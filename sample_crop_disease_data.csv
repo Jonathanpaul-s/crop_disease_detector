@@ -1,0 +1,6 @@
+temperature,humidity,moisture,disease
+30,70,45,Bacterial
+25,60,50,Fungal
+28,80,40,Viral
+31,75,55,Healthy
+27,65,48,Bacterial

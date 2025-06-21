@@ -1,0 +1,6 @@
+temperature,humidity,moisture,disease,Predicted_Disease
+30,70,45,Bacterial,Bacterial
+25,60,50,Fungal,Fungal
+28,80,40,Viral,Viral
+31,75,55,Healthy,Healthy
+27,65,48,Bacterial,Bacterial
