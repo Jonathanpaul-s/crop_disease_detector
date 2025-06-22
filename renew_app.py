@@ -46,5 +46,6 @@ if st.button("🔄 Reset Inputs"):
     st.session_state.soil_moisture = 30.0
     st.session_state.ph = 6.5
     st.session_state.rainfall = 150.0
+    st.experimental_rerun()te.rainfall = 150.0
     st.experimental_rerun()state.rainfall = 150.0
     st.experimental_rerun()
