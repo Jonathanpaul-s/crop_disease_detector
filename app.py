@@ -20,9 +20,13 @@ humidity = st.number_input("💧 Humidity (%)", min_value=0.0, max_value=100.0, 
 moisture = st.number_input("🌱 Soil Moisture (%)", min_value=0.0, max_value=100.0, value=30.0)
 
 # Predict
-if st.button("🔍 Predict Disease"):
-    try:
-        input_data = np.array([[temperature, humidity, moisture]])
-        prediction = model.predict(input_data)
-        st.success(f"✅ Predicted Disease: {prediction[0]}")st.error(f"An error occured during prediction:{e}")
+if st.button("🔍 Predict Disease"):
+    try:
+        input_data = np.array([[temperature, humidity, moisture]])
+        prediction = model.predict(input_data)
+        st.success(f"✅ Predicted Disease: {prediction[0]}")
+    except Exception as e:
+        st.error(f"An error occurred during prediction: {e}")
+        
+    
     
