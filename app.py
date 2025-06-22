@@ -24,5 +24,5 @@ if st.button("🔍 Predict Disease"):
     try:
         input_data = np.array([[temperature, humidity, moisture]])
         prediction = model.predict(input_data)
-        st.success(f"✅ Predicted Disease: {prediction[0]}")st.
-    excest.error(f"An error occurred during prediction: {e}":)ong during prediction: {e}")
+        st.success(f"✅ Predicted Disease: {prediction[0]}")st.error(f"An error occured during prediction:{e}")
+    
