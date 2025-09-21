@@ -1,0 +1,24 @@
+﻿# Python
+pycache/
+*.py[cod]
+venv/
+env/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python package installs
+dist/
+build/
+*.egg-info/
+
+# secrets / local config
+*.env
+secrets.json
+
+# Git LFS track separately if used

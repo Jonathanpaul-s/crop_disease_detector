@@ -1,0 +1,11 @@
+﻿streamlit
+gTTS
+numpy
+pandas
+Pillow
+opencv-python
+matplotlib
+scikit-learn
+tensorflow
+scikit-image
+pyyaml
