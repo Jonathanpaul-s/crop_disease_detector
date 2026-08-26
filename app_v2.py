@@ -20,9 +20,14 @@ def load_data():
             pass
 
     return {
-        "farmer": {},
-        "crops": []
-    }
+    "farmer": {},
+    "crops": [],
+    "equipment": [],
+    "productivity": [],
+    "production_records": [],
+    "sales": [],
+    "expenses": []
+}
 
 
 def save_data(data):
@@ -204,6 +209,150 @@ elif menu == "🌿 Farm Management":
             st.markdown("---")
 
 
+    if len(data["expenses"]) == 0:
+
+            st.info(
+                "No expense records have been added yet."
+            )
+
+    else:
+
+            for number, expense in enumerate(
+                data["expenses"],
+                start=1
+            ):
+
+                st.write(
+                    f"{number}. 💳 {expense['category']}"
+                )
+
+                st.write(
+                    "Description:",
+                    expense["description"]
+                )
+
+                st.write(
+                    "Date:",
+                    expense["date"]
+                )
+
+                st.write(
+                    "Amount:",
+                    expense["amount"]
+                )
+
+                st.markdown("---")
+
+
+    # ========================================================
+    # PROFIT CALCULATION
+    # ========================================================
+
 elif menu == "📊 Productivity & Records":
 
-    st.subheader("📊 Productivity & Records")
+    productivity_option = st.sidebar.selectbox(
+        "📊 Productivity Options",
+        [
+            "📊 Farm Productivity",
+            "🌾 Crop Production Records",
+            "📈 Yield Records",
+            "💰 Sales Records",
+            "💸 Expense Records",
+            "📊 Profit Calculation"
+        ],
+        key="productivity_option"
+    )
+
+    if productivity_option == "📊 Farm Productivity":
+
+        st.subheader("📊 Farm Productivity")
+
+        # Put your existing Farm Productivity code here
+
+
+    elif productivity_option == "🌾 Crop Production Records":
+
+        st.subheader("🌾 Crop Production Records")
+
+        # Put your existing Crop Production Records code here
+
+
+    elif productivity_option == "📈 Yield Records":
+
+        st.subheader("📈 Yield Records")
+
+        # Put your existing Yield Records code here
+
+
+    elif productivity_option == "💰 Sales Records":
+
+        st.subheader("💰 Sales Records")
+
+        # Put your existing Sales Records code here
+
+
+    elif productivity_option == "💸 Expense Records":
+
+        st.subheader("💸 Expense Records")
+
+        # Put your existing Expense Records code here
+
+
+    elif productivity_option == "📊 Profit Calculation":
+
+        st.subheader("📊 Farm Profit Calculation")
+
+        if "sales" not in data:
+            data["sales"] = []
+
+        if "expenses" not in data:
+            data["expenses"] = []
+
+        total_sales = sum(
+            float(sale.get("total", 0))
+            for sale in data["sales"]
+        )
+
+        total_expenses = sum(
+            float(expense.get("amount", 0))
+            for expense in data["expenses"]
+        )
+
+        profit = total_sales - total_expenses
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "💰 Total Sales",
+                f"{total_sales:,.2f}"
+            )
+
+        with col2:
+            st.metric(
+                "💳 Total Expenses",
+                f"{total_expenses:,.2f}"
+            )
+
+        with col3:
+            st.metric(
+              "📈 Net Profit",
+             f"{profit:,.2f}"
+            )
+
+        st.markdown("---")
+
+        if profit > 0:
+            st.success(
+                "📈 Your farm is currently profitable."
+            )
+
+        elif profit < 0:
+            st.error(
+                "📉 Your farm currently has a loss."
+            )
+
+        else:
+            st.info(
+                "Farm sales and expenses are currently balanced."
+            )
