@@ -208,40 +208,129 @@ elif menu == "🌿 Farm Management":
 
             st.markdown("---")
 
+            st.markdown("---")
 
-    if len(data["expenses"]) == 0:
+    st.subheader("🚜 Farm Equipment Tracker")
 
-            st.info(
-                "No expense records have been added yet."
+    if "farm_equipment" not in data:
+        data["farm_equipment"] = []
+
+    equipment_name = st.text_input(
+        "Equipment Name",
+        key="equipment_name"
+    )
+
+    equipment_type = st.selectbox(
+        "Equipment Type",
+        [
+            "🚜 Tractor",
+            "🌾 Harvester",
+            "💧 Irrigation Equipment",
+            "🛠️ Hand Tools",
+            "🚚 Farm Vehicle",
+            "⚙️ Processing Equipment",
+            "📦 Storage Equipment",
+            "Other"
+        ],
+        key="equipment_type"
+    )
+
+    condition = st.selectbox(
+        "Equipment Condition",
+        [
+            "🟢 Good",
+            "🟡 Needs Maintenance",
+            "🔴 Damaged",
+            "⚫ Out of Service"
+        ],
+        key="equipment_condition"
+    )
+
+    purchase_date = st.date_input(
+        "📅 Purchase / Acquisition Date",
+        key="equipment_purchase_date"
+    )
+
+    notes = st.text_area(
+        "📝 Equipment Notes",
+        key="equipment_notes"
+    )
+
+    if st.button(
+        "💾 Save Equipment Record",
+        key="save_equipment"
+    ):
+
+        if equipment_name.strip() == "":
+            st.error("Please enter an equipment name.")
+
+        else:
+
+            equipment_record = {
+                "equipment_name": equipment_name,
+                "equipment_type": equipment_type,
+                "condition": condition,
+                "purchase_date": str(purchase_date),
+                "notes": notes
+            }
+
+            data["farm_equipment"].append(
+                equipment_record
             )
+
+            save_data(data)
+
+            st.success(
+                "✅ Equipment record saved successfully."
+            )
+
+            st.rerun()
+
+    st.markdown("---")
+
+    st.subheader("📋 Equipment Records")
+
+    if len(data["farm_equipment"]) == 0:
+
+        st.info(
+            "No farm equipment records have been added yet."
+        )
 
     else:
 
-            for number, expense in enumerate(
-                data["expenses"],
-                start=1
-            ):
+        for number, equipment in enumerate(
+            data["farm_equipment"],
+            start=1
+        ):
+
+            st.write(
+                f"{number}. 🚜 "
+                f"{equipment['equipment_name']}"
+            )
+
+            st.write(
+                "Type:",
+                equipment["equipment_type"]
+            )
+
+            st.write(
+                "Condition:",
+                equipment["condition"]
+            )
+
+            st.write(
+                "Purchase Date:",
+                equipment["purchase_date"]
+            )
+
+            if equipment["notes"]:
 
                 st.write(
-                    f"{number}. 💳 {expense['category']}"
+                    "Notes:",
+                    equipment["notes"]
                 )
 
-                st.write(
-                    "Description:",
-                    expense["description"]
-                )
-
-                st.write(
-                    "Date:",
-                    expense["date"]
-                )
-
-                st.write(
-                    "Amount:",
-                    expense["amount"]
-                )
-
-                st.markdown("---")
+            st.markdown("---")
 
 
     # ========================================================
