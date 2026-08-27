@@ -10,18 +10,27 @@ if BACKGROUND.exists():
         bg = base64.b64encode(f.read()).decode()
 
     st.markdown(
-        f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/png;base64,{bg}");
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+    f"""
+    <style>
+    .stApp {{
+        background-image:
+            linear-gradient(rgba(255,255,255,0.55), rgba(255,255,255,0.55)),
+            url("data:image/png;base64,{bg}");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }}
+
+    /* Make the main content easier to read */
+    .block-container {{
+        background-color: rgba(255, 255, 255, 0.78);
+        border-radius: 15px;
+        padding: 2rem;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 
