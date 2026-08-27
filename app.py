@@ -1,3 +1,26 @@
+from pathlib import Path
+import base64
+
+BACKGROUND = Path("assets/farm_logo.png")
+
+if BACKGROUND.exists():
+    with open(BACKGROUND, "rb") as f:
+        bg = base64.b64encode(f.read()).decode()
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/png;base64,{bg}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 import streamlit as st
 import requests
 import joblib  # for loading your model

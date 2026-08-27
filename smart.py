@@ -1,31 +1,19 @@
-# app.py
-import base64
+
 import streamlit as st
 from pathlib import Path
+import base64
 
-# 1. Page config must be the first Streamlit command
-st.set_page_config(
-    page_title="Smart Farm AI",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+BACKGROUND = Path("assets/farm_logo.png")
 
-# 2. Helper function to set background from local image
-def set_background(image_file):
-    img_path = Path(image_file)
-    if not img_path.exists():
-        st.error(f"❌ Background image not found: {image_file}")
-        return
-    
-    with open(image_file, "rb") as f:
-        data = f.read()
-    encoded = base64.b64encode(data).decode()
+if BACKGROUND.exists():
+    with open(BACKGROUND, "rb") as f:
+        bg = base64.b64encode(f.read()).decode()
 
     st.markdown(
         f"""
         <style>
         .stApp {{
-            background-image: url("data:image/jpg;base64,{encoded}");
+            background-image: url("data:image/png;base64,{bg}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -34,13 +22,6 @@ def set_background(image_file):
         """,
         unsafe_allow_html=True
     )
-
-# 3. Call the background function
-set_background("assets/farm_bg.jpg")
-
-# 4. Example content
-st.title("🌱 Smart Farm AI")
-st.write("✅ Background successfully applied — Smart Farm AI is ready to assist you.")
 
 
 
