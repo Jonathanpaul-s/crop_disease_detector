@@ -34,6 +34,250 @@ if BACKGROUND.exists():
 
 
 
+# ============================================================
+# 🧠 PERSONALIZATION ENGINE
+# ============================================================
+
+def build_farmer_context(profile):
+    """Build a safe context used by the personalization engine."""
+    
+    if not isinstance(profile, dict):
+        profile = {}
+
+    return {
+        "country": str(profile.get("country", "")).strip().lower(),
+        "location": str(profile.get("location", "")).strip().lower(),
+        "farm_type": str(profile.get("farm_type", "")).strip().lower(),
+        "experience": str(profile.get("experience", "")).strip().lower(),
+        "farm_size": str(profile.get("farm_size", "")).strip().lower(),
+        "crops": profile.get("crops", []),
+    }
+
+
+def personalize_features(features, context):
+    """
+    Personalize the existing feature list according to farmer context.
+    Does not delete the original features.
+    """
+
+    if not isinstance(features, list):
+        return features
+
+    context = context or {}
+
+    country = context.get("country", "")
+    farm_type = context.get("farm_type", "")
+    experience = context.get("experience", "")
+
+    personalized = []
+
+    for feature in features:
+        if isinstance(feature, dict):
+            item = feature.copy()
+            name = str(item.get("name", item.get("Name", ""))).lower()
+
+            score = item.get("Score", 0)
+
+            # Country relevance
+            if country:
+                if country in name:
+                    score += 10
+
+            # Farm-type relevance
+            if farm_type:
+                if farm_type in name:
+                    score += 10
+
+            # Experience relevance
+            if experience:
+                if experience in name:
+                    score += 5
+
+            item["Score"] = score
+            personalized.append(item)
+
+        else:
+            personalized.append(feature)
+
+    # Keep highest-priority features first
+    try:
+        personalized = sorted(
+            personalized,
+            key=lambda x: x.get("Score", 0)
+            if isinstance(x, dict) else 0,
+            reverse=True
+        )
+    except Exception:
+        pass
+
+    return personalized
+
+
+# ============================================================
+# 🔐 LOGIN STATE
+# ============================================================
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
+
+if "farmer_profile" not in st.session_state:
+    st.session_state.farmer_profile = {}
+
+
+# ============================================================
+# 🔐 ACCOUNT MANAGEMENT
+# ============================================================
+
+if not st.session_state.logged_in:
+
+    st.subheader("🔐 User Account Management")
+
+    account_action = st.radio(
+        "Choose an action",
+        ["Login", "Create Account"],
+        key="account_action_unique_001"
+    )
+
+    if account_action == "Login":
+
+        username = st.text_input(
+            "Username",
+            key="login_username_unique_001"
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            key="login_password_unique_001"
+        )
+
+        if st.button(
+            "🔓 Login",
+            key="login_button_unique_001"
+        ):
+
+            users = st.session_state.get("users", [])
+
+            if not isinstance(users, list):
+                users = []
+
+            user_found = None
+
+            for user in users:
+                if (
+                    isinstance(user, dict)
+                    and user.get("username") == username
+                    and user.get("password") == password
+                ):
+                    user_found = user
+                    break
+
+            if user_found:
+
+                st.session_state.logged_in = True
+                st.session_state.current_user = username
+                st.session_state.farmer_profile = user_found.get(
+                    "profile",
+                    {}
+                )
+
+                st.success("Login successful!")
+                st.rerun()
+
+            else:
+                st.error("Invalid username or password.")
+
+    else:
+
+        new_username = st.text_input(
+            "Create Username",
+            key="register_username_unique_001"
+        )
+
+        new_password = st.text_input(
+            "Create Password",
+            type="password",
+            key="register_password_unique_001"
+        )
+
+        country = st.text_input(
+            "Country",
+            key="register_country_unique_001"
+        )
+
+        location = st.text_input(
+            "Location",
+            key="register_location_unique_001"
+        )
+
+        farm_type = st.selectbox(
+            "Farm Type",
+            [
+                "Crop Farming",
+                "Livestock Farming",
+                "Mixed Farming",
+                "Aquaculture",
+                "Urban Farming"
+            ],
+            key="register_farm_type_unique_001"
+        )
+
+        experience = st.selectbox(
+            "Farming Experience",
+            [
+                "Beginner",
+                "Intermediate",
+                "Experienced",
+                "Professional"
+            ],
+            key="register_experience_unique_001"
+        )
+
+        if st.button(
+            "📝 Create Account",
+            key="create_account_button_unique_001"
+        ):
+
+            if not new_username or not new_password:
+                st.warning("Please enter a username and password.")
+
+            else:
+
+                users = st.session_state.get("users", [])
+
+                if not isinstance(users, list):
+                    users = []
+
+                if any(
+                    isinstance(user, dict)
+                    and user.get("username") == new_username
+                    for user in users
+                ):
+                    st.error("Username already exists.")
+
+                else:
+
+                    profile = {
+                        "country": country,
+                        "location": location,
+                        "farm_type": farm_type,
+                        "experience": experience,
+                    }
+
+                    users.append({
+                        "username": new_username,
+                        "password": new_password,
+                        "profile": profile
+                    })
+
+                    st.session_state.users = users
+
+                    st.success(
+                        "Account created successfully. You can now login."
+                    )
 
 import streamlit as st
 
@@ -1688,7 +1932,7 @@ if menu == "🌿 Farm Management":
 
     if farm_option == "User Account Management":
 
-        user_account_management_ui()
+        pass
 
     elif farm_option == "Farm Plot Mapping":
 
@@ -2721,29 +2965,26 @@ key=k2("main_menu_option")
 )
 
 
+
 # -------- Router (clean & deduped) --------
 if menu_v2 == "🏡 Home":
     st.subheader("🏡 Welcome to Smart Farm AI!")
     st.write("🌱 Empowering farmers with AI-driven tools for better yield, smart management, and sustainable farming.")
-    st.info("👈 Use the sidebar to explore features like irrigation schedules, crop predictions, farm records, and more.")
-
-
-elif menu_v2 == "🔒 User Account Management":
-    user_account_management_ui_v2()
-
-elif menu_v2 == "📅 Expanded AI Crop Calendar":
-    expanded_crop_calendar_ui()
+    st.info("👈 Use the sidebar to explore features like irrigation schedules, crop predictions, and farm records.")
 
 elif menu_v2 == "🧑‍🏫 Smart Tutor Multilanguage":
-    # call both UIs so Support & Help and the Smart Tutor are available together
     try:
         support_help_ui()
     except Exception as e:
         st.error(f"Support UI failed: {e}")
+
     try:
         smart_tutor_voice()
     except Exception as e:
-        st.error(f"Smart Tutor failed: {e}")
+        st.error(f"Smart Tutor UI failed: {e}")
+
+elif menu_v2 == "📅 Expanded AI Crop Calendar":
+    expanded_crop_calendar_ui()
 
 elif menu_v2 == "📡 Live Sensor Dashboard":
     live_sensor_dashboard_v2()
@@ -5343,4 +5584,5 @@ if st.session_state.get("_dev_show_tutor_notes", False):
         - If speech or TTS features fail, check microphone permissions and re-run the install commands above.  
 
         """)
+
 
