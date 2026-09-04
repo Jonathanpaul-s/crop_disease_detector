@@ -32,6 +32,62 @@ if BACKGROUND.exists():
     unsafe_allow_html=True
 )
 
+# ============================================================
+# 💾 ACCOUNT DATA STORAGE
+# ============================================================
+
+import json
+import os
+
+
+def _load(filename, default):
+    """Load JSON data safely from a local file."""
+    try:
+        if not os.path.exists(filename):
+            return default
+
+        with open(filename, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return data
+
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def _save(filename, data):
+    """Save JSON data safely to a local file."""
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+
+    except OSError as e:
+        st.error(f"Unable to save account data: {e}")
+
+
+# ============================================================
+# 🔐 PASSWORD HASHING
+# ============================================================
+
+import hashlib
+
+def hash_password(password):
+    return hashlib.sha256(
+        password.encode("utf-8")
+    ).hexdigest()
+
+
+# ============================================================
+# 🎯 APPLY FARMER PERSONALIZATION
+# ============================================================
+
+if st.session_state.get("logged_in", False):
+
+    farmer_profile = st.session_state.get(
+        "farmer_profile",
+        {}
+    )
+
 
 
 # ============================================================
@@ -113,6 +169,371 @@ def personalize_features(features, context):
     return personalized
 
 
+
+# ============================================================
+# 🌱 CROP-SPECIFIC PERSONALIZATION RULES
+# ============================================================
+
+CROP_FEATURE_RULES = {
+
+    "cassava": [
+        "Soil Health Record",
+        "Farm Productivity",
+        "Yield Estimator",
+        "AI Crop Calendar",
+        "Crop Disease Detection",
+        "Smart Fertilizer & Pesticide Stock Manager",
+        "Farm Equipment Tracker",
+        "Irrigation Schedule",
+        "Harvest Time Estimator",
+        "View Sales Record",
+        "Calculate Profit",
+    ],
+
+    "maize": [
+        "Soil Health Record",
+        "Irrigation Schedule",
+        "AI Crop Calendar",
+        "Crop Disease Detection",
+        "Yield Estimator",
+        "Farm Productivity",
+        "Smart Fertilizer & Pesticide Stock Manager",
+        "Harvest Time Estimator",
+        "Farm Performance Indicators",
+        "View Sales Record",
+        "Price Trend Checker",
+    ],
+
+    "corn": [
+        "Soil Health Record",
+        "Irrigation Schedule",
+        "AI Crop Calendar",
+        "Crop Disease Detection",
+        "Yield Estimator",
+        "Farm Productivity",
+        "Smart Fertilizer & Pesticide Stock Manager",
+        "Harvest Time Estimator",
+        "View Sales Record",
+        "Price Trend Checker",
+        "Calculate Profit",
+    ],
+
+    "rice": [
+        "Irrigation Schedule",
+        "Soil Health Record",
+        "AI Crop Calendar",
+        "Crop Disease Detection",
+        "Yield Estimator",
+        "Farm Productivity",
+        "Harvest Time Estimator",
+        "Farm Plot Mapping",
+        "Weather",
+        "View Sales Record",
+        "Price Trend Checker",
+    ],
+
+    "tomato": [
+        "Irrigation Schedule",
+        "Crop Disease Detection",
+        "Soil Health Record",
+        "Smart Fertilizer & Pesticide Stock Manager",
+        "AI Crop Calendar",
+        "Yield Estimator",
+        "Farm Productivity",
+        "Harvest Time Estimator",
+        "Farm Plot Mapping",
+        "View Sales Record",
+        "Price Trend Checker",
+    ],
+
+    "yam": [
+        "Soil Health Record",
+        "AI Crop Calendar",
+        "Crop Disease Detection",
+        "Farm Productivity",
+        "Yield Estimator",
+        "Harvest Time Estimator",
+        "Smart Fertilizer & Pesticide Stock Manager",
+        "Irrigation Schedule",
+        "Farm Plot Mapping",
+        "View Sales Record",
+        "Calculate Profit",
+    ],
+}
+
+
+# ============================================================
+# 🎯 PERSONALIZED FEATURE RECOMMENDATION ENGINE
+# ============================================================
+
+def recommend_features(features, profile):
+
+    if not isinstance(features, list):
+        return []
+
+    if not isinstance(profile, dict):
+        profile = {}
+
+    crop_type = str(
+        profile.get("crop_type", "")
+    ).lower().strip()
+
+    location = str(
+        profile.get("location", "")
+    ).lower().strip()
+
+    country = str(
+        profile.get("country", "")
+    ).lower().strip()
+
+    farm_type = str(
+        profile.get("farm_type", "")
+    ).lower().strip()
+
+    experience = str(
+        profile.get("experience", "")
+    ).lower().strip()
+
+    # --------------------------------------------------------
+    # 🌱 Get crop-specific features
+    # --------------------------------------------------------
+
+    crop_rules = CROP_FEATURE_RULES.get(
+        crop_type,
+        []
+    )
+
+    crop_rules = [
+        str(x).lower().strip()
+        for x in crop_rules
+    ]
+
+    scored_features = []
+
+    # --------------------------------------------------------
+    # ⭐ Score every existing feature
+    # --------------------------------------------------------
+
+    for feature in features:
+
+        if isinstance(feature, dict):
+
+            item = feature.copy()
+
+            feature_name = str(
+                item.get(
+                    "name",
+                    item.get("Name", "")
+                )
+            ).strip()
+
+        else:
+
+            feature_name = str(feature).strip()
+
+            item = {
+                "name": feature_name
+            }
+
+        name_lower = feature_name.lower().strip()
+
+        score = 0
+
+        # ====================================================
+        # 🌱 EXACT CROP RELEVANCE
+        # ====================================================
+
+        if name_lower in crop_rules:
+            score += 100
+
+        # Partial crop-rule matching
+        for rule in crop_rules:
+
+            if rule and (
+                rule in name_lower
+                or name_lower in rule
+            ):
+                score += 80
+                break
+
+        # ====================================================
+        # 🌾 FARM TYPE
+        # ====================================================
+
+        if farm_type in [
+            "crop farming",
+            "mixed farming"
+        ]:
+
+            if any(word in name_lower for word in [
+                "crop",
+                "soil",
+                "irrigation",
+                "yield",
+                "disease",
+                "fertilizer",
+                "pesticide",
+                "calendar",
+                "harvest"
+            ]):
+                score += 30
+
+        elif farm_type == "livestock farming":
+
+            if any(word in name_lower for word in [
+                "livestock",
+                "animal",
+                "feed",
+                "health",
+                "farm management"
+            ]):
+                score += 30
+
+        elif farm_type == "aquaculture":
+
+            if any(word in name_lower for word in [
+                "water",
+                "soil",
+                "health",
+                "productivity",
+                "market"
+            ]):
+                score += 30
+
+        elif farm_type == "urban farming":
+
+            if any(word in name_lower for word in [
+                "crop",
+                "irrigation",
+                "soil",
+                "calendar",
+                "disease"
+            ]):
+                score += 30
+
+        # ====================================================
+        # 📍 LOCATION CONTEXT
+        # ====================================================
+
+        if location:
+
+            if any(word in name_lower for word in [
+                "irrigation",
+                "soil",
+                "weather",
+                "climate",
+                "crop",
+                "disease",
+                "calendar"
+            ]):
+             score += 10
+
+        # ====================================================
+        # 🌍 COUNTRY CONTEXT
+        # ====================================================
+
+        if country:
+
+            if any(word in name_lower for word in [
+                "market",
+                "price",
+                "sales",
+                "sale",
+                "order",
+                "loan",
+                "profit",
+                "expense"
+            ]):
+                score += 10
+
+        # ====================================================
+        # 👨‍🌾 EXPERIENCE
+        # ====================================================
+
+        if experience == "beginner":
+
+            if any(word in name_lower for word in [
+                "tips",
+                "tutor",
+                "calendar",
+                "disease",
+                "soil"
+            ]):
+                score += 15
+
+        elif experience in [
+            "experienced",
+            "professional"
+        ]:
+
+            if any(word in name_lower for word in [
+                "yield",
+                "productivity",
+                "drone",
+                "mapping",
+                "roi",
+                "market"
+            ]):
+                score += 15
+
+        # ----------------------------------------------------
+        # Store score internally
+        # ----------------------------------------------------
+
+        item["_personalization_score"] = score
+
+        scored_features.append(item)
+
+    # ========================================================
+    # ⭐ SORT BY RELEVANCE
+    # ========================================================
+
+    scored_features.sort(
+        key=lambda x: x.get(
+            "_personalization_score",
+            0
+        ),
+        reverse=True
+    )
+
+    # ========================================================
+    # 🎯 RETURN ONLY TOP 20
+    # ========================================================
+
+    return scored_features[:20]
+
+# ============================================================
+# 🌾 SMART FARM AI FEATURE CATALOG
+# ============================================================
+
+SMART_FARM_FEATURES = [
+    "View Sales Record",
+    "View Expense",
+    "Calculate Profit",
+    "View Farmer Record",
+    "Farm Productivity",
+    "Yield Estimator",
+    "Farm Loan Recorder",
+    "Add Loan Record",
+
+    "Irrigation Schedule",
+    "Soil Health Record",
+
+    "Farm Plot Mapping",
+
+    "Smart Fertilizer & Pesticide Stock Manager",
+    "AI Crop Calendar",
+    "Drone Flight Scheduler",
+    "Voice Command Interface",
+    "Smart Tutor Multilanguage",
+
+    "Crop Disease Detection",
+    "AI Farm Tips",
+    "Market Tools",
+    "Price Trend Checker",
+    "ROI Calculator"
+]
+
 # ============================================================
 # 🔐 LOGIN STATE
 # ============================================================
@@ -159,7 +580,8 @@ if not st.session_state.logged_in:
             key="login_button_unique_001"
         ):
 
-            users = st.session_state.get("users", [])
+            # Load saved accounts from disk
+            users = _load("accounts.json", [])
 
             if not isinstance(users, list):
                 users = []
@@ -170,7 +592,7 @@ if not st.session_state.logged_in:
                 if (
                     isinstance(user, dict)
                     and user.get("username") == username
-                    and user.get("password") == password
+                    and user.get("password") == hash_password(password)
                 ):
                     user_found = user
                     break
@@ -197,6 +619,11 @@ if not st.session_state.logged_in:
             key="register_username_unique_001"
         )
 
+        new_email = st.text_input(
+            "Email",
+            key="register_email_unique_001"
+        )
+
         new_password = st.text_input(
             "Create Password",
             type="password",
@@ -211,6 +638,11 @@ if not st.session_state.logged_in:
         location = st.text_input(
             "Location",
             key="register_location_unique_001"
+        )
+
+        crop_type = st.text_input(
+            "Main Crop Type",
+            key="register_crop_type_unique_001"
         )
 
         farm_type = st.selectbox(
@@ -246,7 +678,8 @@ if not st.session_state.logged_in:
 
             else:
 
-                users = st.session_state.get("users", [])
+                # Load existing accounts from disk
+                users = _load("accounts.json", [])
 
                 if not isinstance(users, list):
                     users = []
@@ -263,21 +696,686 @@ if not st.session_state.logged_in:
                     profile = {
                         "country": country,
                         "location": location,
+                        "crop_type": crop_type,
                         "farm_type": farm_type,
-                        "experience": experience,
+                        "experience": experience
                     }
-
                     users.append({
                         "username": new_username,
-                        "password": new_password,
+                        "email": new_email,
+                        "password": hash_password(new_password),
                         "profile": profile
                     })
 
-                    st.session_state.users = users
+                    # Permanently save account
+                    _save("accounts.json", users)
 
                     st.success(
                         "Account created successfully. You can now login."
                     )
+
+ # ============================================================
+# 🔒 STOP APP UNTIL USER IS LOGGED IN
+# ============================================================
+
+if not st.session_state.logged_in:
+    st.stop() 
+
+
+# ============================================================
+# 🎯 GENERATE FARMER RECOMMENDATIONS
+# ============================================================
+
+farmer_profile = st.session_state.get(
+    "farmer_profile",
+    {}
+)
+
+recommended_features = recommend_features(
+    SMART_FARM_FEATURES,
+    farmer_profile
+)
+
+
+# ============================================================
+# 🌾 FARM SELECTION & MULTI-FARM MANAGEMENT
+# ============================================================
+
+if st.session_state.get("logged_in", False):
+
+    st.subheader("🌾 My Farms")
+
+    current_username = st.session_state.get(
+        "current_user",
+        ""
+    )
+
+    # ========================================================
+    # 💾 LOAD CURRENT USER PROFILE FROM ACCOUNT
+    # ========================================================
+
+    users = _load(
+        "accounts.json",
+        []
+    )
+
+    if not isinstance(users, list):
+        users = []
+
+    current_user_data = None
+
+    for user in users:
+        if (
+            isinstance(user, dict)
+            and user.get("username") == current_username
+        ):
+            current_user_data = user
+            break
+
+    if current_user_data is not None:
+
+        farmer_profile = current_user_data.get(
+            "profile",
+            {}
+        )
+
+        if not isinstance(farmer_profile, dict):
+            farmer_profile = {}
+
+        # Keep session profile synchronized
+        st.session_state.farmer_profile = farmer_profile
+
+    else:
+
+        farmer_profile = st.session_state.get(
+            "farmer_profile",
+            {}
+        )
+
+        if not isinstance(farmer_profile, dict):
+            farmer_profile = {}
+
+    # ========================================================
+    # 🌾 GET ALL FARMS
+    # ========================================================
+
+    farms = farmer_profile.get(
+        "farms",
+        []
+    )
+
+    if not isinstance(farms, list):
+        farms = []
+
+    # ========================================================
+    # 🏡 CREATE MAIN FARM FROM REGISTRATION
+    # ========================================================
+
+    if not farms:
+
+        registered_crop = str(
+            farmer_profile.get(
+                "crop_type",
+                ""
+            )
+        ).strip()
+
+        registered_location = str(
+            farmer_profile.get(
+                "location",
+                ""
+            )
+        ).strip()
+
+        if registered_crop or registered_location:
+
+            main_farm = {
+                "farm_name": "Main Farm",
+                "location": registered_location,
+                "crop_type": registered_crop,
+                "farm_type": farmer_profile.get(
+                    "farm_type",
+                    ""
+                ),
+                "status": "active"
+            }
+
+            farms.append(main_farm)
+
+            farmer_profile["farms"] = farms
+
+            st.session_state.farmer_profile = (
+                farmer_profile
+            )
+
+            # Save Main Farm
+            if current_user_data is not None:
+
+                current_user_data["profile"] = (
+                    farmer_profile
+                )
+
+                _save(
+                    "accounts.json",
+                    users
+                )
+
+    # ========================================================
+    # 🟢 NORMALIZE FARM STATUS
+    # ========================================================
+
+    for farm in farms:
+
+        if not isinstance(farm, dict):
+            continue
+
+        if farm.get("status") not in [
+            "active",
+            "archived"
+        ]:
+            farm["status"] = "active"
+
+    farmer_profile["farms"] = farms
+
+    st.session_state.farmer_profile = (
+        farmer_profile
+    )
+
+    # ========================================================
+    # 🟢 ACTIVE FARM
+    # ========================================================
+
+    active_farms = [
+        farm
+        for farm in farms
+        if isinstance(farm, dict)
+        and farm.get("status", "active") == "active"
+    ]
+
+    # ========================================================
+    # 📦 ARCHIVED FARMS
+    # ========================================================
+
+    archived_farms = [
+        farm
+        for farm in farms
+        if isinstance(farm, dict)
+        and farm.get("status") == "archived"
+    ]
+
+    # ========================================================
+    # 🟢 ACTIVE FARM NAVIGATION
+    # ========================================================
+
+    st.subheader("⛔️ Active Farms")
+
+    if active_farms:
+
+        active_farm_names = [
+            farm.get(
+                "farm_name",
+                f"Farm {i + 1}"
+            )
+            for i, farm in enumerate(active_farms)
+        ]
+
+        selected_farm_name = st.selectbox(
+            "📍 Select Farm to Manage",
+            active_farm_names,
+            key="selected_active_farm_unique_005"
+        )
+
+        selected_farm = next(
+            (
+                farm
+                for farm in active_farms
+                if farm.get("farm_name")
+                == selected_farm_name
+            ),
+            None
+        )
+
+        if selected_farm:
+
+            # =================================================
+            # 🌾 CURRENT FARM
+            # =================================================
+
+            st.session_state.current_farm = (
+                selected_farm
+            )
+
+            st.success(
+                f"🌾 Currently managing: "
+                f"{selected_farm.get('farm_name', 'Farm')}"
+            )
+
+            st.write(
+                f"🌱 Crop: "
+                f"{selected_farm.get('crop_type', 'Not specified')}"
+            )
+
+            st.write(
+                f"📍 Location: "
+                f"{selected_farm.get('location', 'Not specified')}"
+            )
+
+            st.write(
+                f"🌾 Farm Type: "
+                f"{selected_farm.get('farm_type', 'Not specified')}"
+            )
+
+            # =================================================
+            # 🧠 FARM-SPECIFIC PERSONALIZATION
+            # =================================================
+
+            personalization_profile = (
+                farmer_profile.copy()
+            )
+
+            personalization_profile["crop_type"] = str(
+                selected_farm.get(
+                    "crop_type",
+                    ""
+                )
+            ).lower().strip()
+
+            personalization_profile["location"] = str(
+                selected_farm.get(
+                    "location",
+                    ""
+                )
+            ).lower().strip()
+
+            personalization_profile["farm_type"] = str(
+                selected_farm.get(
+                    "farm_type",
+                    farmer_profile.get(
+                        "farm_type",
+                        ""
+                    )
+                )
+            ).lower().strip()
+
+            recommended_features = recommend_features(
+                SMART_FARM_FEATURES,
+                personalization_profile
+            )
+
+            st.session_state.recommended_features = (
+                recommended_features
+            )
+
+            # =================================================
+            # 📦 ARCHIVE CURRENT FARM
+            # =================================================
+
+            if st.button(
+                "📦 Archive This Farm",
+                key="archive_farm_unique_005",
+                use_container_width=True
+            ):
+
+                selected_farm["status"] = "archived"
+
+                farmer_profile["farms"] = farms
+
+                st.session_state.farmer_profile = (
+                    farmer_profile
+                )
+
+                # Save to account
+                if current_user_data is not None:
+
+                    current_user_data["profile"] = (
+                        farmer_profile
+                    )
+
+                    _save(
+                        "accounts.json",
+                        users
+                    )
+
+                st.session_state.current_farm = None
+
+                st.success(
+                    f"📦 {selected_farm_name} "
+                    "has been archived."
+                )
+
+                st.rerun()
+
+    else:
+
+        st.info(
+            "No active farms yet. Add a farm below."
+        )
+
+        # ========================================================
+    # ➕ ADD ANOTHER FARM
+    # ========================================================
+
+    st.subheader("➕ Add Another Farm")
+
+    with st.expander(
+        "➕ Add New Farm",
+        expanded=True
+    ):
+
+        new_farm_name = st.text_input(
+            "Farm Name",
+            key="new_farm_name_unique_005"
+        )
+
+        new_farm_location = st.text_input(
+            "Farm Location",
+            key="new_farm_location_unique_005"
+        )
+
+        new_farm_crop = st.text_input(
+            "Crop Type",
+            key="new_farm_crop_unique_005"
+        )
+
+        new_farm_type = st.selectbox(
+            "Farm Type",
+            [
+                "Crop Farming",
+                "Livestock Farming",
+                "Mixed Farming",
+                "Aquaculture",
+                "Urban Farming"
+            ],
+            key="new_farm_type_unique_005"
+        )
+
+        if st.button(
+            "➕ Add Farm",
+            key="add_farm_button_unique_005",
+            use_container_width=True
+        ):
+
+            if not new_farm_name.strip():
+
+                st.warning(
+                    "Please enter a farm name."
+                )
+
+            elif not new_farm_crop.strip():
+
+                st.warning(
+                    "Please enter the crop type."
+                )
+
+            else:
+
+                existing_names = [
+                    str(
+                        farm.get(
+                            "farm_name",
+                            ""
+                        )
+                    ).lower().strip()
+                    for farm in farms
+                    if isinstance(farm, dict)
+                ]
+
+                if (
+                    new_farm_name.lower().strip()
+                    in existing_names
+                ):
+
+                    st.error(
+                        "A farm with this name already exists."
+                    )
+
+                else:
+
+                    new_farm = {
+                        "farm_name": new_farm_name.strip(),
+                        "location": new_farm_location.strip(),
+                        "crop_type": new_farm_crop.strip(),
+                        "farm_type": new_farm_type,
+                        "status": "active"
+                    }
+
+                    # Add to farm list
+                    farms.append(new_farm)
+
+                    farmer_profile["farms"] = farms
+
+                    st.session_state.farmer_profile = (
+                        farmer_profile
+                    )
+
+                    st.session_state.current_farm = (
+                        new_farm
+                    )
+
+                    # =========================================
+                    # 💾 SAVE FARM TO CURRENT ACCOUNT
+                    # =========================================
+
+                    if current_user_data is not None:
+
+                        current_user_data["profile"] = (
+                            farmer_profile
+                        )
+
+                        _save(
+                            "accounts.json",
+                            users
+                        )
+
+                    # =========================================
+                    # 🧠 CALCULATE RECOMMENDATION
+                    # FOR THE NEW FARM
+                    # =========================================
+
+                    new_personalization_profile = (
+                        farmer_profile.copy()
+                    )
+
+                    new_personalization_profile[
+                        "crop_type"
+                    ] = new_farm["crop_type"].lower().strip()
+
+                    new_personalization_profile[
+                        "location"
+                    ] = new_farm["location"].lower().strip()
+
+                    new_personalization_profile[
+                        "farm_type"
+                    ] = new_farm["farm_type"].lower().strip()
+
+                    recommended_features = (
+                        recommend_features(
+                            SMART_FARM_FEATURES,
+                            new_personalization_profile
+                        )
+                    )
+
+                    st.session_state.recommended_features = (
+                        recommended_features
+                    )
+
+                    st.success(
+                        f"✅ {new_farm['farm_name']} "
+                        "added successfully!"
+                    )
+
+                    st.rerun()
+
+    # ========================================================
+    # 📋 SHOW ACTIVE FARM LIST
+    # ========================================================
+
+    if active_farms:
+
+        st.subheader("📋 Your Active Farms")
+
+        for i, farm in enumerate(active_farms):
+
+            st.write(
+                f"🟢 {farm.get('farm_name', f'Farm {i + 1}')} "
+                f"— 🌱 {farm.get('crop_type', 'Unknown crop')} "
+                f"— 📍 {farm.get('location', 'Unknown location')}"
+            )
+
+    # ========================================================
+    # 📦 ARCHIVED FARMS
+    # ========================================================
+
+    st.subheader("📦 Archived Farms")
+
+    if archived_farms:
+
+        archived_names = [
+            farm.get(
+                "farm_name",
+                f"Archived Farm {i + 1}"
+            )
+            for i, farm in enumerate(archived_farms)
+        ]
+
+        archived_selected_name = st.selectbox(
+            "Select Archived Farm",
+            archived_names,
+            key="archived_farm_unique_005"
+        )
+
+        archived_farm = next(
+            (
+                farm
+                for farm in archived_farms
+                if farm.get("farm_name")
+                == archived_selected_name
+            ),
+            None
+        )
+
+        if archived_farm:
+
+            st.write(
+                f"🌱 Crop: "
+                f"{archived_farm.get('crop_type', 'Not specified')}"
+            )
+
+            st.write(
+                f"📍 Location: "
+                f"{archived_farm.get('location', 'Not specified')}"
+            )
+
+            # =================================================
+            # 🔄 RESTORE
+            # =================================================
+
+            if st.button(
+                "🔄 Restore Farm",
+                key="restore_farm_unique_005",
+                use_container_width=True
+            ):
+
+                archived_farm["status"] = "active"
+
+                farmer_profile["farms"] = farms
+
+                st.session_state.farmer_profile = (
+                    farmer_profile
+                )
+
+                if current_user_data is not None:
+
+                    current_user_data["profile"] = (
+                        farmer_profile
+                    )
+
+                    _save(
+                        "accounts.json",
+                        users
+                    )
+
+                st.success(
+                    f"🟢 {archived_selected_name} "
+                    "restored successfully!"
+                )
+
+                st.rerun()
+
+            # =================================================
+            # 🗑 PERMANENT DELETE
+            # =================================================
+
+            if st.button(
+                "🗑 Permanently Delete Farm",
+                key="delete_farm_unique_005",
+                use_container_width=True
+            ):
+
+                farms = [
+                    farm
+                    for farm in farms
+                    if farm.get("farm_name")
+                    != archived_selected_name
+                ]
+
+                farmer_profile["farms"] = farms
+
+                st.session_state.farmer_profile = (
+                    farmer_profile
+                )
+
+                if current_user_data is not None:
+
+                    current_user_data["profile"] = (
+                        farmer_profile
+                    )
+
+                    _save(
+                        "accounts.json",
+                        users
+                    )
+
+                st.session_state.current_farm = None
+
+                st.success(
+                    f"🗑 {archived_selected_name} "
+                    "deleted permanently."
+                )
+
+                st.rerun()
+
+    else:
+
+        st.info(
+            "📦 No archived farms."
+        )
+     
+
+# ============================================================
+# ⭐ RECOMMENDED FEATURES
+# ============================================================
+
+if st.session_state.get("logged_in", False):
+
+    st.subheader("⭐ Recommended for You")
+
+    for feature in recommended_features:
+
+        if isinstance(feature, dict):
+
+            feature_name = feature.get(
+                "name",
+                feature.get("Name", "Feature")
+            )
+
+        else:
+
+            feature_name = str(feature)
+
+        st.write(f"⭐ {feature_name}")
+
+
 
 import streamlit as st
 
