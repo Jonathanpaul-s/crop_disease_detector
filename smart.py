@@ -248,7 +248,7 @@ CROP_FEATURE_RULES = {
 
     "yam": [
         "Soil Health Record",
-        "AI Crop Calendar",
+        "AI rop Calendar",
         "Crop Disease Detection",
         "Farm Productivity",
         "Yield Estimator",
@@ -709,7 +709,6 @@ if not st.session_state.logged_in:
 
                     # Permanently save account
                     _save("accounts.json", users)
-
                     st.success(
                         "Account created successfully. You can now login."
                     )
@@ -723,19 +722,713 @@ if not st.session_state.logged_in:
 
 
 # ============================================================
-# 🎯 GENERATE FARMER RECOMMENDATIONS
+# SMART FARM AI — UNIFIED FARM CONTEXT & PERSONALIZATION
 # ============================================================
 
-farmer_profile = st.session_state.get(
-    "farmer_profile",
-    {}
-)
+farmer_profile = st.session_state.get("farmer_profile", {})
+
+if not isinstance(farmer_profile, dict):
+    farmer_profile = {}
+
+# ------------------------------------------------------------
+# 1. Load farmer farms
+# ------------------------------------------------------------
+
+farms = farmer_profile.get("farms", [])
+
+if not isinstance(farms, list):
+    farms = []
+
+# Create a default farm if the farmer has none
+if not farms:
+    default_farm = {
+        "farm_id": "main_farm",
+        "farm_name": "Main Farm",
+        "crop_type": farmer_profile.get("crop_type", "Not specified"),
+        "location": farmer_profile.get("location", "Not specified"),
+        "farm_type": farmer_profile.get("farm_type", "Not specified"),
+        "farm_size": farmer_profile.get("farm_size", "Not specified"),
+        "status": "active",
+    }
+
+    farms.append(default_farm)
+    farmer_profile["farms"] = farms
+    st.session_state.farmer_profile = farmer_profile
+
+
+# ------------------------------------------------------------
+# 2. Only active farms appear as current farm choices
+# ------------------------------------------------------------
+
+active_farms = [
+    farm for farm in farms
+    if str(farm.get("status", "active")).lower() == "active"
+]
+
+if not active_farms:
+    active_farms = farms
+
+
+# ------------------------------------------------------------
+# 3. Restore previously selected farm
+# ------------------------------------------------------------
+
+saved_farm_id = st.session_state.get("current_farm_id")
+
+current_farm = None
+
+if saved_farm_id:
+    current_farm = next(
+        (
+            farm for farm in active_farms
+            if str(farm.get("farm_id")) == str(saved_farm_id)
+        ),
+        None
+    )
+
+# If no valid farm was selected, use the first active farm
+if current_farm is None and active_farms:
+    current_farm = active_farms[0]
+    st.session_state.current_farm_id = current_farm.get("farm_id")
+
+
+# ------------------------------------------------------------
+# 4. Keep current farm available globally through session state
+# ------------------------------------------------------------
+
+st.session_state.current_farm = current_farm
+
+
+# ------------------------------------------------------------
+# 5. Build a unified personalization profile
+# ------------------------------------------------------------
+
+personalized_profile = dict(farmer_profile)
+
+if current_farm:
+
+    personalized_profile.update({
+        "current_farm_id": current_farm.get("farm_id"),
+        "current_farm_name": current_farm.get("farm_name"),
+        "current_crop": current_farm.get("crop_type"),
+        "current_location": current_farm.get("location"),
+        "current_farm_type": current_farm.get("farm_type"),
+        "current_farm_size": current_farm.get("farm_size"),
+    })
+
+    # Current farm becomes the main context
+    if current_farm.get("crop_type"):
+        personalized_profile["crop_type"] = current_farm.get("crop_type")
+
+    if current_farm.get("location"):
+        personalized_profile["location"] = current_farm.get("location")
+
+    if current_farm.get("farm_type"):
+        personalized_profile["farm_type"] = current_farm.get("farm_type")
+
+    if current_farm.get("farm_size"):
+        personalized_profile["farm_size"] = current_farm.get("farm_size")
+
+
+st.session_state.personalized_profile = personalized_profile
+
+
+# ------------------------------------------------------------
+# 6. Generate personalized recommendations
+# ------------------------------------------------------------
 
 recommended_features = recommend_features(
     SMART_FARM_FEATURES,
+    personalized_profile
+)
+
+
+# ------------------------------------------------------------
+# 7. Current Farm Context Bar
+# ------------------------------------------------------------
+
+if current_farm:
+
+    farm_name = current_farm.get("farm_name", "Current Farm")
+    crop_name = current_farm.get("crop_type", "Not specified")
+    farm_location = current_farm.get("location", "Not specified")
+
+    st.markdown(
+        f"""
+        <div style="
+            background: rgba(255,255,255,0.90);
+            padding: 14px 18px;
+            border-radius: 14px;
+            margin-bottom: 18px;
+            border-left: 5px solid #2e7d32;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        ">
+            <div style="font-size: 13px; color: #666;">
+                CURRENT FARM
+            </div>
+
+            <div style="
+                font-size: 22px;
+                font-weight: 700;
+                margin-top: 3px;
+            ">
+                🌱 {farm_name}
+            </div>
+
+            <div style="
+                font-size: 14px;
+                margin-top: 6px;
+                color: #555;
+            ">
+                🌾 Crop: {crop_name}
+                &nbsp;&nbsp;|&nbsp;&nbsp;
+                📍 Location: {farm_location}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# ------------------------------------------------------------
+# 8. Personalization summary
+# ------------------------------------------------------------
+
+with st.expander("⭐ My Personalized Farm Recommendations", expanded=False):
+
+    if recommended_features:
+
+        st.write(
+            "Smart Farm AI has selected the tools most relevant to your "
+            "current farm and farming situation."
+        )
+
+        for feature in recommended_features[:20]:
+
+            if isinstance(feature, dict):
+                feature_name = feature.get(
+                    "name",
+                    feature.get("Name", "Feature")
+                )
+            else:
+                feature_name = str(feature)
+
+            st.markdown(f"⭐ {feature_name}")
+
+    else:
+        st.info(
+            "Complete your farmer profile and current farm information "
+            "to receive personalized recommendations."
+        )
+
+
+    # ============================================================
+# SMART FARM AI — CURRENT FARM SELECTOR
+# ============================================================
+
+if active_farms:
+
+    farm_options = {
+        farm.get("farm_name", f"Farm {i + 1}"): farm
+        for i, farm in enumerate(active_farms)
+    }
+
+    selected_farm_name = st.selectbox(
+        "🌱 Select Current Farm",
+        list(farm_options.keys()),
+        index=list(farm_options.keys()).index(
+            current_farm.get("farm_name")
+        ) if current_farm and current_farm.get("farm_name") in farm_options else 0,
+        key="current_farm_selector"
+    )
+
+    selected_farm = farm_options[selected_farm_name]
+
+    if (
+        st.session_state.get("current_farm_id")
+        != selected_farm.get("farm_id")
+    ):
+        st.session_state.current_farm_id = selected_farm.get("farm_id")
+        st.session_state.current_farm = selected_farm
+
+        # Rebuild personalization immediately
+        personalized_profile = dict(farmer_profile)
+        personalized_profile.update({
+            "current_farm_id": selected_farm.get("farm_id"),
+            "current_farm_name": selected_farm.get("farm_name"),
+            "current_crop": selected_farm.get("crop_type"),
+            "current_location": selected_farm.get("location"),
+            "current_farm_type": selected_farm.get("farm_type"),
+            "current_farm_size": selected_farm.get("farm_size"),
+            "crop_type": selected_farm.get("crop_type"),
+            "location": selected_farm.get("location"),
+            "farm_type": selected_farm.get("farm_type"),
+            "farm_size": selected_farm.get("farm_size"),
+        })
+
+        st.session_state.personalized_profile = personalized_profile
+
+        recommended_features = recommend_features(
+            SMART_FARM_FEATURES,
+            personalized_profile
+        )
+
+        st.rerun()    
+
+
+
+# ============================================================
+# SMART FARM AI — PRECISION AGRICULTURE ENGINE
+# ============================================================
+
+def precision_agriculture_analysis(farm, farmer_profile):
+    """
+    Precision Agriculture (PA) engine.
+
+    Uses the selected/current farm and farmer profile to generate
+    farm-specific recommendations, priorities, and alerts.
+    """
+
+    farm = farm if isinstance(farm, dict) else {}
+    farmer_profile = farmer_profile if isinstance(farmer_profile, dict) else {}
+
+    crop = str(
+        farm.get("crop_type")
+        or farmer_profile.get("crop_type")
+        or "Not specified"
+    ).strip()
+
+    location = str(
+        farm.get("location")
+        or farmer_profile.get("location")
+        or "Not specified"
+    ).strip()
+
+    farm_type = str(
+        farm.get("farm_type")
+        or farmer_profile.get("farm_type")
+        or "Not specified"
+    ).strip()
+
+    farm_size = str(
+        farm.get("farm_size")
+        or farmer_profile.get("farm_size")
+        or "Not specified"
+    ).strip()
+
+    experience = str(
+        farmer_profile.get("experience")
+        or "Not specified"
+    ).strip()
+
+    crop_lower = crop.lower()
+    farm_type_lower = farm_type.lower()
+
+    recommendations = []
+    alerts = []
+
+    # --------------------------------------------------------
+    # CORE PRECISION AGRICULTURE RECOMMENDATIONS
+    # --------------------------------------------------------
+
+    recommendations.append(
+        f"Monitor {crop} field conditions regularly and make decisions "
+        "based on the actual condition of the farm."
+    )
+
+    recommendations.append(
+        "Use soil moisture information to improve irrigation timing "
+        "and reduce unnecessary water use."
+    )
+
+    recommendations.append(
+        "Apply fertilizer according to crop needs and soil conditions "
+        "rather than using the same rate across the entire farm."
+    )
+
+    recommendations.append(
+        "Monitor crop health early so disease, pest, or nutrient problems "
+        "can be detected before they spread."
+    )
+
+    recommendations.append(
+        "Use weather and climate information when planning irrigation, "
+        "fertilizer application, spraying, and other farm activities."
+    )
+
+    recommendations.append(
+        "Record farm observations and yield results so future decisions "
+        "can become more accurate and data-driven."
+    )
+
+    # --------------------------------------------------------
+    # CROP-SPECIFIC GUIDANCE
+    # --------------------------------------------------------
+
+    crop_rules = {
+        "maize": [
+            "Monitor maize for nutrient deficiency, especially nitrogen deficiency.",
+            "Track soil moisture carefully during establishment and grain development.",
+            "Monitor for fall armyworm and other major maize pests."
+        ],
+        "corn": [
+            "Monitor corn for nutrient deficiency, especially nitrogen deficiency.",
+            "Track soil moisture during establishment and grain development.",
+            "Inspect plants regularly for pest and disease pressure."
+        ],
+        "cassava": [
+            "Monitor cassava for mosaic disease, bacterial blight, and pest damage.",
+            "Inspect leaves and stems regularly for abnormal symptoms.",
+            "Monitor soil moisture during establishment and periods of water stress."
+        ],
+        "rice": [
+            "Monitor field water conditions carefully and avoid unnecessary irrigation.",
+            "Watch for rice diseases and pest pressure during critical growth stages.",
+            "Use weather information when planning fertilizer and crop protection activities."
+        ],
+        "tomato": [
+            "Monitor tomato leaves and fruits frequently for disease and pest symptoms.",
+            "Avoid excessive irrigation and monitor soil moisture.",
+            "Use weather information to reduce disease risk during wet periods."
+        ],
+        "yam": [
+            "Monitor yam vines and leaves for disease and pest symptoms.",
+            "Maintain appropriate soil moisture without prolonged waterlogging.",
+            "Monitor nutrient conditions during important growth stages."
+        ]
+    }
+
+    for key, rules in crop_rules.items():
+        if key in crop_lower:
+            recommendations.extend(rules)
+            break
+
+    # --------------------------------------------------------
+    # FARM-TYPE GUIDANCE
+    # --------------------------------------------------------
+
+    if "crop" in farm_type_lower:
+        recommendations.append(
+            "Prioritize field-level monitoring of soil, crop health, "
+            "water, weather, pests, and yield."
+        )
+
+    elif "mixed" in farm_type_lower:
+        recommendations.append(
+            "Consider interactions between crop production, livestock "
+            "resources, soil fertility, water, and farm economics."
+        )
+
+    elif "livestock" in farm_type_lower:
+        recommendations.append(
+            "Use environmental monitoring to support animal comfort, "
+            "water availability, feed planning, and farm productivity."
+        )
+
+    # --------------------------------------------------------
+    # EXPERIENCE-BASED GUIDANCE
+    # --------------------------------------------------------
+
+    if experience.lower() == "beginner":
+        recommendations.append(
+            "Start with simple measurements such as soil moisture, "
+            "weather conditions, crop health, and farm records."
+        )
+
+    elif experience.lower() in ["experienced", "professional"]:
+        recommendations.append(
+            "Use historical farm records and sensor data to identify "
+            "patterns and improve field-level decision making."
+        )
+
+    # --------------------------------------------------------
+    # PRECISION AGRICULTURE ALERTS
+    # --------------------------------------------------------
+
+    if crop == "Not specified":
+        alerts.append(
+            "Crop information is missing. Add the crop for more precise "
+            "agricultural recommendations."
+        )
+
+    if location == "Not specified":
+        alerts.append(
+            "Farm location is missing. Add the location to improve "
+            "weather, climate, and regional recommendations."
+        )
+
+    if farm_size == "Not specified":
+        alerts.append(
+            "Farm size is missing. Add farm size to improve resource "
+            "and productivity calculations."
+        )
+
+    # --------------------------------------------------------
+    # PRIORITY ACTIONS
+    # --------------------------------------------------------
+
+    priority_actions = [
+        "Monitor soil moisture",
+        "Monitor crop health",
+        "Check weather conditions",
+        "Review irrigation needs",
+        "Review fertilizer needs",
+        "Record farm observations",
+        "Monitor pests and diseases"
+    ]
+
+    return {
+        "farm": farm,
+        "crop": crop,
+        "location": location,
+        "farm_type": farm_type,
+        "farm_size": farm_size,
+        "experience": experience,
+        "recommendations": recommendations,
+        "alerts": alerts,
+        "priority_actions": priority_actions
+    }
+
+
+# ------------------------------------------------------------
+# RUN PRECISION AGRICULTURE FOR THE CURRENT FARM
+# ------------------------------------------------------------
+
+current_farm = st.session_state.get("current_farm", {})
+personalized_profile = st.session_state.get(
+    "personalized_profile",
     farmer_profile
 )
 
+pa_analysis = precision_agriculture_analysis(
+    current_farm,
+    personalized_profile
+)
+
+st.session_state.pa_analysis = pa_analysis
+
+
+# ============================================================
+# SMART FARM AI — GREEN CHLOROPHYLL INDEX (CIG) ENGINE
+# ============================================================
+
+def calculate_cig(near_infrared, green):
+    """
+    Green Chlorophyll Index (CIG).
+
+    CIG = (NIR / Green) - 1
+
+    Used with suitable multispectral/remote-sensing data
+    to estimate relative vegetation chlorophyll condition.
+    """
+
+    try:
+        nir = float(near_infrared)
+        green_band = float(green)
+
+        if green_band <= 0:
+            return None
+
+        return (nir / green_band) - 1
+
+    except (TypeError, ValueError):
+        return None
+
+
+def chlorophyll_status(cig_value):
+    """Convert CIG into a simple farm interpretation."""
+
+    if cig_value is None:
+        return "Data unavailable"
+
+    if cig_value < 1:
+        return "Low chlorophyll signal"
+
+    if cig_value < 2:
+        return "Moderate chlorophyll signal"
+
+    return "Healthy chlorophyll signal"
+
+
+def green_chlorophyll_analysis(farm, farmer_profile):
+    """
+    CIG intelligence layer.
+
+    Uses the current farm context and prepares the platform
+    for future drone/satellite/multispectral measurements.
+    """
+
+    farm = farm if isinstance(farm, dict) else {}
+    farmer_profile = (
+        farmer_profile
+        if isinstance(farmer_profile, dict)
+        else {}
+    )
+
+    crop = str(
+        farm.get("crop_type")
+        or farmer_profile.get("crop_type")
+        or "Not specified"
+    )
+
+    location = str(
+        farm.get("location")
+        or farmer_profile.get("location")
+        or "Not specified"
+    )
+
+    recommendations = [
+        "Monitor vegetation colour and crop vigour regularly.",
+        "Investigate areas showing weaker crop growth or unusual colour.",
+        "Compare crop condition across different areas of the farm.",
+        "Use multispectral drone or satellite data when available "
+        "to improve chlorophyll assessment.",
+        "Combine chlorophyll information with soil, weather, irrigation, "
+        "and crop-health data before making management decisions."
+    ]
+
+    alerts = []
+
+    if crop == "Not specified":
+        alerts.append(
+            "Crop information is required for more meaningful "
+            "chlorophyll interpretation."
+        )
+
+    return {
+        "crop": crop,
+        "location": location,
+        "cig": None,
+        "status": "Waiting for multispectral data",
+        "recommendations": recommendations,
+        "alerts": alerts
+    }
+
+
+# ------------------------------------------------------------
+# RUN CIG FOR THE CURRENT FARM
+# ------------------------------------------------------------
+
+current_farm = st.session_state.get("current_farm", {})
+personalized_profile = st.session_state.get(
+    "personalized_profile",
+    farmer_profile
+)
+
+cig_analysis = green_chlorophyll_analysis(
+    current_farm,
+    personalized_profile
+)
+
+st.session_state.cig_analysis = cig_analysis
+
+
+# ============================================================
+# SMART FARM AI — CLIMATE-SMART AGRICULTURE (CSA) ENGINE
+# ============================================================
+
+def climate_smart_agriculture_analysis(farm, farmer_profile):
+    """
+    Climate-Smart Agriculture engine.
+
+    Connects farm context with climate-aware recommendations,
+    risk management, productivity, and resource efficiency.
+    """
+
+    farm = farm if isinstance(farm, dict) else {}
+
+    farmer_profile = (
+        farmer_profile
+        if isinstance(farmer_profile, dict)
+        else {}
+    )
+
+    crop = str(
+        farm.get("crop_type")
+        or farmer_profile.get("crop_type")
+        or "Not specified"
+    ).strip()
+
+    location = str(
+        farm.get("location")
+        or farmer_profile.get("location")
+        or "Not specified"
+    ).strip()
+
+    farm_type = str(
+        farm.get("farm_type")
+        or farmer_profile.get("farm_type")
+        or "Not specified"
+    ).strip()
+
+    recommendations = [
+        "Use weather and seasonal information when planning farm activities.",
+        "Improve water efficiency by matching irrigation with crop needs "
+        "and soil moisture.",
+        "Protect soil through appropriate soil-management and erosion-control practices.",
+        "Adjust planting and farm operations when climate conditions create increased risk.",
+        "Monitor crop health early so climate-related stress can be detected quickly.",
+        "Use farm records to compare productivity, resource use, and climate conditions over time.",
+        "Combine weather, soil, crop, irrigation, disease, and yield information "
+        "for better climate-aware decisions."
+    ]
+
+    climate_risks = [
+        "Drought and water stress",
+        "Excess rainfall and flooding",
+        "Heat stress",
+        "Changing pest and disease pressure",
+        "Soil degradation and erosion"
+    ]
+
+    adaptation_actions = [
+        "Improve irrigation efficiency",
+        "Protect soil moisture",
+        "Monitor weather before major farm operations",
+        "Strengthen crop-health monitoring",
+        "Use farm records to identify climate-related production changes"
+    ]
+
+    alerts = []
+
+    if crop == "Not specified":
+        alerts.append(
+            "Add a crop to receive more specific climate-smart recommendations."
+        )
+
+    if location == "Not specified":
+        alerts.append(
+            "Add the farm location to improve climate and seasonal guidance."
+        )
+
+    return {
+        "crop": crop,
+        "location": location,
+        "farm_type": farm_type,
+        "recommendations": recommendations,
+        "climate_risks": climate_risks,
+        "adaptation_actions": adaptation_actions,
+        "alerts": alerts
+    }
+
+
+# ------------------------------------------------------------
+# RUN CSA FOR THE CURRENT FARM
+# ------------------------------------------------------------
+
+current_farm = st.session_state.get("current_farm", {})
+
+personalized_profile = st.session_state.get(
+    "personalized_profile",
+    farmer_profile
+)
+
+csa_analysis = climate_smart_agriculture_analysis(
+    current_farm,
+    personalized_profile
+)
+
+st.session_state.csa_analysis = csa_analysis
 
 # ============================================================
 # 🌾 FARM SELECTION & MULTI-FARM MANAGEMENT
@@ -4064,11 +4757,489 @@ key=k2("main_menu_option")
 
 
 
-# -------- Router (clean & deduped) --------
+# ============================================================
+# SMART FARM AI — FARMER COMMAND CENTER
+# ============================================================
+
 if menu_v2 == "🏡 Home":
-    st.subheader("🏡 Welcome to Smart Farm AI!")
-    st.write("🌱 Empowering farmers with AI-driven tools for better yield, smart management, and sustainable farming.")
-    st.info("👈 Use the sidebar to explore features like irrigation schedules, crop predictions, and farm records.")
+
+    st.header("🏡 Smart Farm AI — Farmer Command Center")
+
+    current_farm = st.session_state.get("current_farm", {})
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
+
+    farm_name = current_farm.get("farm_name", "My Farm")
+
+    crop_name = current_farm.get(
+        "crop_type",
+        personalized_profile.get("crop_type", "Not specified")
+    )
+
+    farm_location = current_farm.get(
+        "location",
+        personalized_profile.get("location", "Not specified")
+    )
+
+    farm_type = current_farm.get(
+        "farm_type",
+        personalized_profile.get("farm_type", "Not specified")
+    )
+
+    farm_size = current_farm.get(
+        "farm_size",
+        personalized_profile.get("farm_size", "Not specified")
+    )
+
+    # ========================================================
+    # WELCOME
+    # ========================================================
+
+    st.markdown(
+        f"""
+        ### Welcome back! 🌱
+
+        {farm_name} is your current farm.
+
+        Crop: {crop_name}  
+        Location: {farm_location}  
+        Farm type: {farm_type}  
+        Farm size: {farm_size}
+        """
+    )
+
+    st.divider()
+
+    # ========================================================
+    # FARM OVERVIEW METRICS
+    # ========================================================
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        st.metric("🌱 Current Farm", farm_name)
+
+    with c2:
+        st.metric("🌾 Main Crop", crop_name)
+
+    with c3:
+        st.metric("📍 Location", farm_location)
+
+    with c4:
+        st.metric("📊 Farm Size", farm_size)
+
+    st.divider()
+
+    # ========================================================
+    # PERSONALIZED RECOMMENDATIONS
+    # ========================================================
+
+    st.subheader("⭐ Recommended for Your Farm")
+
+    if recommended_features:
+
+        for feature in recommended_features[:6]:
+
+            if isinstance(feature, dict):
+                feature_name = feature.get(
+                    "name",
+                    feature.get("Name", "Farm Tool")
+                )
+            else:
+                feature_name = str(feature)
+
+            st.markdown(f"🌿 {feature_name}")
+
+    else:
+
+        st.info(
+            "Complete your farm profile to receive personalized "
+            "recommendations."
+        )
+
+    st.divider()
+
+    # ========================================================
+    # QUICK FARM ACTIONS
+    # ========================================================
+
+    st.subheader("⚡ Quick Farm Actions")
+
+    q1, q2, q3, q4 = st.columns(4)
+
+    with q1:
+        st.info("🌦 Weather & Climate")
+
+    with q2:
+        st.info("🚨 Farm Alerts")
+
+    with q3:
+        st.info("💧 Irrigation & Soil")
+
+    with q4:
+        st.info("🧠 AI Predictions")
+
+    st.divider()
+
+    # ========================================================
+    # PRECISION AGRICULTURE
+    # ========================================================
+
+    st.subheader("🎯 Precision Agriculture Intelligence")
+
+    pa_analysis = st.session_state.get(
+        "pa_analysis",
+        {}
+    )
+
+    if pa_analysis:
+
+        pa_crop = pa_analysis.get(
+            "crop",
+            "Not specified"
+        )
+
+        pa_location = pa_analysis.get(
+            "location",
+            "Not specified"
+        )
+
+        pa_recommendations = pa_analysis.get(
+            "recommendations",
+            []
+        )
+
+        pa_alerts = pa_analysis.get(
+            "alerts",
+            []
+        )
+
+        pa_priority_actions = pa_analysis.get(
+            "priority_actions",
+            []
+        )
+
+        # ----------------------------------------------------
+        # PA SUMMARY
+        # ----------------------------------------------------
+
+        p1, p2, p3 = st.columns(3)
+
+        with p1:
+            st.metric(
+                "🌾 Crop",
+                pa_crop
+            )
+
+        with p2:
+            st.metric(
+                "📍 Location",
+                pa_location
+            )
+
+        with p3:
+            st.metric(
+                "🧠 PA Recommendations",
+                len(pa_recommendations)
+            )
+
+        # ----------------------------------------------------
+        # PA PRIORITY ACTIONS
+        # ----------------------------------------------------
+
+        st.markdown("### ⭐ Priority Actions")
+
+        if pa_priority_actions:
+
+            action_cols = st.columns(2)
+
+            for i, action in enumerate(
+                pa_priority_actions[:6]
+            ):
+
+                with action_cols[i % 2]:
+                    st.info(
+                        f"🎯 {action}"
+                    )
+
+        # ----------------------------------------------------
+        # PA RECOMMENDATIONS
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 🌱 Precision Farm Recommendations"
+        )
+
+        if pa_recommendations:
+
+            for recommendation in pa_recommendations[:6]:
+
+                st.write(
+                    f"• {recommendation}"
+                )
+
+        else:
+
+            st.info(
+                "Precision Agriculture is ready. "
+                "More farm data will improve the recommendations."
+            )
+
+        # ----------------------------------------------------
+        # PA ALERTS
+        # ----------------------------------------------------
+
+        if pa_alerts:
+
+            st.markdown(
+                "### ⚠️ Precision Agriculture Alerts"
+            )
+
+            for alert in pa_alerts:
+
+                st.warning(alert)
+
+    else:
+
+        st.info(
+            "Precision Agriculture intelligence is preparing "
+            "for your current farm."
+        )
+
+    st.divider()
+
+    # ========================================================
+    # CIG — GREEN CHLOROPHYLL INTELLIGENCE
+    # ========================================================
+
+    st.subheader(
+        "🌿 Green Chlorophyll Intelligence"
+    )
+
+    cig_analysis = st.session_state.get(
+        "cig_analysis",
+        {}
+    )
+
+    if cig_analysis:
+
+        cig_crop = cig_analysis.get(
+            "crop",
+            "Not specified"
+        )
+
+        cig_status = cig_analysis.get(
+            "status",
+            "Waiting for multispectral data"
+        )
+
+        cig_value = cig_analysis.get(
+            "cig"
+        )
+
+        # ----------------------------------------------------
+        # CIG SUMMARY
+        # ----------------------------------------------------
+
+        g1, g2, g3 = st.columns(3)
+
+        with g1:
+            st.metric(
+                "🌾 Crop",
+                cig_crop
+            )
+
+        with g2:
+
+            if cig_value is not None:
+
+                st.metric(
+                    "🌿 CIG",
+                    f"{cig_value:.2f}"
+                )
+
+            else:
+
+                st.metric(
+                    "🌿 CIG",
+                    "Pending"
+                )
+
+        with g3:
+            st.metric(
+                "📡 Status",
+                cig_status
+            )
+
+        st.caption(
+            "CIG becomes quantitative when suitable "
+            "multispectral drone or satellite NIR and "
+            "green-band data are available."
+        )
+
+        # ----------------------------------------------------
+        # CIG RECOMMENDATIONS
+        # ----------------------------------------------------
+
+        cig_recommendations = cig_analysis.get(
+            "recommendations",
+            []
+        )
+
+        if cig_recommendations:
+
+            st.markdown(
+                "### 🌱 CIG Recommendations"
+            )
+
+            for recommendation in cig_recommendations[:4]:
+
+                st.write(
+                    f"• {recommendation}"
+                )
+
+        # ----------------------------------------------------
+        # CIG ALERTS
+        # ----------------------------------------------------
+
+        cig_alerts = cig_analysis.get(
+            "alerts",
+            []
+        )
+
+        for alert in cig_alerts:
+
+            st.warning(alert)
+
+    else:
+        st.info(
+            "Green Chlorophyll Intelligence is ready "
+            "for multispectral data."
+        )
+
+    st.divider()
+
+    # ========================================================
+    # CSA — CLIMATE-SMART AGRICULTURE
+    # ========================================================
+
+    st.subheader(
+        "🌍 Climate-Smart Agriculture"
+    )
+
+    csa_analysis = st.session_state.get(
+        "csa_analysis",
+        {}
+    )
+
+    if csa_analysis:
+
+        csa_crop = csa_analysis.get(
+            "crop",
+            "Not specified"
+        )
+
+        csa_location = csa_analysis.get(
+            "location",
+            "Not specified"
+        )
+
+        # ----------------------------------------------------
+        # CSA SUMMARY
+        # ----------------------------------------------------
+
+        s1, s2 = st.columns(2)
+
+        with s1:
+            st.metric(
+                "🌾 Crop",
+                csa_crop
+            )
+
+        with s2:
+            st.metric(
+                "📍 Farm Location",
+                csa_location
+            )
+
+        # ----------------------------------------------------
+        # CLIMATE RISKS
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 🌦 Climate Risks to Monitor"
+        )
+
+        climate_risks = csa_analysis.get(
+            "climate_risks",
+            []
+        )
+
+        for risk in climate_risks[:5]:
+
+            st.warning(
+                f"⚠️ {risk}"
+            )
+
+        # ----------------------------------------------------
+        # ADAPTATION ACTIONS
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 🌱 Climate Adaptation Actions"
+        )
+
+        adaptation_actions = csa_analysis.get(
+            "adaptation_actions",
+            []
+        )
+
+        for action in adaptation_actions[:5]:
+
+            st.info(
+                f"🌱 {action}"
+            )
+
+        # ----------------------------------------------------
+        # CSA RECOMMENDATIONS
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 🧠 Climate-Smart Recommendations"
+        )
+
+        csa_recommendations = csa_analysis.get(
+            "recommendations",
+            []
+        )
+
+        for recommendation in csa_recommendations[:5]:
+
+            st.write(
+                f"• {recommendation}"
+            )
+
+        # ----------------------------------------------------
+        # CSA ALERTS
+        # ----------------------------------------------------
+
+        csa_alerts = csa_analysis.get(
+            "alerts",
+            []
+        )
+
+        for alert in csa_alerts:
+
+            st.warning(alert)
+
+    else:
+
+        st.info(
+            "Climate-Smart Agriculture intelligence is "
+            "preparing for your current farm."
+        )
 
 elif menu_v2 == "🧑‍🏫 Smart Tutor Multilanguage":
     try:
