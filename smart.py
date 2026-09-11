@@ -2184,6 +2184,294 @@ def user_account_management_ui_v2():
         _save("account.json", {"username": username, "email": email})
         st.success("✅ Account saved.")
 
+ # ============================================================
+# SMART FARM AI — FARM MANAGEMENT
+# ============================================================
+
+def farm_management_ui():
+
+    st.subheader("🌿 Farm Management")
+
+    farmer_profile = st.session_state.get(
+        "farmer_profile",
+        {}
+    )
+
+    if not isinstance(farmer_profile, dict):
+        farmer_profile = {}
+
+    farms = farmer_profile.get("farms", [])
+
+    if not isinstance(farms, list):
+        farms = []
+
+    # ========================================================
+    # ADD NEW FARM
+    # ========================================================
+
+    st.markdown("### ➕ Add New Farm")
+
+    with st.form("add_farm_form"):
+
+        farm_name = st.text_input(
+            "🌱 Farm Name",
+            placeholder="e.g. Main Farm"
+        )
+
+        crop_type = st.text_input(
+            "🌾 Main Crop",
+            placeholder="e.g. Maize"
+        )
+
+        location = st.text_input(
+            "📍 Farm Location",
+            placeholder="e.g. Anambra, Nigeria"
+        )
+
+        farm_type = st.selectbox(
+            "🚜 Farm Type",
+            [
+                "Crop Farming",
+                "Livestock Farming",
+                "Mixed Farming",
+                "Aquaculture",
+                "Urban Farming"
+            ]
+        )
+
+        farm_size = st.text_input(
+            "📊 Farm Size",
+            placeholder="e.g. 5 hectares"
+        )
+
+        add_farm = st.form_submit_button(
+            "➕ Add Farm"
+        )
+
+    if add_farm:
+
+        if not farm_name.strip():
+
+            st.error("Please enter a farm name.")
+
+        else:
+
+            farm_id = (
+                "farm_"
+                + str(len(farms) + 1)
+                + "_"
+                + str(abs(hash(farm_name)))
+            )
+
+            new_farm = {
+                "farm_id": farm_id,
+                "farm_name": farm_name.strip(),
+                "crop_type": crop_type.strip(),
+                "location": location.strip(),
+                "farm_type": farm_type,
+                "farm_size": farm_size.strip(),
+                "status": "active"
+            }
+
+            farms.append(new_farm)
+
+            farmer_profile["farms"] = farms
+
+            st.session_state.farmer_profile = farmer_profile
+
+            # Automatically make the new farm current
+            st.session_state.current_farm_id = farm_id
+            st.session_state.current_farm = new_farm
+
+            personalized_profile = dict(farmer_profile)
+
+            personalized_profile.update({
+                "current_farm_id": farm_id,
+                "current_farm_name": farm_name.strip(),
+                "current_crop": crop_type.strip(),
+                "current_location": location.strip(),
+                "current_farm_type": farm_type,
+                "current_farm_size": farm_size.strip(),
+                "crop_type": crop_type.strip(),
+                "location": location.strip(),
+                "farm_type": farm_type,
+                "farm_size": farm_size.strip()
+            })
+
+            st.session_state.personalized_profile = (
+                personalized_profile
+            )
+
+            recommended_features = recommend_features(
+                SMART_FARM_FEATURES,
+                personalized_profile
+            )
+
+            st.session_state.recommended_features = (
+                recommended_features
+            )
+
+            st.success(
+                f"✅ {farm_name.strip()} has been added "
+                "and selected as your current farm."
+            )
+
+            st.rerun()
+
+    st.divider()
+
+    # ========================================================
+    # EXISTING FARMS
+    # ========================================================
+
+    st.markdown("### 🌾 My Farms")
+
+    active_farms = [
+        farm for farm in farms
+        if str(
+            farm.get("status", "active")
+        ).lower() == "active"
+    ]
+
+    if not active_farms:
+
+        st.info(
+            "No farms have been added yet. "
+            "Use the form above to add your first farm."
+        )
+
+    else:
+        for farm in active_farms:
+
+            farm_name_display = farm.get(
+                "farm_name",
+                "Unnamed Farm"
+            )
+
+            crop_display = farm.get(
+                "crop_type",
+                "Not specified"
+            )
+
+            location_display = farm.get(
+                "location",
+                "Not specified"
+            )
+
+            farm_type_display = farm.get(
+                "farm_type",
+                "Not specified"
+            )
+
+            farm_size_display = farm.get(
+                "farm_size",
+                "Not specified"
+            )
+
+            farm_id = farm.get(
+                "farm_id"
+            )
+
+            st.markdown(
+                f"### 🌱 {farm_name_display}"
+            )
+
+            f1, f2, f3, f4 = st.columns(4)
+
+            with f1:
+                st.write(
+                    f"🌾 Crop: {crop_display}"
+                )
+
+            with f2:
+                st.write(
+                    f"📍 Location: {location_display}"
+                )
+
+            with f3:
+                st.write(
+                    f"🚜 Type: {farm_type_display}"
+                )
+
+            with f4:
+                st.write(
+                    f"📊 Size: {farm_size_display}"
+                )
+
+            if (
+                st.session_state.get(
+                    "current_farm_id"
+                ) == farm_id
+            ):
+
+                st.success(
+                    "🟢 Current Farm"
+                )
+
+            else:
+
+                if st.button(
+                    "🌱 Select This Farm",
+                    key=f"select_farm_{farm_id}"
+                ):
+
+                    st.session_state.current_farm_id = farm_id
+                    st.session_state.current_farm = farm
+
+                    personalized_profile = dict(
+                        farmer_profile
+                    )
+
+                    personalized_profile.update({
+                        "current_farm_id": farm_id,
+                        "current_farm_name": farm.get(
+                            "farm_name"
+                        ),
+                        "current_crop": farm.get(
+                            "crop_type"
+                        ),
+                        "current_location": farm.get(
+                            "location"
+                        ),
+                        "current_farm_type": farm.get(
+                            "farm_type"
+                        ),
+                        "current_farm_size": farm.get(
+                            "farm_size"
+                        ),
+                        "crop_type": farm.get(
+                            "crop_type"
+                        ),
+                        "location": farm.get(
+                            "location"
+                        ),
+                        "farm_type": farm.get(
+                            "farm_type"
+                        ),
+                        "farm_size": farm.get(
+                            "farm_size"
+                        )
+                    })
+
+                    st.session_state.personalized_profile = (
+                        personalized_profile
+                    )
+
+                    st.session_state.recommended_features = (
+                        recommend_features(
+                            SMART_FARM_FEATURES,
+                            personalized_profile
+                        )
+                    )
+
+                    st.success(
+                        f"✅ {farm_name_display} "
+                        "is now your current farm."
+                    )
+
+                    st.rerun()
+
+
 
 def farm_plot_mapping_ui():
 
@@ -5293,81 +5581,14 @@ if _show_help:
         st.markdown(_help_content)
 # otherwise nothing is shown in the UI (help works "silently" in the code)
   
-
-
-
-
 # 🏡 HOME
 if menu == "🏡 Home":
     st.subheader("Welcome to Smart Farm AI!")
     st.write("Use the sidebar to navigate through available tools.")
 
-# farm management"
+# 🌿 FARM MANAGEMENT
 elif menu_v2 == "🌿 Farm Management":
-    option = st.selectbox(
-        "Select a Feature",
-        [
-            "Farm Equipment Tracker",
-            "Pesticides Recommendation",
-            "Add Sale Record",
-            "Add Order Record",
-            "Farm Labor Record",
-            "Farm Location Mapper",
-        ],
-        key=kfm2("feature")
-    )
-
-    if option == "Farm Equipment Tracker":
-        st.subheader("Farm Equipment Tracker")
-        equipment_name = st.text_input("Enter Equipment Name:", key=kfm2("equip_name"))
-        purchase_date  = st.date_input("Select Purchase Date:", key=kfm2("equip_date"))
-        status = st.selectbox("Equipment Status", ["Available", "In Use", "Under Repair"], key=kfm2("equip_status"))
-        if st.button("Save Equipment Record", key=kfm2("equip_save")):
-            st.success(f"✅ Saved: {equipment_name} | {purchase_date} | {status}")
-
-    elif option == "Pesticides Recommendation":
-        st.subheader("Pesticides Recommendation")
-        pest_name = st.text_input("Enter Detected Pest Name:", key=kfm2("pest_name"))
-        crop_type = st.text_input("Enter Crop Type:", key=kfm2("pest_crop"))
-        severity = st.selectbox("Severity Level", ["Low", "Medium", "High"], key=kfm2("pest_severity"))
-        if st.button("Get Recommendation", key=kfm2("pest_reco")):
-            st.success(f"Use recommended pesticide for {pest_name} on {crop_type} (Severity: {severity})")
-
-    elif option == "Add Sale Record":
-        st.subheader("Add Sale Record")
-        crop_name = st.text_input("Enter Crop Name Sold:", key=kfm2("sale_crop"))
-        quantity_sold = st.number_input("Quantity Sold (kg):", min_value=0, key=kfm2("sale_qty"))
-        price_per_kg = st.number_input("Price per kg (₦):", min_value=0, key=kfm2("sale_price"))
-        sale_date = st.date_input("Sale Date:", key=kfm2("sale_date"))
-        if st.button("Save Sale Record", key=kfm2("sale_save")):
-            total_amount = quantity_sold * price_per_kg
-            st.success(f"✅ Sale recorded: {quantity_sold} kg of {crop_name} sold for ₦{total_amount}")
-
-    elif option == "Add Order Record":
-        st.subheader("Add Order Record")
-        customer_name = st.text_input("Customer Name:", key=kfm2("order_customer"))
-        product_ordered = st.text_input("Product Ordered:", key=kfm2("order_product"))
-        quantity_ordered = st.number_input("Quantity Ordered (kg):", min_value=0, key=kfm2("order_qty"))
-        expected_delivery = st.date_input("Expected Delivery Date:", key=kfm2("order_date"))
-        if st.button("Save Order Record", key=kfm2("order_save")):
-            st.success(f"✅ Order saved: {customer_name} ordered {quantity_ordered} kg of {product_ordered}")
-
-    elif option == "Farm Labor Record":
-        st.subheader("Farm Labor Record")
-        worker_name = st.text_input("Worker Name:", key=kfm2("labor_worker"))
-        task_assigned = st.text_input("Task Assigned:", key=kfm2("labor_task"))
-        work_date = st.date_input("Work Date:", key=kfm2("labor_date"))
-        payment_amount = st.number_input("Payment Amount (₦):", min_value=0, key=kfm2("labor_pay"))
-        if st.button("Save Labor Record", key=kfm2("labor_save")):
-            st.success(f"✅ Labor record saved: {worker_name} on {work_date}, Task: {task_assigned}, ₦{payment_amount}")
-
-    elif option == "Farm Location Mapper":
-        st.subheader("Farm Location Mapper")
-        location_name = st.text_input("Farm Location Name:", key=kfm2("loc_name"))
-        gps_coordinates = st.text_input("Enter GPS Coordinates (e.g. 7.3775, 3.9470):", key=kfm2("loc_gps"))
-        land_size = st.number_input("Land Size (hectares):", min_value=0.0, key=kfm2("loc_size"))
-        if st.button("Save Farm Location", key=kfm2("loc_save")):
-            st.success("✅ Location Saved")
+    farm_management_ui()
 
 
 #productivity & Records ----
