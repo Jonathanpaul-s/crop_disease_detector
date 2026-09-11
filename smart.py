@@ -3991,6 +3991,53 @@ if menu == "🌿 Farm Management":
 
     st.header("🌿 Farm Management")
 
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
+
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_farm_name = current_farm.get(
+        "farm_name",
+        personalized_profile.get(
+            "current_farm_name",
+            "Main Farm"
+        )
+    )
+
+    current_crop = current_farm.get(
+        "crop_type",
+        personalized_profile.get(
+            "crop_type",
+            "Not specified"
+        )
+    )
+
+    current_location = current_farm.get(
+        "location",
+        personalized_profile.get(
+            "location",
+            "Not specified"
+        )
+    )
+
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
+
+    
     farm_option = st.sidebar.selectbox("Select a Feature", [
 
         "User Account Management",
