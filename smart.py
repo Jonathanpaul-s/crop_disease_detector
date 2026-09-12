@@ -5938,10 +5938,13 @@ if menu == "🏡 Home":
 elif menu_v2 == "🌿 Farm Management":
     farm_management_ui()
 
-
 elif menu_v2 == "📊 Productivity & Records":
 
     st.header("📊 Productivity & Records")
+
+    # =========================================================
+    # CURRENT FARM
+    # =========================================================
 
     current_farm = st.session_state.get(
         "current_farm",
@@ -5977,32 +5980,36 @@ elif menu_v2 == "📊 Productivity & Records":
         f"📍 Location: {current_location}"
     )
 
+    # =========================================================
+    # PRODUCTIVITY FEATURES
+    # =========================================================
+
     option = st.selectbox(
         "Select a Feature",
         [
-            "View Sales Record",
-            "Add Sales Record",
-            "View Expense",
-            "Add Expense",
-            "Calculate Profit",
-            "View Farmer Record",
-            "Farm Productivity",
-            "Yield Estimator",
-            "Farm Loan Recorder",
-            "Add Loan Record",
-            "View Inventory",
-            "Add Inventory",
-            "Generate Report",
-            "Farm Summary",
+            "📈 View Sales Record",
+            "➕ Add Sales Record",
+            "💰 View Expense",
+            "➕ Add Expense",
+            "🧮 Calculate Profit",
+            "👩‍🌾 View Farmer Record",
+            "📊 Farm Productivity",
+            "🌾 Yield Estimator",
+            "💳 Farm Loan Recorder",
+            "➕ Add Loan Record",
+            "📦 View Inventory",
+            "➕ Add Inventory",
+            "📄 Generate Report",
+            "📊 Farm Summary",
         ],
         key=kp2("feature")
     )
 
     # =========================================================
-    # SALES
+    # ADD SALES RECORD
     # =========================================================
 
-    if option == "Add Sales Record":
+    if option == "➕ Add Sales Record":
 
         st.subheader("➕ Add Sales Record")
 
@@ -6071,7 +6078,11 @@ elif menu_v2 == "📊 Productivity & Records":
                 f"{current_farm_name}."
             )
 
-    elif option == "View Sales Record":
+    # =========================================================
+    # VIEW SALES RECORD
+    # =========================================================
+
+    elif option == "📈 View Sales Record":
 
         st.subheader("📈 View Sales Record")
 
@@ -6108,6 +6119,7 @@ elif menu_v2 == "📊 Productivity & Records":
                     )
 
             else:
+
                 st.info(
                     f"No sales records for "
                     f"{current_farm_name}."
@@ -6120,10 +6132,10 @@ elif menu_v2 == "📊 Productivity & Records":
             )
 
     # =========================================================
-    # EXPENSES
+    # ADD EXPENSE
     # =========================================================
 
-    elif option == "Add Expense":
+    elif option == "➕ Add Expense":
 
         st.subheader("➕ Add Expense Record")
 
@@ -6208,12 +6220,15 @@ elif menu_v2 == "📊 Productivity & Records":
                 f"{current_farm_name}."
             )
 
-    elif option == "View Expense":
+    # =========================================================
+    # VIEW EXPENSE
+    # =========================================================
+
+    elif option == "💰 View Expense":
 
         st.subheader("💰 View Expense Records")
 
         try:
-
             with open(
                 "expenses.json",
                 "r"
@@ -6259,12 +6274,13 @@ elif menu_v2 == "📊 Productivity & Records":
             )
 
     # =========================================================
-    # PROFIT
+    # CALCULATE PROFIT
     # =========================================================
 
-    elif option == "Calculate Profit":
+    elif option == "🧮 Calculate Profit":
 
-        st.subheader("📊 Calculate Profit")
+        st.subheader("🧮 Calculate Profit")
+
         total_sales = st.number_input(
             "Enter Total Sales (₦):",
             min_value=0,
@@ -6282,18 +6298,22 @@ elif menu_v2 == "📊 Productivity & Records":
             key=kp2("profit_calc_btn")
         ):
 
-            profit = total_sales - total_expenses
+            profit = (
+                total_sales -
+                total_expenses
+            )
 
             st.success(
-                f"✅ Net Profit for {current_farm_name}: "
+                f"✅ Net Profit for "
+                f"{current_farm_name}: "
                 f"₦{profit:,.2f}"
             )
 
     # =========================================================
-    # FARMER RECORD
+    # VIEW FARMER RECORD
     # =========================================================
 
-    elif option == "View Farmer Record":
+    elif option == "👩‍🌾 View Farmer Record":
 
         st.subheader("👩‍🌾 View Farmer Record")
 
@@ -6317,9 +6337,9 @@ elif menu_v2 == "📊 Productivity & Records":
     # FARM PRODUCTIVITY
     # =========================================================
 
-    elif option == "Farm Productivity":
+    elif option == "📊 Farm Productivity":
 
-        st.subheader("📈 Farm Productivity")
+        st.subheader("📊 Farm Productivity")
 
         crop_name = st.text_input(
             "Crop Name:",
@@ -6367,7 +6387,7 @@ elif menu_v2 == "📊 Productivity & Records":
     # YIELD ESTIMATOR
     # =========================================================
 
-    elif option == "Yield Estimator":
+    elif option == "🌾 Yield Estimator":
 
         st.subheader("🌾 Yield Estimator")
 
@@ -6398,12 +6418,11 @@ elif menu_v2 == "📊 Productivity & Records":
                 f"{current_farm_name}: "
                 f"{estimated_yield:,.0f} kg"
             )
-
+            # =========================================================
+    # FARM LOAN RECORDER
     # =========================================================
-    # LOANS
-    # =========================================================
 
-    elif option == "Farm Loan Recorder":
+    elif option == "💳 Farm Loan Recorder":
 
         st.subheader("💳 Farm Loan Recorder")
 
@@ -6423,6 +6442,7 @@ elif menu_v2 == "📊 Productivity & Records":
             min_value=0.0,
             key=kp2("loan_interest")
         )
+
         repayment_period = st.text_input(
             "Repayment Period (e.g. 12 months)",
             key=kp2("loan_period")
@@ -6442,7 +6462,11 @@ elif menu_v2 == "📊 Productivity & Records":
                 f"{repayment_period}"
             )
 
-    elif option == "Add Loan Record":
+    # =========================================================
+    # ADD LOAN RECORD
+    # =========================================================
+
+    elif option == "➕ Add Loan Record":
 
         st.subheader("➕ Add Loan Record")
 
@@ -6474,10 +6498,10 @@ elif menu_v2 == "📊 Productivity & Records":
             )
 
     # =========================================================
-    # INVENTORY
+    # ADD INVENTORY
     # =========================================================
 
-    elif option == "Add Inventory":
+    elif option == "➕ Add Inventory":
 
         st.subheader("➕ Add Inventory Item")
 
@@ -6545,12 +6569,15 @@ elif menu_v2 == "📊 Productivity & Records":
                 f"{current_farm_name}."
             )
 
-    elif option == "View Inventory":
+# =========================================================
+    # VIEW INVENTORY
+    # =========================================================
+
+    elif option == "📦 View Inventory":
 
         st.subheader("📦 View Inventory Records")
 
         try:
-
             with open(
                 "inventory.json",
                 "r"
@@ -6582,6 +6609,7 @@ elif menu_v2 == "📊 Productivity & Records":
                     )
 
             else:
+
                 st.info(
                     f"No inventory records for "
                     f"{current_farm_name}."
@@ -6594,10 +6622,10 @@ elif menu_v2 == "📊 Productivity & Records":
             )
 
     # =========================================================
-    # REPORT
+    # GENERATE REPORT
     # =========================================================
 
-    elif option == "Generate Report":
+    elif option == "📄 Generate Report":
 
         st.subheader("📄 Generate Farm Report")
 
@@ -6670,10 +6698,10 @@ elif menu_v2 == "📊 Productivity & Records":
         )
 
     # =========================================================
-    # FARM SUMMARY
-    # =========================================================
+# FARM SUMMARY
+# =========================================================
 
-    elif option == "Farm Summary":
+    elif option == "📊 Farm Summary":
 
         st.subheader("📊 Overall Farm Summary")
 
@@ -6695,7 +6723,7 @@ elif menu_v2 == "📊 Productivity & Records":
                 ) == str(current_farm_id)
             ]
 
-        except FileNotFoundError:
+        except (FileNotFoundError, json.JSONDecodeError):
             farm_sales = []
 
         try:
@@ -6716,7 +6744,7 @@ elif menu_v2 == "📊 Productivity & Records":
                 ) == str(current_farm_id)
             ]
 
-        except FileNotFoundError:
+        except (FileNotFoundError, json.JSONDecodeError):
             farm_expenses = []
 
         try:
@@ -6737,8 +6765,34 @@ elif menu_v2 == "📊 Productivity & Records":
                 ) == str(current_farm_id)
             ]
 
-        except FileNotFoundError:
-            farm_invent
+        except (FileNotFoundError, json.JSONDecodeError):
+            farm_inventory = []
+
+        total_sales = sum(
+            float(entry.get("amount", 0) or 0)
+            for entry in farm_sales
+        )
+
+        total_expenses = sum(
+            float(entry.get("Amount", 0) or 0)
+            for entry in farm_expenses
+        )
+
+        net_profit = total_sales - total_expenses
+
+        st.markdown(
+            f"""
+### 📊 Overall Farm Summary
+
+- 🌱 Farm: {current_farm_name}
+- 🌾 Crop: {current_crop}
+- 📍 Location: {current_location}
+- 💰 Total Sales: ₦{total_sales:,.2f}
+- 💸 Total Expenses: ₦{total_expenses:,.2f}
+- 🧮 Net Profit / Loss: ₦{net_profit:,.2f}
+- 📦 Inventory Items: {len(farm_inventory)}
+"""
+        )
         
 # irrigation & soil
 elif menu_v2 == "💧 Irrigation & Soil":
