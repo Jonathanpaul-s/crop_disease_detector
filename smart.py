@@ -8446,56 +8446,291 @@ elif menu_v2 == "💧 Irrigation & Soil":
             )
 
  
+# ========================================================
+# CALENDAR & SEASONS
+# ========================================================
 
-# calendar & seasons
 elif menu_v2 == "📅 Calendar & Seasons":
-    st.header("📅 Calendar & Seasons (Upgrade)")
 
-    option = st.selectbox(
-        "Select a Calendar Tool",
-        ["Planting Calendar", "Harvest Time Estimator", "Seasonal Task Planner"],
+    st.header("📅 Calendar & Seasons")
+
+    # ========================================================
+    # CURRENT FARM CONTEXT
+    # ========================================================
+
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
+
+    if not isinstance(
+        current_farm,
+        dict
+    ):
+        current_farm = {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
+
+    if not isinstance(
+        personalized_profile,
+        dict
+    ):
+        personalized_profile = {}
+
+    current_farm_id = current_farm.get(
+        "farm_id",
+        "main_farm"
+    )
+
+    current_farm_name = current_farm.get(
+        "farm_name",
+        personalized_profile.get(
+            "current_farm_name",
+            "Main Farm"
+        )
+    )
+
+    current_crop = current_farm.get(
+        "crop_type",
+        personalized_profile.get(
+            "crop_type",
+            "Not specified"
+        )
+    )
+
+    current_location = current_farm.get(
+        "location",
+        personalized_profile.get(
+            "location",
+            "Not specified"
+        )
+    )
+
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
+
+    # ========================================================
+    # CALENDAR TOOLS
+    # ========================================================
+
+    calendar_option = st.selectbox(
+        "📅 Select a Calendar Tool",
+        [
+            "🌱 Planting Calendar",
+            "🌾 Harvest Time Estimator",
+            "📋 Seasonal Task Planner"
+        ],
         key=kcal("option")
     )
 
-    # --- Planting Calendar ---
-    if option == "Planting Calendar":
+    # ========================================================
+    # 1. PLANTING CALENDAR
+    # ========================================================
+
+    if calendar_option == "🌱 Planting Calendar":
+
         st.subheader("🌱 AI-Based Planting Calendar")
-        crop = st.text_input("Enter Crop Name:", key=kcal("planting_crop"))
-        region = st.text_input("Enter Your Region:", key=kcal("planting_region"))
-        if st.button("Generate Planting Schedule", key=kcal("btn_generate")):
-            if not crop.strip() or not region.strip():
-                st.warning("Please enter both crop and region.")
-            else:
-                st.success(f"✅ Recommended planting schedule for {crop.title()} in {region.title()}:")
-                st.write("- Best planting month: April")
-                st.write("- Expected harvest period: July to August")
-                st.write("- Ideal soil moisture: 60%")
-                st.write("- AI Tip: Use sensors to monitor rainfall and adjust irrigation.")
 
-    # --- Harvest Time Estimator ---
-    elif option == "Harvest Time Estimator":
+        crop = st.text_input(
+            "Crop Name",
+            value=(
+                current_crop
+                if current_crop != "Not specified"
+                else ""
+            ),
+            key=kcal("planting_crop")
+        )
+
+        region = st.text_input(
+            "Farm Region",
+            value=(
+                current_location
+                if current_location != "Not specified"
+                else ""
+            ),
+            key=kcal("planting_region")
+        )
+
+        if st.button(
+            "📅 Generate Planting Schedule",
+            key=kcal("btn_generate")
+        ):
+
+            if not crop.strip():
+
+                st.warning(
+                    "Please enter a crop name."
+                )
+
+            elif not region.strip():
+
+                st.warning(
+                    "Please enter your farm region."
+                )
+
+            else:
+
+                st.success(
+                    f"✅ Recommended planting schedule for "
+                    f"{crop.title()} in {region.title()}"
+                )
+
+                st.write(
+                    "🌱 Best planting month: April"
+                )
+
+                st.write(
+                    "🌾 Expected harvest period: July to August"
+                )
+
+                st.write(
+                    "💧 Ideal soil moisture: 60%"
+                )
+
+                st.write(
+                    "🤖 AI Tip: Use sensors to monitor rainfall "
+                    "and adjust irrigation."
+                )
+
+    # ========================================================
+    # 2. HARVEST TIME ESTIMATOR
+    # ========================================================
+
+    elif calendar_option == "🌾 Harvest Time Estimator":
+
         st.subheader("🌾 Harvest Time Estimator")
-        crop_type = st.text_input("Enter Crop Type:", key=kcal("harvest_crop"))
-        planting_date = st.date_input("Select Planting Date:", key=kcal("planting_date"))
-        if st.button("Estimate Harvest Time", key=kcal("btn_estimate")):
-            est_date = planting_date + timedelta(days=90)
-            st.success(f"✅ Estimated harvest time for {crop_type.title() or 'your crop'} is 90 days after planting.")
-            st.write("📅 Approximate harvest date:", est_date.strftime("%Y-%m-%d"))
-            st.write("🔎 Sensor Alert: Monitor ripeness using image sensors or NDVI analysis.")
 
-    # --- Seasonal Task Planner ---
-    elif option == "Seasonal Task Planner":
-        st.subheader("📅 Seasonal Farm Task Planner")
-        season = st.selectbox("Select Season", ["Dry Season", "Rainy Season"], key=kcal("season"))
-        if st.button("Show Recommended Tasks", key=kcal("btn_tasks")):
-            if season == "Rainy Season":
-                st.write("- Weed control and disease monitoring")
-                st.write("- Fertilizer application planning")
-                st.write("- Regular drainage checks")
+        crop_type = st.text_input(
+            "Crop Type",
+            value=(
+                current_crop
+                if current_crop != "Not specified"
+                else ""
+            ),
+            key=kcal("harvest_crop")
+        )
+
+        planting_date = st.date_input(
+            "📅 Planting Date",
+            key=kcal("planting_date")
+        )
+
+        if st.button(
+            "🌾 Estimate Harvest Time",
+            key=kcal("btn_estimate")
+        ):
+
+            if not crop_type.strip():
+
+                st.warning(
+                    "Please enter the crop type."
+                )
+
             else:
-                st.write("- Land clearing and soil preparation")
-                st.write("- Irrigation planning")
-                st.write("- AI sensor calibration for dry monitoring")
+
+                est_date = planting_date + timedelta(
+                    days=90
+                )
+
+                st.success(
+                    f"✅ Estimated harvest time for "
+                    f"{crop_type.title()} is approximately "
+                    f"90 days after planting."
+                )
+
+                st.write(
+                    f"🌱 Farm: {current_farm_name}"
+                )
+
+                st.write(
+                    f"📍 Location: {current_location}"
+                )
+
+                st.write(
+                    "📅 Approximate harvest date:",
+                    est_date.strftime("%Y-%m-%d")
+                )
+
+                st.write(
+                    "🔎 Sensor Alert: Monitor crop ripeness "
+                    "using image sensors or NDVI analysis."
+                )
+
+    # ========================================================
+    # 3. SEASONAL TASK PLANNER
+    # ========================================================
+
+    elif calendar_option == "📋 Seasonal Task Planner":
+
+        st.subheader("📋 Seasonal Farm Task Planner")
+
+        season = st.selectbox(
+            "Select Season",
+            [
+                "Dry Season",
+                "Rainy Season"
+            ],
+            key=kcal("season")
+        )
+
+        st.write(
+            f"🌱 Farm: {current_farm_name}"
+        )
+
+        st.write(
+            f"🌾 Crop: {current_crop}"
+        )
+
+        st.write(
+            f"📍 Location: {current_location}"
+        )
+
+        if st.button(
+            "📋 Show Recommended Tasks",
+            key=kcal("btn_tasks")
+        ):
+
+            if season == "Rainy Season":
+
+                st.write(
+                    "🌧️ Weed control and disease monitoring"
+                )
+
+                st.write(
+                    "🌱 Fertilizer application planning"
+                )
+
+                st.write(
+                    "💧 Regular drainage checks"
+                )
+
+                st.write(
+                    "🔎 Monitor soil moisture and rainfall."
+                )
+
+            else:
+
+                st.write(
+                    "🌱 Land clearing and soil preparation"
+                )
+
+                st.write(
+                    "💧 Irrigation planning"
+                )
+
+                st.write(
+                    "📡 AI sensor calibration for dry-season monitoring"
+                )
+
+                st.write(
+                    "🌾 Monitor crop water requirements."
+                )
 
 
 # farmer community forum
