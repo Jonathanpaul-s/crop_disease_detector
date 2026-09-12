@@ -2472,36 +2472,474 @@ def farm_management_ui():
                     st.rerun()
 
 
+# =========================================================
+# FARM PLOT MAPPING — CONSOLIDATED
+# =========================================================
 
 def farm_plot_mapping_ui():
 
-    st.subheader("🗺 Farm Plot Mapping")
+    st.header("🌍 Farm Plot Mapping")
 
-    plots = _load("plots.json", [])
+    # ---------------------------------------------------------
+    # CURRENT FARM CONTEXT
+    # ---------------------------------------------------------
 
-    with st.form("plot_form"):
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
 
-        plot_name = st.text_input("Plot Name", key="plot_name")
+    if not isinstance(current_farm, dict):
+        current_farm = {}
 
-        size = st.number_input("Plot Size (hectares)", min_value=0.1, key="plot_size")
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
 
-        submitted = st.form_submit_button("Save Plot")
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
 
-    if submitted:
+    current_farm_id = current_farm.get(
+        "farm_id",
+        "main_farm"
+    )
 
-        plots.append({"name": plot_name, "size": size})
+    current_farm_name = current_farm.get(
+        "farm_name",
+        personalized_profile.get(
+            "current_farm_name",
+            "Main Farm"
+        )
+    )
 
-        _save("plots.json", plots)
+    current_crop = current_farm.get(
+        "crop_type",
+        personalized_profile.get(
+            "crop_type",
+            "Not specified"
+        )
+    )
 
-        st.success(f"✅ Plot '{plot_name}' ({size} ha) saved.")
+    current_location = current_farm.get(
+        "location",
+        personalized_profile.get(
+            "location",
+            "Not specified"
+        )
+    )
 
-    if plots:
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
 
-        st.markdown("### 📋 Saved Plots")
+    # =========================================================
+    # FARM PLOT MAPPING
+    # =========================================================
 
-        for i, p in enumerate(plots, 1):
+    plot_option = st.sidebar.selectbox(
+        "🌍 Select a Farm Plot Feature",
+        [
+            "➕ Add New Farm Plot",
+            "📋 View Mapped Plots",
+            "🗑 Manage Plots",
+            "⬇️ Download Plots CSV"
+        ],
+        key="farm_plot_feature"
+    )
 
-            st.write(f"{i}. {p['name']} — {p['size']} ha")
+    # =========================================================
+    # LOAD PLOTS
+    # =========================================================
+
+    plots = _load(
+        "plots.json",
+        []
+    )
+
+    if not isinstance(
+        plots,
+        list
+    ):
+        plots = []
+
+    # Keep only plots belonging to the current farm.
+    # Older plots without farm_id remain available to Main Farm.
+    farm_plots = [
+        plot
+        for plot in plots
+        if str(
+            plot.get(
+                "farm_id",
+                "main_farm"
+            )
+        ) == str(current_farm_id)
+    ]
+
+    # =========================================================
+    # 1. ADD NEW FARM PLOT
+    # =========================================================
+
+    if plot_option == "➕ Add New Farm Plot":
+
+        st.subheader("➕ Add New Farm Plot")
+
+        with st.form(
+            "farm_plot_add_form",
+            clear_on_submit=True
+        ):
+
+            plot_name = st.text_input(
+                "Plot Name",
+                key="farm_plot_name"
+            )
+
+            plot_size = st.number_input(
+                "Plot Size (hectares)",
+                min_value=0.1,
+                step=0.1,
+                key="farm_plot_size"
+            )
+
+            plot_location = st.text_input(
+                "Location Description",
+                value=current_location
+                if current_location != "Not specified"
+                else "",
+                key="farm_plot_location"
+            )
+
+            plot_crop = st.selectbox(
+                "Crop Planted",
+                [
+                    "Maize",
+                    "Cassava",
+                    "Tomato",
+                    "Rice",
+                    "Yam",
+                    "Other"
+                ],
+                index=(
+                    [
+                        "Maize",
+                        "Cassava",
+                        "Tomato",
+                        "Rice",
+                        "Yam",
+                        "Other"
+                    ].index(current_crop)
+                    if current_crop in [
+                        "Maize",
+                        "Cassava",
+                        "Tomato",
+                        "Rice",
+                        "Yam",
+                        "Other"
+                    ]
+                    else 0
+                ),
+                key="farm_plot_crop"
+            )
+
+            submitted = st.form_submit_button(
+                "💾 Save Plot",
+                use_container_width=True
+            )
+
+        if submitted:
+
+            if not plot_name.strip():
+
+                st.warning(
+                    "Please enter a plot name."
+                )
+
+            else:
+
+                new_plot = {
+                    "farm_id": current_farm_id,
+                    "farm_name": current_farm_name,
+                    "crop_type": current_crop,
+                    "location": current_location,
+                    "name": plot_name.strip(),
+                    "size": float(plot_size),
+                    "plot_location": plot_location.strip(),
+                    "crop": plot_crop
+                }
+
+                plots.append(
+                    new_plot
+                )
+
+                _save(
+                    "plots.json",
+                    plots
+                )
+
+                st.success(
+                    f"✅ Plot '{plot_name.strip()}' "
+                    f"saved successfully for "
+                    f"{current_farm_name}."
+                )
+
+    # =========================================================
+    # 2. VIEW MAPPED PLOTS
+    # =========================================================
+
+    elif plot_option == "📋 View Mapped Plots":
+
+        st.subheader(
+            f"📋 Mapped Plots — {current_farm_name}"
+        )
+
+        if farm_plots:
+
+            for index, plot in enumerate(
+                farm_plots,
+                1
+            ):
+
+                plot_name = plot.get(
+                    "name",
+                    plot.get(
+                        "Name",
+                        f"Plot {index}"
+                    )
+                )
+
+                plot_size = plot.get(
+                    "size",
+                    plot.get(
+                        "Size (ha)",
+                        0
+                    )
+                )
+
+                plot_location = plot.get(
+                    "plot_location",
+                    plot.get(
+                        "Location",
+                        ""
+                    )
+                )
+
+                plot_crop = plot.get(
+                    "crop",
+                    plot.get(
+                        "Crop",
+                        current_crop
+                    )
+                )
+
+                st.markdown(
+                    f"""
+### 📍 Plot {index}: {plot_name}
+
+- 🌱 Farm: {current_farm_name}
+- 🌾 Crop: {plot_crop}
+- 📐 Size: {float(plot_size):,.2f} hectares
+- 📍 Location: {plot_location or "Not specified"}
+
+---
+"""
+                )
+
+        else:
+
+            st.info(
+                f"No farm plots mapped for "
+                f"{current_farm_name} yet."
+            )
+
+    # =========================================================
+    # 3. MANAGE PLOTS
+    # =========================================================
+
+    elif plot_option == "🗑 Manage Plots":
+
+        st.subheader(
+            f"🗑 Manage Plots — {current_farm_name}"
+        )
+
+        if farm_plots:
+
+            for index, plot in enumerate(
+                farm_plots
+            ):
+
+                plot_name = plot.get(
+                    "name",
+                    plot.get(
+                        "Name",
+                        f"Plot {index + 1}"
+                    )
+                )
+
+                plot_size = plot.get(
+                    "size",
+                    plot.get(
+                        "Size (ha)",
+                        0
+                    )
+                )
+
+                plot_crop = plot.get(
+                    "crop",
+                    plot.get(
+                        "Crop",
+                        current_crop
+                    )
+                )
+                with st.expander(
+                    f"📌 {plot_name} • "
+                    f"{plot_crop} • "
+                    f"{float(plot_size):,.2f} ha"
+                ):
+
+                    plot_location = plot.get(
+                        "plot_location",
+                        plot.get(
+                            "Location",
+                            ""
+                        )
+                    )
+
+                    st.write(
+                        f"📍 Location: "
+                        f"{plot_location or 'Not specified'}"
+                    )
+
+                    if st.button(
+                        "🗑 Delete this plot",
+                        key=f"farm_plot_delete_{index}"
+                    ):
+
+                        # Find the exact plot in the original
+                        # plots list before deleting it.
+                        target_index = None
+
+                        for original_index, original_plot in enumerate(
+                            plots
+                        ):
+
+                            if original_plot is plot:
+
+                                target_index = original_index
+                                break
+
+                        if target_index is not None:
+
+                            plots.pop(
+                                target_index
+                            )
+
+                            _save(
+                                "plots.json",
+                                plots
+                            )
+
+                            st.success(
+                                f"✅ Plot '{plot_name}' "
+                                f"deleted."
+                            )
+
+                            st.rerun()
+
+        else:
+
+            st.info(
+                f"No plots available to manage for "
+                f"{current_farm_name}."
+            )
+
+    # =========================================================
+    # 4. DOWNLOAD PLOTS CSV
+    # =========================================================
+
+    elif plot_option == "⬇️ Download Plots CSV":
+
+        st.subheader(
+            f"⬇️ Download Farm Plots — {current_farm_name}"
+        )
+
+        if farm_plots:
+
+            import pandas as pd
+
+            csv_data = []
+
+            for plot in farm_plots:
+
+                csv_data.append(
+                    {
+                        "Farm ID": plot.get(
+                            "farm_id",
+                            current_farm_id
+                        ),
+                        "Farm Name": plot.get(
+                            "farm_name",
+                            current_farm_name
+                        ),
+                        "Crop": plot.get(
+                            "crop",
+                            plot.get(
+                                "Crop",
+                                current_crop
+                            )
+                        ),
+                        "Plot Name": plot.get(
+                            "name",
+                            plot.get(
+                                "Name",
+                                ""
+                            )
+                        ),
+                        "Size (hectares)": plot.get(
+                            "size",
+                            plot.get(
+                                "Size (ha)",
+                                0
+                            )
+                        ),
+                        "Location": plot.get(
+                            "plot_location",
+                            plot.get(
+                                "Location",
+                                ""
+                            )
+                        )
+                    }
+                )
+
+            csv = pd.DataFrame(
+                csv_data
+            ).to_csv(
+                index=False
+            ).encode(
+                "utf-8"
+            )
+
+            st.download_button(
+                "⬇️ Download Plots CSV",
+                csv,
+                file_name="farm_plots.csv",
+                mime="text/csv",
+                key="farm_plot_download_csv"
+            )
+
+            st.success(
+                f"✅ {len(farm_plots)} plot(s) ready "
+                f"for download."
+            )
+
+        else:
+
+            st.info(
+                f"No plots available for "
+                f"{current_farm_name}."
+            )
 
 
 
@@ -8007,152 +8445,7 @@ elif menu_v2 == "💧 Irrigation & Soil":
                 f"₦{total_cost:,.2f}"
             )
 
- # =========================================================
-# FARM PLOT MAPPING
-# =========================================================
-
-elif menu_v2 == "🌍 Farm Plot Mapping":
-
-    st.header("🌍 Farm Plot Mapping (Upgrade)")
-
-    # Session storage for upgraded section
-    if kplot("data") not in st.session_state:
-        st.session_state[kplot("data")] = []
-
-    st.subheader("➕ Add New Farm Plot")
-
-    with st.form(
-        kplot("add_form"),
-        clear_on_submit=True
-    ):
-
-        plot_name = st.text_input(
-            "Plot Name",
-            key=kplot("name")
-        )
-
-        plot_size = st.number_input(
-            "Size (hectares)",
-            min_value=0.0,
-            step=0.1,
-            key=kplot("size")
-        )
-
-        plot_location = st.text_input(
-            "Location Description",
-            key=kplot("loc")
-        )
-
-        crop_type = st.selectbox(
-            "Crop Planted",
-            [
-                "Maize",
-                "Cassava",
-                "Tomato",
-                "Rice",
-                "Yam",
-                "Other"
-            ],
-            key=kplot("crop")
-        )
-
-        submitted = st.form_submit_button(
-            "Add Plot",
-            use_container_width=True
-        )
-
-    if submitted:
-
-        if not plot_name.strip():
-
-            st.warning(
-                "Please enter a plot name."
-            )
-
-        else:
-
-            new_plot = {
-                "Name": plot_name.strip(),
-                "Size (ha)": float(plot_size),
-                "Location": plot_location.strip(),
-                "Crop": crop_type
-            }
-
-            st.session_state[
-                kplot("data")
-            ].append(new_plot)
-
-            st.success(
-                f"✅ Plot '{new_plot['Name']}' "
-                f"added successfully!"
-            )
-
-    plots = st.session_state[
-        kplot("data")
-    ]
-
-    if plots:
-
-        st.subheader("📋 Mapped Plots")
-
-        st.dataframe(
-            plots,
-            use_container_width=True
-        )
-
-        st.divider()
-
-        st.subheader("🗑 Manage Plots")
-
-        for i, p in enumerate(plots):
-
-            with st.expander(
-                f"📌 {p['Name']} • "
-                f"{p['Crop']} • "
-                f"{p['Size (ha)']} ha"
-            ):
-
-                st.write(
-                    f"Location: "
-                    f"{p['Location'] or '—'}"
-                )
-
-                if st.button(
-                    "Delete this plot",
-                    key=kplot(f"del_{i}")
-                ):
-
-                    st.session_state[
-                        kplot("data")
-                    ].pop(i)
-
-                    st.success(
-                        "Plot deleted."
-                    )
-
-                    st.rerun()
-
-        import pandas as pd
-
-        csv = pd.DataFrame(
-            st.session_state[
-                kplot("data")
-            ]
-        ).to_csv(
-            index=False
-        ).encode("utf-8")
-
-        st.download_button(
-            "⬇️ Download Plots CSV",
-            csv,
-            file_name="farm_plots_v2.csv",
-            mime="text/csv",
-            key=kplot("dl")
-        )
-
-    else:
-
-        st.info("No plots added yet.")
+ 
 
 # calendar & seasons
 elif menu_v2 == "📅 Calendar & Seasons":
