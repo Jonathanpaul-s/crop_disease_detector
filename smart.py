@@ -5638,79 +5638,806 @@ elif menu_v2 == "🌿 Farm Management":
     farm_management_ui()
 
 
-#productivity & Records ----
 elif menu_v2 == "📊 Productivity & Records":
+
+    st.header("📊 Productivity & Records")
+
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get(
+        "farm_id",
+        "main_farm"
+    )
+
+    current_farm_name = current_farm.get(
+        "farm_name",
+        "Main Farm"
+    )
+
+    current_crop = current_farm.get(
+        "crop_type",
+        "Not specified"
+    )
+
+    current_location = current_farm.get(
+        "location",
+        "Not specified"
+    )
+
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
+
     option = st.selectbox(
         "Select a Feature",
         [
             "View Sales Record",
+            "Add Sales Record",
             "View Expense",
+            "Add Expense",
             "Calculate Profit",
             "View Farmer Record",
             "Farm Productivity",
             "Yield Estimator",
             "Farm Loan Recorder",
             "Add Loan Record",
+            "View Inventory",
+            "Add Inventory",
+            "Generate Report",
+            "Farm Summary",
         ],
         key=kp2("feature")
     )
 
-    if option == "View Sales Record":
-        st.subheader("View Sales Record")
-        st.write("📈 (This will later show all recorded sales in a table here.)")
+    # =========================================================
+    # SALES
+    # =========================================================
+
+    if option == "Add Sales Record":
+
+        st.subheader("➕ Add Sales Record")
+
+        item = st.text_input(
+            "Enter Item Sold",
+            key=kp2("sales_item")
+        )
+
+        quantity = st.number_input(
+            "Enter Quantity",
+            min_value=1,
+            key=kp2("sales_quantity")
+        )
+
+        amount = st.number_input(
+            "Enter Amount (₦)",
+            min_value=0,
+            key=kp2("sales_amount")
+        )
+
+        record_date = st.date_input(
+            "Select Date",
+            key=kp2("sales_date")
+        )
+
+        if st.button(
+            "Save Record",
+            key=kp2("sales_save")
+        ):
+
+            new_record = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "item": item,
+                "quantity": quantity,
+                "amount": amount,
+                "date": str(record_date)
+            }
+
+            try:
+                with open(
+                    "sales_records.json",
+                    "r"
+                ) as file:
+                    sales_data = json.load(file)
+
+            except FileNotFoundError:
+                sales_data = []
+
+            sales_data.append(new_record)
+
+            with open(
+                "sales_records.json",
+                "w"
+            ) as file:
+                json.dump(
+                    sales_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Sales record added for "
+                f"{current_farm_name}."
+            )
+
+    elif option == "View Sales Record":
+
+        st.subheader("📈 View Sales Record")
+
+        try:
+            with open(
+                "sales_records.json",
+                "r"
+            ) as file:
+                sales_data = json.load(file)
+
+            farm_sales = [
+                entry
+                for entry in sales_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+            if farm_sales:
+
+                for entry in farm_sales:
+
+                    st.markdown(
+                        f"""
+- 📅 Date: {entry.get('date', '')}
+- 🛒 Item Sold: {entry.get('item', '')}
+- 🔢 Quantity: {entry.get('quantity', 0)}
+- 💰 Amount: ₦{entry.get('amount', 0)}
+---
+"""
+                    )
+
+            else:
+                st.info(
+                    f"No sales records for "
+                    f"{current_farm_name}."
+                )
+
+        except FileNotFoundError:
+
+            st.warning(
+                "No sales record file found yet."
+            )
+
+    # =========================================================
+    # EXPENSES
+    # =========================================================
+
+    elif option == "Add Expense":
+
+        st.subheader("➕ Add Expense Record")
+
+        with st.form(
+            kp2("expense_form")
+        ):
+
+            expense_date = st.date_input(
+                "📅 Date of Expense",
+                key=kp2("expense_date")
+            )
+
+            category = st.selectbox(
+                "📂 Expense Category",
+                [
+                    "Fertilizer",
+                    "Pesticide",
+                    "Seeds",
+                    "Labor",
+                    "Fuel",
+                    "Maintenance",
+                    "Transport",
+                    "Others"
+                ],
+                key=kp2("expense_category")
+            )
+
+            amount = st.number_input(
+                "💰 Amount Spent (₦)",
+                min_value=0.0,
+                step=100.0,
+                format="%.2f",
+                key=kp2("expense_amount")
+            )
+
+            description = st.text_area(
+                "📝 Description (Optional)",
+                key=kp2("expense_description")
+            )
+
+            submit_expense = st.form_submit_button(
+                "Save Expense Record"
+            )
+
+        if submit_expense:
+
+            new_expense = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "Date": str(expense_date),
+                "Category": category,
+                "Amount": amount,
+                "Description": description
+            }
+
+            try:
+                with open(
+                    "expenses.json",
+                    "r"
+                ) as file:
+                    expense_data = json.load(file)
+
+            except FileNotFoundError:
+                expense_data = []
+
+            expense_data.append(new_expense)
+
+            with open(
+                "expenses.json",
+                "w"
+            ) as file:
+                json.dump(
+                    expense_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Expense recorded for "
+                f"{current_farm_name}."
+            )
 
     elif option == "View Expense":
-        st.subheader("View Expense")
-        expense_name = st.text_input("Expense Item:", key=kp2("expense_name"))
-        expense_amount = st.number_input("Amount Spent (₦):", min_value=0, key=kp2("expense_amount"))
-        expense_date = st.date_input("Expense Date:", key=kp2("expense_date"))
-        if st.button("Save Expense", key=kp2("expense_save_btn")):
-            st.success(f"✅ Expense recorded: {expense_name}, ₦{expense_amount} on {expense_date}")
+
+        st.subheader("💰 View Expense Records")
+
+        try:
+
+            with open(
+                "expenses.json",
+                "r"
+            ) as file:
+                expense_data = json.load(file)
+
+            farm_expenses = [
+                entry
+                for entry in expense_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+            if farm_expenses:
+
+                for entry in farm_expenses:
+
+                    st.markdown(
+                        f"""
+- 📅 Date: {entry.get('Date', '')}
+- 📂 Category: {entry.get('Category', '')}
+- 💰 Amount: ₦{entry.get('Amount', 0)}
+- 📝 Description: {entry.get('Description', '')}
+---
+"""
+                    )
+
+            else:
+
+                st.info(
+                    f"No expense records for "
+                    f"{current_farm_name}."
+                )
+
+        except FileNotFoundError:
+
+            st.warning(
+                "No expense record file found yet."
+            )
+
+    # =========================================================
+    # PROFIT
+    # =========================================================
 
     elif option == "Calculate Profit":
-        st.subheader("Calculate Profit")
-        total_sales = st.number_input("Enter Total Sales (₦):", min_value=0, key=kp2("profit_total_sales"))
-        total_expenses = st.number_input("Enter Total Expenses (₦):", min_value=0, key=kp2("profit_total_expenses"))
-        if st.button("Calculate Profit", key=kp2("profit_calc_btn")):
+
+        st.subheader("📊 Calculate Profit")
+        total_sales = st.number_input(
+            "Enter Total Sales (₦):",
+            min_value=0,
+            key=kp2("profit_total_sales")
+        )
+
+        total_expenses = st.number_input(
+            "Enter Total Expenses (₦):",
+            min_value=0,
+            key=kp2("profit_total_expenses")
+        )
+
+        if st.button(
+            "Calculate Profit",
+            key=kp2("profit_calc_btn")
+        ):
+
             profit = total_sales - total_expenses
-            st.success(f"✅ Net Profit: {profit}")
+
+            st.success(
+                f"✅ Net Profit for {current_farm_name}: "
+                f"₦{profit:,.2f}"
+            )
+
+    # =========================================================
+    # FARMER RECORD
+    # =========================================================
 
     elif option == "View Farmer Record":
-        st.subheader("View Farmer Record")
-        st.write("👩‍🌾 (This will later display registered farmers' records here.)")
+
+        st.subheader("👩‍🌾 View Farmer Record")
+
+        st.write(
+            "Current farmer profile and farm information:"
+        )
+
+        st.write(
+            f"🌱 Farm: {current_farm_name}"
+        )
+
+        st.write(
+            f"🌾 Crop: {current_crop}"
+        )
+
+        st.write(
+            f"📍 Location: {current_location}"
+        )
+
+    # =========================================================
+    # FARM PRODUCTIVITY
+    # =========================================================
 
     elif option == "Farm Productivity":
-        st.subheader("Farm Productivity")
-        crop_name = st.text_input("Crop Name:", key=kp2("prod_crop_name"))
-        season = st.selectbox("Season", ["Dry Season", "Rainy Season"], key=kp2("prod_season"))
-        yield_kg = st.number_input("Total Yield (kg):", min_value=0, key=kp2("prod_yield_kg"))
-        farm_size = st.number_input("Farm Size (hectares):", min_value=0.0, key=kp2("prod_farm_size"))
-        if st.button("Record Productivity", key=kp2("prod_record_btn")):
-            st.success(f"✅ Productivity recorded for {crop_name} ({season}): {yield_kg} kg on {farm_size} hectares")
+
+        st.subheader("📈 Farm Productivity")
+
+        crop_name = st.text_input(
+            "Crop Name:",
+            value=current_crop
+            if current_crop != "Not specified"
+            else "",
+            key=kp2("prod_crop_name")
+        )
+
+        season = st.selectbox(
+            "Season",
+            [
+                "Dry Season",
+                "Rainy Season"
+            ],
+            key=kp2("prod_season")
+        )
+
+        yield_kg = st.number_input(
+            "Total Yield (kg):",
+            min_value=0,
+            key=kp2("prod_yield_kg")
+        )
+
+        farm_size_value = st.number_input(
+            "Farm Size (hectares):",
+            min_value=0.0,
+            key=kp2("prod_farm_size")
+        )
+
+        if st.button(
+            "Record Productivity",
+            key=kp2("prod_record_btn")
+        ):
+
+            st.success(
+                f"✅ Productivity recorded for "
+                f"{crop_name} ({season}): "
+                f"{yield_kg} kg on "
+                f"{farm_size_value} hectares "
+                f"for {current_farm_name}."
+            )
+
+    # =========================================================
+    # YIELD ESTIMATOR
+    # =========================================================
 
     elif option == "Yield Estimator":
-        st.subheader("Yield Estimator")
-        farm_area = st.number_input("Farm Area (hectares):", min_value=0.0, key=kp2("yield_farm_area"))
-        average_yield_per_hectare = st.number_input("Expected Yield per Hectare (kg):", min_value=0, key=kp2("yield_per_ha"))
-        if st.button("Estimate Yield", key=kp2("yield_estimate_btn")):
-            estimated_yield = farm_area * average_yield_per_hectare
-            st.success(f"✅ Estimated Yield: {estimated_yield} kg")
+
+        st.subheader("🌾 Yield Estimator")
+
+        farm_area = st.number_input(
+            "Farm Area (hectares):",
+            min_value=0.0,
+            key=kp2("yield_farm_area")
+        )
+
+        average_yield_per_hectare = st.number_input(
+            "Expected Yield per Hectare (kg):",
+            min_value=0,
+            key=kp2("yield_per_ha")
+        )
+
+        if st.button(
+            "Estimate Yield",
+            key=kp2("yield_estimate_btn")
+        ):
+
+            estimated_yield = (
+                farm_area *
+                average_yield_per_hectare
+            )
+
+            st.success(
+                f"✅ Estimated Yield for "
+                f"{current_farm_name}: "
+                f"{estimated_yield:,.0f} kg"
+            )
+
+    # =========================================================
+    # LOANS
+    # =========================================================
 
     elif option == "Farm Loan Recorder":
-        st.subheader("Farm Loan Recorder")
-        lender_name = st.text_input("Lender Name:", key=kp2("loan_lender"))
-        loan_amount = st.number_input("Loan Amount (₦):", min_value=0, key=kp2("loan_amount"))
-        interest_rate = st.number_input("Interest Rate (%):", min_value=0.0, key=kp2("loan_interest"))
-        repayment_period = st.text_input("Repayment Period (e.g. 12 months)", key=kp2("loan_period"))
-        if st.button("Record Loan", key=kp2("loan_record_btn")):
-            st.success(f"✅ Loan recorded: ₦{loan_amount} from {lender_name} at {interest_rate}% for {repayment_period}")
+
+        st.subheader("💳 Farm Loan Recorder")
+
+        lender_name = st.text_input(
+            "Lender Name:",
+            key=kp2("loan_lender")
+        )
+
+        loan_amount = st.number_input(
+            "Loan Amount (₦):",
+            min_value=0,
+            key=kp2("loan_amount")
+        )
+
+        interest_rate = st.number_input(
+            "Interest Rate (%):",
+            min_value=0.0,
+            key=kp2("loan_interest")
+        )
+        repayment_period = st.text_input(
+            "Repayment Period (e.g. 12 months)",
+            key=kp2("loan_period")
+        )
+
+        if st.button(
+            "Record Loan",
+            key=kp2("loan_record_btn")
+        ):
+
+            st.success(
+                f"✅ Loan recorded for "
+                f"{current_farm_name}: "
+                f"₦{loan_amount:,.2f} from "
+                f"{lender_name} at "
+                f"{interest_rate}% for "
+                f"{repayment_period}"
+            )
 
     elif option == "Add Loan Record":
-        st.subheader("Add Loan Record")
-        loan_purpose = st.text_input("Loan Purpose:", key=kp2("loan_purpose"))
-        loan_date = st.date_input("Loan Date:", key=kp2("loan_date"))
-        amount = st.number_input("Loan Amount (₦):", min_value=0, key=kp2("loan_amount_single"))
-        st.button(f"✅ Loan for {loan_purpose} of ₦{amount} on {loan_date} saved.")
+
+        st.subheader("➕ Add Loan Record")
+
+        loan_purpose = st.text_input(
+            "Loan Purpose:",
+            key=kp2("loan_purpose")
+        )
+
+        loan_date = st.date_input(
+            "Loan Date:",
+            key=kp2("loan_date")
+        )
+
+        amount = st.number_input(
+            "Loan Amount (₦):",
+            min_value=0,
+            key=kp2("loan_amount_single")
+        )
+
+        if st.button(
+            "Save Loan Record",
+            key=kp2("loan_save_btn")
+        ):
+
+            st.success(
+                f"✅ Loan for {loan_purpose} "
+                f"of ₦{amount:,.2f} on {loan_date} "
+                f"saved for {current_farm_name}."
+            )
+
+    # =========================================================
+    # INVENTORY
+    # =========================================================
+
+    elif option == "Add Inventory":
+
+        st.subheader("➕ Add Inventory Item")
+
+        with st.form(
+            kp2("inventory_form")
+        ):
+
+            item = st.text_input(
+                "📦 Item Name",
+                key=kp2("inventory_item")
+            )
+
+            quantity = st.number_input(
+                "🔢 Quantity",
+                min_value=0,
+                step=1,
+                key=kp2("inventory_quantity")
+            )
+
+            category = st.text_input(
+                "📂 Category (e.g., Fertilizer, Seeds, Tools)",
+                key=kp2("inventory_category")
+            )
+
+            submit_inventory = st.form_submit_button(
+                "Save Inventory Item"
+            )
+
+        if submit_inventory:
+
+            new_item = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "Item": item,
+                "Quantity": quantity,
+                "Category": category
+            }
+
+            try:
+                with open(
+                    "inventory.json",
+                    "r"
+                ) as file:
+                    inventory_data = json.load(file)
+
+            except FileNotFoundError:
+                inventory_data = []
+
+            inventory_data.append(new_item)
+
+            with open(
+                "inventory.json",
+                "w"
+            ) as file:
+                json.dump(
+                    inventory_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Inventory item added for "
+                f"{current_farm_name}."
+            )
+
+    elif option == "View Inventory":
+
+        st.subheader("📦 View Inventory Records")
+
+        try:
+
+            with open(
+                "inventory.json",
+                "r"
+            ) as file:
+                inventory_data = json.load(file)
+
+            farm_inventory = [
+                entry
+                for entry in inventory_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+            if farm_inventory:
+
+                for entry in farm_inventory:
+
+                    st.markdown(
+                        f"""
+- 📦 Item: {entry.get('Item', '')}
+- 🔢 Quantity: {entry.get('Quantity', 0)}
+- 📂 Category: {entry.get('Category', '')}
+---
+"""
+                    )
+
+            else:
+                st.info(
+                    f"No inventory records for "
+                    f"{current_farm_name}."
+                )
+
+        except FileNotFoundError:
+
+            st.warning(
+                "No inventory record file found yet."
+            )
+
+    # =========================================================
+    # REPORT
+    # =========================================================
+
+    elif option == "Generate Report":
+
+        st.subheader("📄 Generate Farm Report")
+
+        try:
+            with open(
+                "sales_records.json",
+                "r"
+            ) as file:
+                sales_data = json.load(file)
+
+            farm_sales = [
+                entry
+                for entry in sales_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+        except FileNotFoundError:
+            farm_sales = []
+
+        try:
+            with open(
+                "expenses.json",
+                "r"
+            ) as file:
+                expense_data = json.load(file)
+
+            farm_expenses = [
+                entry
+                for entry in expense_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+        except FileNotFoundError:
+            farm_expenses = []
+
+        total_sales = sum(
+            entry.get("amount", 0)
+            for entry in farm_sales
+        )
+
+        total_expenses = sum(
+            entry.get("Amount", 0)
+            for entry in farm_expenses
+        )
+
+        profit_loss = (
+            total_sales -
+            total_expenses
+        )
+
+        st.markdown(
+            f"""
+### 📊 Farm Financial Report
+
+- 🌱 Farm: {current_farm_name}
+- 💰 Total Sales: ₦{total_sales:,.2f}
+- 💸 Total Expenses: ₦{total_expenses:,.2f}
+- 📈 Profit / Loss: ₦{profit_loss:,.2f}
+"""
+        )
+
+    # =========================================================
+    # FARM SUMMARY
+    # =========================================================
+
+    elif option == "Farm Summary":
+
+        st.subheader("📊 Overall Farm Summary")
+
+        try:
+            with open(
+                "sales_records.json",
+                "r"
+            ) as file:
+                sales_data = json.load(file)
+
+            farm_sales = [
+                entry
+                for entry in sales_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+        except FileNotFoundError:
+            farm_sales = []
+
+        try:
+            with open(
+                "expenses.json",
+                "r"
+            ) as file:
+                expense_data = json.load(file)
+
+            farm_expenses = [
+                entry
+                for entry in expense_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+        except FileNotFoundError:
+            farm_expenses = []
+
+        try:
+            with open(
+                "inventory.json",
+                "r"
+            ) as file:
+                inventory_data = json.load(file)
+
+            farm_inventory = [
+                entry
+                for entry in inventory_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+        except FileNotFoundError:
+            farm_invent
         
 # irrigation & soil
 elif menu_v2 == "💧 Irrigation & Soil":
