@@ -7248,6 +7248,7 @@ menu_v2 = st.sidebar.selectbox(
         "📚 AI Farm Tips",
         "🧪 Smart Fertilizer & Pesticide",
         "📡 Live Sensor Dashboard",
+        "🎙️ Voice Command Interface",
         "🚨 Smart Farm Alerts",
         "🚁 Voice-Controlled Drone Irrigation Assistant",
         "🚁 Drone Flight Scheduler",
