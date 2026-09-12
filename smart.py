@@ -4466,7 +4466,7 @@ def support_help_ui():
         "🧑‍🏫 Smart Tutor (Multi-Language)",
         "🤖 Chatbot Assistant"
     ],
-    key=f"support_help_{menu_key}"
+    key="support_help"
 )
 
     # =====================================================
@@ -7749,15 +7749,8 @@ if menu_v2 == "🏡 Home":
         )
 
 elif menu_v2 == "🧑‍🏫 Smart Tutor Multilanguage":
-    try:
-        support_help_ui()
-    except Exception as e:
-        st.error(f"Support UI failed: {e}")
 
-    try:
-        smart_tutor_voice()
-    except Exception as e:
-        st.error(f"Smart Tutor UI failed: {e}")
+    smart_tutor_voice()
 
 elif menu_v2 == "📅 Expanded AI Crop Calendar":
     expanded_crop_calendar_ui()
