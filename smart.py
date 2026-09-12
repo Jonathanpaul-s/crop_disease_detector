@@ -4383,14 +4383,72 @@ def sensors_monitoring_ui():
             st.success(random.choice(tips))
 
 
+# =========================================================
+# SUPPORT & HELP — FINAL INTEGRATED VERSION
+# =========================================================
 
-# =========================
-# SUPPORT & HELP  (drop-in)
-# =========================
 def support_help_ui():
-    import streamlit as st
-    import json, random, os, calendar
-    from datetime import date, datetime
+
+    st.header("🆘 Support & Help")
+
+    # =====================================================
+    # CURRENT FARM CONTEXT
+    # =====================================================
+
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
+
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_farm_id = current_farm.get(
+        "farm_id",
+        "main_farm"
+    )
+
+    current_farm_name = current_farm.get(
+        "farm_name",
+        personalized_profile.get(
+            "current_farm_name",
+            "Main Farm"
+        )
+    )
+
+    current_crop = current_farm.get(
+        "crop_type",
+        personalized_profile.get(
+            "crop_type",
+            "Not specified"
+        )
+    )
+
+    current_location = current_farm.get(
+        "location",
+        personalized_profile.get(
+            "location",
+            "Not specified"
+        )
+    )
+
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
+
+    # =====================================================
+    # SUPPORT MENU
+    # =====================================================
 
     help_option = st.sidebar.selectbox(
         "🆘 Select a Help Feature",
@@ -4399,390 +4457,844 @@ def support_help_ui():
             "💾 Data Backup & Recovery",
             "📘 Tutorial & Guide",
             "🧑‍🏫 Smart Tutor (Multi-Language)",
-            "🤖 Chatbot Assistant",
+            "🤖 Chatbot Assistant"
         ],
-        key="support_help",
+        key="support_help"
     )
 
-    # -------------------------
-    # 👨‍🌾 Farmers Community Forum
-    # -------------------------
+    # =====================================================
+    # 1. FARMERS COMMUNITY FORUM
+    # =====================================================
+
     if help_option == "👨‍🌾 Farmers Community Forum":
+
         st.subheader("👨‍🌾 Farmers Community Forum")
-        st.write("Connect with other farmers, share experiences, and ask questions.")
 
-        if "forum_posts" not in st.session_state:
-            st.session_state.forum_posts = []
+        st.write(
+            "Connect with other farmers, share experiences, "
+            "and ask questions."
+        )
 
-        new_post = st.text_area("💬 Share your thoughts or ask a question:", key="forum_new_post")
-        if st.button("📢 Post Message", key="forum_post_btn"):
-            if new_post.strip():
-                st.session_state.forum_posts.append(new_post.strip())
-                st.success("✅ Your message has been posted!")
+        try:
+
+            with open(
+                "forum_posts.json",
+                "r"
+            ) as file:
+                forum_posts = json.load(file)
+
+            if not isinstance(
+                forum_posts,
+                list
+            ):
+                forum_posts = []
+
+        except (
+            FileNotFoundError,
+            json.JSONDecodeError
+        ):
+
+            forum_posts = []
+
+        # Add new forum post
+
+        new_post = st.text_area(
+            "💬 Share your thoughts or ask a question:",
+            key="forum_new_post"
+        )
+
+        if st.button(
+            "📢 Post Message",
+            key="forum_post_btn"
+        ):
+
+            if not new_post.strip():
+
+                st.warning(
+                    "⚠️ Please enter a message before posting."
+                )
+
             else:
-                st.warning("⚠️ Please enter a message before posting.")
+
+                new_forum_post = {
+                    "farm_id": current_farm_id,
+                    "farm_name": current_farm_name,
+                    "crop_type": current_crop,
+                    "location": current_location,
+                    "message": new_post.strip(),
+                    "date": str(
+                        datetime.now().strftime(
+                            "%Y-%m-%d %H:%M"
+                        )
+                    )
+                }
+
+                forum_posts.append(
+                    new_forum_post
+                )
+
+                with open(
+                    "forum_posts.json",
+                    "w"
+                ) as file:
+
+                    json.dump(
+                        forum_posts,
+                        file,
+                        indent=4
+                    )
+
+                st.success(
+                    "✅ Your message has been posted!"
+                )
+                st.rerun()
+
+        # Show posts for current farm
 
         st.write("### 📜 Forum Messages")
-        if st.session_state.forum_posts:
-            for idx, post in enumerate(st.session_state.forum_posts, 1):
-                st.write(f"{idx}. {post}")
+
+        farm_posts = [
+            post
+            for post in forum_posts
+            if str(
+                post.get(
+                    "farm_id",
+                    "main_farm"
+                )
+            ) == str(current_farm_id)
+        ]
+
+        if farm_posts:
+
+            for idx, post in enumerate(
+                reversed(farm_posts),
+                1
+            ):
+
+                st.markdown(
+                    f"""
+👨‍🌾 {post.get('farm_name', 'Farmer')}
+
+💬 {post.get('message', '')}
+
+🌾 Crop: {post.get('crop_type', 'Not specified')}  
+📍 Location: {post.get('location', 'Not specified')}  
+📅 {post.get('date', '')}
+
+---
+"""
+                )
+
         else:
-            st.info("No messages yet. Be the first to post!")
 
-    # -------------------------
-    # 💾 Data Backup & Recovery
-    # -------------------------
+            st.info(
+                "No messages yet for this farm. "
+                "Be the first to post!"
+            )
+
+    # =====================================================
+    # 2. DATA BACKUP & RECOVERY
+    # =====================================================
+
     elif help_option == "💾 Data Backup & Recovery":
-        st.subheader("💾 Data Backup & Recovery")
-        st.write("Backup your farm data or restore it when needed.")
-        c1, c2 = st.columns(2)
-        if c1.button("📤 Backup Data", key="backup_btn"):
-            st.success("✅ Data backup completed successfully!")
-        if c2.button("📥 Restore Data", key="restore_btn"):
-            st.info("ℹ️ Data restoration feature coming soon.")
 
-    # -------------------------
-    # 📘 Tutorial & Guide
-    # -------------------------
+        st.subheader("💾 Data Backup & Recovery")
+
+        st.write(
+            f"Backup and restore data associated with "
+            f"{current_farm_name}."
+        )
+
+        backup_files = [
+            "accounts.json",
+            "sales_records.json",
+            "expenses.json",
+            "inventory.json",
+            "plots.json",
+            "forum_posts.json",
+            "chem_inventory.json"
+        ]
+
+        backup_data = {}
+
+        for filename in backup_files:
+
+            try:
+
+                with open(
+                    filename,
+                    "r"
+                ) as file:
+
+                    backup_data[filename] = json.load(
+                        file
+                    )
+
+            except (
+                FileNotFoundError,
+                json.JSONDecodeError
+            ):
+
+                backup_data[filename] = []
+
+        backup_json = json.dumps(
+            backup_data,
+            indent=4
+        ).encode("utf-8")
+
+        st.download_button(
+            "📤 Backup Farm Data",
+            data=backup_json,
+            file_name=(
+                f"{current_farm_id}_backup.json"
+            ),
+            mime="application/json",
+            key="support_backup_download"
+        )
+
+        st.success(
+            "✅ Your available Smart Farm AI data "
+            "is ready for backup."
+        )
+
+        st.divider()
+
+        st.write(
+            "📥 Restore Data"
+        )
+
+        restore_file = st.file_uploader(
+            "Upload a Smart Farm AI backup file",
+            type=["json"],
+            key="support_restore_file"
+        )
+
+        if restore_file is not None:
+
+            if st.button(
+                "Restore Backup",
+                key="support_restore_btn"
+            ):
+
+                try:
+
+                    restored_data = json.load(
+                        restore_file
+                    )
+
+                    if not isinstance(
+                        restored_data,
+                        dict
+                    ):
+
+                        st.error(
+                            "❌ Invalid backup format."
+                        )
+
+                    else:
+
+                        restored_count = 0
+
+                        for filename, data in restored_data.items():
+
+                            if filename in backup_files:
+
+                                with open(
+                                    filename,
+                                    "w"
+                                ) as file:
+
+                                    json.dump(
+                                        data,
+                                        file,
+                                        indent=4
+                                    )
+                                    restored_count += 1
+
+                        st.success(
+                            f"✅ Backup restored successfully. "
+                            f"{restored_count} data files restored."
+                        )
+
+                        st.rerun()
+
+                except (
+                    json.JSONDecodeError,
+                    UnicodeDecodeError
+                ):
+
+                    st.error(
+                        "❌ Could not read the backup file."
+                    )
+
+    # =====================================================
+    # 3. TUTORIAL & GUIDE
+    # =====================================================
+
     elif help_option == "📘 Tutorial & Guide":
+
         st.subheader("📘 Tutorial & Guide")
-        st.write("Step-by-step tutorials and guides to help you use Smart Farm AI.")
+
+        st.write(
+            "Step-by-step guidance for using "
+            "Smart Farm AI."
+        )
+
         st.markdown(
             """
-- 🌿 **Farm Management**: Manage plots, accounts, and schedules.  
-- 📊 **Productivity & Records**: Track sales, yields, and expenses.  
-- 🧠 **AI Predictions**: Detect diseases, predict yield, and check soil health.  
-- 💧 **Irrigation & Soil**: Schedule irrigation and manage soil data.  
-- 💱 **Market & Finance**: Track loans, prices, and budgets.  
-- 📡 **Sensors & Monitoring**: Live farm sensor dashboard.  
+### 🌿 Farm Management
+Manage your farm, plots, crops, fertilizer, pesticide stock,
+calendar, drone scheduling, and voice commands.
+
+### 📊 Productivity & Records
+Track sales, expenses, profit, farmer records, productivity,
+yield, loans, inventory, reports, and farm summaries.
+
+### 🧠 AI Predictions
+Use AI tools for crop disease detection, yield prediction,
+soil health, and farm decision support.
+
+### 💧 Irrigation & Soil
+Manage irrigation and soil-related farm information.
+
+### 💹 Market & Finance
+Work with market and financial information relevant to the farm.
+
+### 📡 Sensors & Monitoring
+Monitor available farm sensor information and connected devices.
+
+### 🆘 Support & Help
+Use the Farmers Community Forum, Backup & Recovery,
+Tutorial, Smart Tutor, and Chatbot Assistant.
 """
         )
 
-        # Quick tips button (kept inside this branch so it doesn't render everywhere)
         tips = [
             "Rotate your crops each season to maintain soil fertility. 🌱",
-            "Use organic compost to boost plant health naturally. ♻️",
+            "Use organic compost to improve soil health. ♻️",
             "Water early in the morning to reduce evaporation. 💧",
-            "Monitor your plants weekly for early signs of pests. 🐛",
-            "Test your soil every year to know the right fertilizer to use. 🧪",
-            "Intercropping can help reduce pests and increase yield. 🌾",
+            "Monitor your plants regularly for early signs of pests. 🐛",
+            "Test your soil regularly to guide fertilizer decisions. 🧪",
+            "Intercropping can help manage pests and improve productivity. 🌾",
             "Mulch your soil to retain moisture and control weeds. 🌿",
-            "Choose disease-resistant seed varieties for better harvests. 🌻"
+            "Choose suitable seed varieties for your farming conditions. 🌻"
         ]
-        if st.button("💡 Get Advice", key="smart_tutor_tip"):
-            st.success(random.choice(tips))
 
-    # -------------------------
-    # 🧑‍🏫 Smart Tutor (Multi-Language) — with Voice
-    # -------------------------
+        if st.button(
+            "💡 Get Advice",
+            key="smart_tutor_tip"
+        ):
+
+            st.success(
+                random.choice(tips)
+            )
+
+    # =====================================================
+    # 4. SMART TUTOR — MULTI-LANGUAGE
+    # =====================================================
+
     elif help_option == "🧑‍🏫 Smart Tutor (Multi-Language)":
-        # ===== Optional deps (gracefully handled) =====
+
+        st.subheader(
+            "🧑‍🏫 Smart Tutor (Multi-Language) + 🎙️ Voice"
+        )
+
+        st.caption(
+            "Ask farming questions by voice or typing."
+        )
+
+        LANGS = [
+            "Urhobo",
+            "Yorùbá",
+            "Hausa",
+            "Ịjọ (Ijaw)",
+            "Efik (Calabar)",
+            "Ịgbò (Igbo)",
+            "Edo (Bini)",
+            "Tiv",
+            "Ibibio",
+            "Kanuri",
+            "Nupe",
+            "Fulfulde (Fula)",
+            "Itsekiri",
+            "Gbagyi",
+            "Idoma",
+            "Ebira",
+            "Jukun",
+            "Igala",
+            "Berom (Birom)",
+            "Esan",
+            "Isoko",
+            "Okun (Yoruba dialect)",
+            "Ika",
+            "English (for reference)"
+        ]
+
+        DOMAINS = [
+            "General chat",
+            "Farming & Agriculture",
+            "Business & Finance",
+            "Health & Safety (non-medical advice)",
+            "Education & Study Help"
+        ]
+
+        TONES = [
+            "Neutral",
+            "Friendly",
+            "Professional",
+            "Encouraging",
+            "Brief"
+        ]
+
+        c1, c2, c3 = st.columns(
+            [1.2, 1, 1]
+        )
+
+        lang = c1.selectbox(
+            "Language",
+            LANGS,
+            index=0,
+            key="ml_lang"
+        )
+        domain = c2.selectbox(
+            "Domain",
+            DOMAINS,
+            index=1,
+            key="ml_domain"
+        )
+
+        tone = c3.selectbox(
+            "Tone",
+            TONES,
+            index=1,
+            key="ml_tone"
+        )
+
+        input_mode = st.radio(
+            "Input Mode",
+            [
+                "🎙️ Voice",
+                "⌨️ Typing"
+            ],
+            horizontal=True,
+            key="ml_input_mode"
+        )
+
+        auto_speak = st.toggle(
+            "🔁 Auto-speak reply",
+            value=True,
+            key="ml_auto_speak"
+        )
+
+        tts_lang_hint = st.selectbox(
+            "TTS language",
+            [
+                "auto (best effort)",
+                "en",
+                "ha",
+                "yo",
+                "ig"
+            ],
+            key="ml_tts_code"
+        )
+
+        # Optional dependencies
+
         try:
             import speech_recognition as sr
         except Exception:
             sr = None
 
         try:
-            import pyttsx3  # offline TTS
+            import pyttsx3
         except Exception:
             pyttsx3 = None
 
         try:
-            from gtts import gTTS  # online TTS fallback
+            from gtts import gTTS
         except Exception:
             gTTS = None
 
-        # Translators (optional)
-        translator = None
         try:
-            from googletrans import Translator  # pip install googletrans==4.0.0rc1
-            translator = "googletrans"
-            _gt = Translator()
-        except Exception:
-            try:
-                from deep_translator import GoogleTranslator  # pip install deep-translator
-                translator = "deep"
-            except Exception:
-                translator = None
+            from openai import OpenAI
 
-        # OpenAI (optional)
-        client = None
-        try:
-            from openai import OpenAI  # pip install openai
             if os.getenv("OPENAI_API_KEY"):
                 client = OpenAI()
+            else:
+                client = None
+
         except Exception:
+
             client = None
 
-        # ===== UI =====
-        st.subheader("🧑‍🏫 Smart Tutor (Multi-Language) + 🎙️ Voice")
-        st.caption("Speak or type your question. I’ll answer and can read the reply aloud.")
+        def _model_answer(
+            user_text
+        ):
 
-        LANGS = [
-            "Urhobo", "Yorùbá", "Hausa", "Ịjọ (Ijaw)", "Efik (Calabar)",
-            "Ịgbò (Igbo)", "Edo (Bini)", "Tiv", "Ibibio", "Kanuri",
-            "Nupe", "Fulfulde (Fula)", "Itsekiri", "Gbagyi", "Idoma",
-            "Ebira", "Jukun", "Igala", "Berom (Birom)", "Esan", "Isoko",
-            "Okun (Yoruba dialect)", "Ika", "English (for reference)"
-        ]
-        DOMAINS = [
-            "General chat",
-            "Farming & Agriculture",
-            "Business & Finance",
-            "Health & Safety (non-medical advice)",
-            "Education & Study Help",
-        ]
-        TONES = ["Neutral", "Friendly", "Professional", "Encouraging", "Brief"]
+            system_prompt = f"""
+You are Smart Farm AI Smart Tutor.
 
-        c1, c2, c3 = st.columns([1.2, 1, 1])
-        lang = c1.selectbox("Language", LANGS, index=0, key="ml_lang")
-        domain = c2.selectbox("Domain", DOMAINS, index=1, key="ml_domain")
-        tone = c3.selectbox("Tone", TONES, index=1, key="ml_tone")
+Current farm:
+Farm name: {current_farm_name}
+Crop: {current_crop}
+Location: {current_location}
 
-        # Voice controls
-        vc1, vc2, vc3 = st.columns([1.1, 1.1, 1])
-        input_mode = vc1.radio("Input Mode", ["🎙️ Voice", "⌨️ Typing"], horizontal=True, key="ml_input_mode")
-        auto_speak = vc2.toggle("🔁 Auto-speak reply", value=True, key="ml_auto_speak")
-        tts_lang_hint = vc3.selectbox(
-            "TTS language (for playback)",
-            ["auto (best effort)", "en", "ha", "yo", "ig"],
-            index=0,
-            key="ml_tts_code",
-            help="If your selected language lacks TTS support, fallback to English."
-        )
+Reply entirely in {lang}.
+Domain: {domain}.
+Tone: {tone}.
 
-        st.divider()
-
-        # ===== Helpers =====
-        def _system_prompt(lang_: str, domain_: str, tone_: str) -> str:
-            return f"""
-You are a helpful AI that replies entirely in {lang_}.
-Tone: {tone_}. Domain focus: {domain_}.
-Use clear, culturally appropriate expressions. Avoid slang unless asked.
-If a term has no direct {lang_} word, explain briefly in {lang_}.
-Keep paragraphs short. Use bullet points for steps/lists.
-Do NOT switch to English unless the user asks.
+Give clear, practical, farmer-friendly guidance.
+Use short paragraphs and bullet points when useful.
 """.strip()
 
-        def _translate_to(text: str, target_code: str) -> str:
-            # target_code like 'en', 'ha', 'yo', 'ig', etc.; we don't have full codes for all listed langs.
-            # If translator not available or target_code is not known, return original.
-            if not translator or not text.strip():
-                return text
-            try:
-                if translator == "googletrans":
-                    # Try googletrans with language code; if target_code isn't valid it may still guess
-                    return _gt.translate(text, dest=target_code or "en").text
-                else:
-                    # deep-translator
-                    from deep_translator import GoogleTranslator
-                    return GoogleTranslator(source="auto", target=target_code or "en").translate(text)
-            except Exception:
-                return text
-
-        def _speak_text(text: str, lang_code: str = "en"):
-            # Try offline first
-            if pyttsx3 is not None:
-                try:
-                    engine = pyttsx3.init()
-                    rate = engine.getProperty("rate")
-                    if isinstance(rate, int):
-                        engine.setProperty("rate", max(120, min(185, rate)))
-                    engine.say(text)
-                    engine.runAndWait()
-                    st.caption("🔉 Played using offline TTS (pyttsx3).")
-                    return
-                except Exception:
-                    pass
-            # gTTS fallback
-            if gTTS is not None:
-                try:
-                    use_code = lang_code if lang_code in {"en", "ha", "yo", "ig"} else "en"
-                    tts = gTTS(text=text, lang=use_code)
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                        tts.save(tmp.name)
-                        st.audio(tmp.name, format="audio/mp3")
-                        st.caption("🔉 Played using gTTS.")
-                    return
-                except Exception as e:
-                    st.warning(f"TTS failed: {e}")
-            st.info("🔇 Could not play audio (no TTS engine available).")
-
-        def _model_answer(user_text: str) -> str:
-            sys_prompt = _system_prompt(lang, domain, tone)
             if client is not None:
+
                 try:
-                    resp = client.chat.completions.create(
+
+                    response = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[
-                            {"role": "system", "content": sys_prompt},
-                            {"role": "user", "content": user_text},
+                            {
+                                "role": "system",
+                                "content": system_prompt
+                            },
+                            {
+                                "role": "user",
+                                "content": user_text
+                            }
                         ],
                         temperature=0.6,
-                        max_tokens=380,
+                        max_tokens=380
                     )
-                    return (resp.choices[0].message.content or "").strip()
+
+                    return (
+                        response
+                        .choices[0]
+                        .message
+                        .content
+                        or ""
+                    ).strip()
+
                 except Exception:
-                    pass  # fall through to fallback
-            # Local fallback pattern
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-            header = f"[{lang}] — {domain} • {tone}"
-            body_map = {
-                "Farming & Agriculture": "• Farm advice (summary):",
-                "Business & Finance": "• Business guidance (summary):",
-                "Health & Safety (non-medical advice)": "• Safety tips (general):",
-                "Education & Study Help": "• Study help (outline):",
-                "General chat": "• Response (general):",
-            }
+                    pass
+
             return (
-                f"{header}\n"
-                f"{body_map.get(domain,'• Response:')}\n"
-                f"- 1) Identify main need. 2) Give short, clear guidance. 3) Suggest next step.\n"
-                f"- Your request: “{user_text.strip()}”\n"
-                f"- Tip: Keep records and review weekly.\n"
-                f"— {ts}"
+                f"🌱 Smart Farm AI — {lang}\n\n"
+                f"Your question: {user_text.strip()}\n\n"
+                "1. Identify the main farm problem.\n"
+                "2. Check the crop, soil, weather, and farm conditions.\n"
+                "3. Apply the safest practical farming action.\n"
+                "4. Monitor the result and keep a record.\n\n"
+                "💡 Review the farm regularly and use available "
+                "Smart Farm AI tools for better decisions."
             )
 
-        # Keep simple session history
-        if "ml_msgs" not in st.session_state:
-            st.session_state.ml_msgs = []  # list[tuple[role, text]]
+        def _speak_text(
+            text,
+            lang_code="en"
+        ):
 
-        # ===== Input area (Voice or Typing) =====
-        recognized_box = st.empty()
+            if pyttsx3 is not None:
+
+                try:
+
+                    engine = pyttsx3.init()
+                    engine.say(text)
+                    engine.runAndWait()
+
+                    st.caption(
+                        "🔉 Played using offline TTS."
+                    )
+
+                    return
+
+                except Exception:
+                    pass
+
+            if gTTS is not None:
+
+                try:
+
+                    allowed_codes = {
+                        "en",
+                        "ha",
+                        "yo",
+                        "ig"
+                    }
+                    use_code = (
+                        lang_code
+                        if lang_code in allowed_codes
+                        else "en"
+                    )
+
+                    tts = gTTS(
+                        text=text,
+                        lang=use_code
+                    )
+
+                    import tempfile
+
+                    with tempfile.NamedTemporaryFile(
+                        delete=False,
+                        suffix=".mp3"
+                    ) as tmp:
+
+                        tts.save(
+                            tmp.name
+                        )
+
+                        st.audio(
+                            tmp.name,
+                            format="audio/mp3"
+                        )
+
+                    return
+
+                except Exception:
+
+                    pass
+
+            st.info(
+                "🔇 Audio playback is unavailable."
+            )
+
+        if "ml_msgs" not in st.session_state:
+
+            st.session_state.ml_msgs = []
+
         query_text = ""
 
         if input_mode == "🎙️ Voice":
-            c_mic, c_up = st.columns([1, 1])
-            mic_clicked = c_mic.button("🎤 Tap to Record", key="ml_mic_btn")
-            audio_file = c_up.file_uploader("…or upload WAV/MP3", type=["wav", "mp3", "m4a"], key="ml_audio_upload")
 
-            if mic_clicked:
+            if st.button(
+                "🎤 Tap to Record",
+                key="ml_mic_btn"
+            ):
+
                 if sr is None:
-                    st.error("SpeechRecognition not installed. Try: `pip install SpeechRecognition pyaudio`")
+
+                    st.error(
+                        "SpeechRecognition is not installed."
+                    )
+
                 else:
+
                     try:
-                        recog = sr.Recognizer()
+
+                        recognizer = sr.Recognizer()
+
                         with sr.Microphone() as source:
-                            st.info("🎤 Listening…")
-                            try:
-                                recog.adjust_for_ambient_noise(source, duration=0.6)
-                            except Exception:
-                                pass
-                            audio = recog.listen(source, timeout=4, phrase_time_limit=8)
-                        st.caption("⏳ Transcribing…")
-                        # Try to hint with common codes (fallback to 'en')
-                        hint_code = {"Yorùbá": "yo", "Hausa": "ha", "Ịgbò (Igbo)": "ig"}.get(lang, "en")
-                        query_text = recog.recognize_google(audio, language=hint_code)
-                        recognized_box.success(f"🗣️ Recognized: {query_text}")
-                    except sr.WaitTimeoutError:
-                        st.error("Listening timed out. Try again and speak sooner.")
-                    except sr.UnknownValueError:
-                        st.error("I couldn't understand that. Please try again.")
-                    except sr.RequestError:
-                        st.error("Speech service unavailable. Check internet connection.")
+
+                            st.info(
+                                "🎤 Listening..."
+                            )
+
+                            audio = recognizer.listen(
+                                source,
+                                timeout=4,
+                                phrase_time_limit=8
+                            )
+
+                        query_text = recognizer.recognize_google(
+                            audio,
+                            language="en"
+                        )
+
+                        st.success(
+                            f"🗣️ Recognized: {query_text}"
+                        )
+
                     except Exception as e:
-                        st.error(f"Mic/recognition error: {e}")
 
-            if audio_file is not None and sr is not None:
-                try:
-                    recog = sr.Recognizer()
-                    with sr.AudioFile(audio_file) as source:
-                        audio = recog.record(source)
-                    st.caption("⏳ Transcribing uploaded audio…")
-                    hint_code = {"Yorùbá": "yo", "Hausa": "ha", "Ịgbò (Igbo)": "ig"}.get(lang, "en")
-                    query_text = recog.recognize_google(audio, language=hint_code)
-                    recognized_box.success(f"🗣️ Recognized: {query_text}")
-                except Exception as e:
-                    st.error(f"Audio transcription failed: {e}")
+                        st.error(
+                            f"Voice recognition error: {e}"
+                        )
 
-            default_text = query_text or st.session_state.get("ml_last_text", "")
-            user_text = st.text_area("Your question (editable):", value=default_text, key="ml_textarea", height=120)
-            st.session_state["ml_last_text"] = user_text
+            user_text = st.text_area(
+                "Your question:",
+                value=query_text,
+                key="ml_textarea",
+                height=120
+            )
 
-        else:  # Typing
+        else:
+
             user_text = st.text_area(
                 "Type your question / prompt",
-                placeholder="e.g., Explain in Yorùbá how to prevent tomato leaf blight this week.",
-                height=140,
+                placeholder=(
+                    "Ask Smart Farm AI about farming..."
+                ),
                 key="ml_query",
+                height=140
             )
 
-        st.divider()
+        if st.button(
+            "Generate",
+            type="primary",
+            key="ml_go"
+        ):
 
-        # ===== Generate =====
-        go = st.button("Generate", type="primary", key="ml_go")
-        if go:
-            if not (user_text or "").strip():
-                st.warning("Please enter a question or prompt.")
+            if not user_text.strip():
+
+                st.warning(
+                    "Please enter a question or prompt."
+                )
+
             else:
-                with st.spinner("Generating..."):
-                    base_reply = _model_answer(user_text)
 
-                    # Try a best-effort text translate to a matching code (only a few are well supported)
-                    # For playback, we also try 'tts_lang_hint' to guide TTS.
-                    lang_to_code = {
-                        "English (for reference)": "en",
-                        "Yorùbá": "yo",
-                        "Hausa": "ha",
-                        "Ịgbò (Igbo)": "ig",
-                    }
-                    target_code = lang_to_code.get(lang, "en")
-                    translated = _translate_to(base_reply, target_code) if target_code else base_reply
+                with st.spinner(
+                    "Generating..."
+                ):
 
-                # Save to history
-                st.session_state.ml_msgs.append(("user", user_text))
-                st.session_state.ml_msgs.append(("assistant", translated))
+                    reply = _model_answer(
+                        user_text
+                    )
 
-                st.markdown("### ✅ Tutor Response")
-                st.write(translated)
+                st.session_state.ml_msgs.append(
+                    ("user", user_text)
+                )
 
-                # Auto-speak (optional)
-                if auto_speak and translated.strip():
-                    tts_code = None if tts_lang_hint.startswith("auto") else tts_lang_hint
-                    _speak_text(translated, lang_code=tts_code or target_code or "en")
+                st.session_state.ml_msgs.append(
+                    ("assistant", reply)
+                )
 
-        # ===== Conversation history + manual speak buttons =====
+                st.subheader(
+                    "### ✅ Tutor Response"
+                )
+
+                st.write(reply)
+
+                if auto_speak:
+
+                    code = (
+                        "en"
+                        if tts_lang_hint.startswith("auto")
+                        else tts_lang_hint
+                    )
+
+                    _speak_text(
+                        reply,
+                        code
+                    )
+
         if st.session_state.ml_msgs:
-            st.subheader("💬 Conversation")
-            for role, text in st.session_state.ml_msgs:
-                if role == "user":
-                    with st.chat_message("user", avatar="🧑"):
-                        st.write(text)
-                else:
-                    with st.chat_message("assistant", avatar="🧠"):
-                        st.write(text)
-                        if st.button("🔊 Speak this reply", key=f"ml_say_{abs(hash(text))%10**8}"):
-                            tts_code = None if tts_lang_hint.startswith("auto") else tts_lang_hint
-                            # Try to infer from current language choice (fallback English)
-                            lang_to_code = {"English (for reference)": "en", "Yorùbá": "yo", "Hausa": "ha", "Ịgbò (Igbo)": "ig"}
-                            inferred = lang_to_code.get(lang, "en")
-                            _speak_text(text, lang_code=tts_code or inferred or "en")
+            st.subheader("💬 Conversation History")
 
-        
+        for index, (role, text) in enumerate(
+            st.session_state.ml_msgs
+        ):
+
+            if role == "user":
+
+                with st.chat_message(
+                    "user",
+                    avatar="🧑"
+                ):
+
+                    st.write(text)
+
+            else:
+
+                with st.chat_message(
+                    "assistant",
+                    avatar="🧠"
+                ):
+
+                    st.write(text)
+
+                    if st.button(
+                        "🔊 Speak this reply",
+                        key=f"ml_say_{index}"
+                    ):
+
+                        code = (
+                            "en"
+                            if tts_lang_hint.startswith("auto")
+                            else tts_lang_hint
+                        )
+
+                        _speak_text(
+                            text,
+                            code
+                        )
 
 
-    # -------------------------
-    # 🤖 Chatbot Assistant
-    # -------------------------
-    elif help_option == "🤖 Chatbot Assistant":
-        st.subheader("🤖 Smart Farm AI Chatbot Assistant")
-        st.write("Ask me anything about Smart Farm AI or farming practices.")
-        chatbot_knowledge = {
-            "how to add a crop": "Go to Farm Management > Add Crop and fill in the crop details.",
-            "how to backup data": "Go to Support & Help > Data Backup & Recovery and click 'Backup Data'.",
-            "how to check soil moisture": "Check Sensors & Monitoring > Live Farm Sensor Dashboard.",
-            "how to detect crop disease": "Use AI Predictions > Crop Disease Detection and upload a leaf image.",
-        }
-        user_question = st.text_input("💬 Type your question here:", key="chat_q")
-        if st.button("🤖 Get Answer", key="chat_go"):
-            answer = chatbot_knowledge.get(
-                (user_question or "").lower(),
-                "❓ Sorry, I don't have an answer for that yet. Please try another question.",
+# 🤖 CHATBOT ASSISTANT
+# ========================================================
+
+if help_option == "🤖 Chatbot Assistant":
+
+    st.subheader(
+        "🤖 Smart Farm AI Chatbot Assistant"
+    )
+
+    st.write(
+        "Ask me anything about Smart Farm AI "
+        "or farming practices."
+    )
+
+    chatbot_knowledge = {
+        "how to add a crop":
+            "Go to Farm Management and add the crop details.",
+
+        "how to backup data":
+            "Go to Support & Help > Data Backup & Recovery "
+            "and use the backup option.",
+
+        "how to check soil moisture":
+            "Go to Irrigation & Soil or Sensors & Monitoring "
+            "to check available soil data.",
+
+        "how to detect crop disease":
+            "Go to AI Predictions > Crop Disease Detection "
+            "and upload a crop image.",
+
+        "how to use farm plot mapping":
+            "Go to Farm Management > Farm Plot Mapping "
+            "to add and manage your farm plots.",
+
+        "how to use productivity":
+            "Go to Productivity & Records to manage sales, "
+            "expenses, yields, loans, inventory, reports "
+            "and farm summaries.",
+
+        "how to use calendar":
+            "Go to Calendar & Seasons to access planting, "
+            "harvest and seasonal task planning."
+    }
+
+    user_question = st.text_input(
+        "💬 Type your question here:",
+        key="chat_q"
+    )
+
+    if st.button(
+        "🤖 Get Answer",
+        key="chat_go"
+    ):
+
+        question = (
+            user_question or ""
+        ).strip().lower()
+
+        if not question:
+
+            st.warning(
+                "Please enter a question."
             )
+
+        else:
+
+            answer = chatbot_knowledge.get(
+                question,
+                "❓ I don't have a specific answer "
+                "for that yet. Please try asking about "
+                "farm management, productivity, irrigation, "
+                "AI predictions, calendar, sensors, or "
+                "other Smart Farm AI features."
+            )
+
             st.info(answer)
-
-
 
 
 
@@ -8733,47 +9245,9 @@ elif menu_v2 == "📅 Calendar & Seasons":
                 )
 
 
-# farmer community forum
-elif menu_v2 == "🌐 Farmer Community Forum":
-    st.header("🌐 Farmer Community Forum (Upgrade)")
-    st.write("Ask questions, share knowledge, or reply to fellow farmers.")
+elif menu == "🆘 Support & Help":
 
-    # Keep forum posts in session state (namespaced key)
-    posts_key = kforum("posts")
-    if posts_key not in st.session_state:
-        st.session_state[posts_key] = []
-
-    # Create a new post (unique keys + clear on submit)
-    with st.form(kforum("new_post_form"), clear_on_submit=True):
-        name = st.text_input("👤 Your Name", key=kforum("name"))
-        message = st.text_area("📝 Your Message", key=kforum("message"))
-        submitted = st.form_submit_button("📨 Post", use_container_width=True)
-
-        if submitted:
-            if name.strip() and message.strip():
-                st.session_state[posts_key].insert(0, {
-                    "name": name.strip(),
-                    "message": message.strip(),
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-                st.success("✅ Post shared successfully!")
-            else:
-                st.warning("Please enter both your name and a message.")
-
-    # Display all posts with per-row delete (unique keys)
-    st.subheader("📬 Recent Posts")
-    posts = st.session_state[posts_key]
-    if posts:
-        for idx, post in enumerate(posts):
-            st.markdown(f"**{post['name']}** *(at {post['timestamp']})*")
-            st.markdown(f"> {post['message']}")
-            del_col, _ = st.columns([1, 8])
-            if del_col.button("🗑 Delete", key=kforum(f"del_{idx}")):
-                posts.pop(idx)
-                st.rerun()
-            st.markdown("---")
-    else:
-        st.info("No posts yet. Be the first to share something!")
+    support_help_ui()
 
 
 
