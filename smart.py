@@ -4457,7 +4457,7 @@ def support_help_ui():
     # SUPPORT MENU
     # =====================================================
 
-    help_option = st.selectbox(
+    help_option = st.sidebar.selectbox(
     "🆘 Select a Help Feature",
     [
         "👨‍🌾 Farmers Community Forum",
@@ -4466,7 +4466,7 @@ def support_help_ui():
         "🧑‍🏫 Smart Tutor (Multi-Language)",
         "🤖 Chatbot Assistant"
     ],
-    key="support_help_v2"
+    key=f"support_help_{menu_key}"
 )
 
     # =====================================================
@@ -7252,6 +7252,7 @@ menu_v2 = st.sidebar.selectbox(
         "🚨 Smart Farm Alerts",
         "🚁 Voice-Controlled Drone Irrigation Assistant",
         "🚁 Drone Flight Scheduler",
+        "🆘 Support & Help",
         "📍 Farm Lot Management",
         "📅 Expanded AI Crop Calendar",
         "🤖 AI Crop Calendar",
