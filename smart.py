@@ -4084,15 +4084,60 @@ if menu == "🌿 Farm Management":
 
 elif menu == "📊 Productivity & Records":
 
-    # Send the old router to the current v2
-    # Productivity & Records system.
-    try:
-        main_v2_key = k2("main_menu_option")
-    except Exception:
-        main_v2_key = "v2_main_menu_option"
+    st.header("📊 Productivity & Records")
 
-    st.session_state[main_v2_key] = "📊 Productivity & Records"
-    st.rerun()
+    # ========================================================
+    # CURRENT FARM CONTEXT
+    # ========================================================
+
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get(
+        "farm_id",
+        "main_farm"
+    )
+
+    current_farm_name = current_farm.get(
+        "farm_name",
+        "Main Farm"
+    )
+
+    current_crop = current_farm.get(
+        "crop_type",
+        "Not specified"
+    )
+
+    current_location = current_farm.get(
+        "location",
+        "Not specified"
+    )
+
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
+
+    productivity_option = st.sidebar.selectbox(
+        "📊 Select a Productivity Feature",
+        [
+            "📈 View Sales Record",
+            "➕ Add Sales Record",
+            "💰 View Expense",
+            "➕ Add Expense",
+            "📦 View Inventory",
+            "➕ Add Inventory",
+            "📄 Generate Report",
+            "📊 Farm Summary",
+        ],
+        key="productivity_feature"
+    )
 
 
 
