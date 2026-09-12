@@ -4389,6 +4389,13 @@ def sensors_monitoring_ui():
 
 def support_help_ui():
 
+    import streamlit as st
+    import json
+    import random
+    import os
+    import tempfile
+    from datetime import datetime
+
     st.header("🆘 Support & Help")
 
     # =====================================================
@@ -4450,7 +4457,7 @@ def support_help_ui():
     # SUPPORT MENU
     # =====================================================
 
-    help_option = st.sidebar.selectbox(
+    help_option = st.selectbox(
         "🆘 Select a Help Feature",
         [
             "👨‍🌾 Farmers Community Forum",
@@ -4468,7 +4475,9 @@ def support_help_ui():
 
     if help_option == "👨‍🌾 Farmers Community Forum":
 
-        st.subheader("👨‍🌾 Farmers Community Forum")
+        st.subheader(
+            "👨‍🌾 Farmers Community Forum"
+        )
 
         st.write(
             "Connect with other farmers, share experiences, "
@@ -4481,12 +4490,14 @@ def support_help_ui():
                 "forum_posts.json",
                 "r"
             ) as file:
+
                 forum_posts = json.load(file)
 
             if not isinstance(
                 forum_posts,
                 list
             ):
+
                 forum_posts = []
 
         except (
@@ -4495,8 +4506,6 @@ def support_help_ui():
         ):
 
             forum_posts = []
-
-        # Add new forum post
 
         new_post = st.text_area(
             "💬 Share your thoughts or ask a question:",
@@ -4522,10 +4531,8 @@ def support_help_ui():
                     "crop_type": current_crop,
                     "location": current_location,
                     "message": new_post.strip(),
-                    "date": str(
-                        datetime.now().strftime(
-                            "%Y-%m-%d %H:%M"
-                        )
+                    "date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M"
                     )
                 }
 
@@ -4543,20 +4550,19 @@ def support_help_ui():
                         file,
                         indent=4
                     )
-
-                st.success(
+                    st.success(
                     "✅ Your message has been posted!"
                 )
-                st.rerun()
 
-        # Show posts for current farm
+                st.rerun()
 
         st.write("### 📜 Forum Messages")
 
         farm_posts = [
             post
             for post in forum_posts
-            if str(
+            if isinstance(post, dict)
+            and str(
                 post.get(
                     "farm_id",
                     "main_farm"
@@ -4598,7 +4604,9 @@ def support_help_ui():
 
     elif help_option == "💾 Data Backup & Recovery":
 
-        st.subheader("💾 Data Backup & Recovery")
+        st.subheader(
+            "💾 Data Backup & Recovery"
+        )
 
         st.write(
             f"Backup and restore data associated with "
@@ -4645,9 +4653,7 @@ def support_help_ui():
         st.download_button(
             "📤 Backup Farm Data",
             data=backup_json,
-            file_name=(
-                f"{current_farm_id}_backup.json"
-            ),
+            file_name=f"{current_farm_id}_backup.json",
             mime="application/json",
             key="support_backup_download"
         )
@@ -4727,13 +4733,21 @@ def support_help_ui():
                         "❌ Could not read the backup file."
                     )
 
+                except Exception as e:
+
+                    st.error(
+                        f"❌ Restore error: {e}"
+                    )
+
     # =====================================================
     # 3. TUTORIAL & GUIDE
     # =====================================================
 
     elif help_option == "📘 Tutorial & Guide":
 
-        st.subheader("📘 Tutorial & Guide")
+        st.subheader(
+            "📘 Tutorial & Guide"
+        )
 
         st.write(
             "Step-by-step guidance for using "
@@ -4849,13 +4863,13 @@ Tutorial, Smart Tutor, and Chatbot Assistant.
         c1, c2, c3 = st.columns(
             [1.2, 1, 1]
         )
-
         lang = c1.selectbox(
             "Language",
             LANGS,
             index=0,
             key="ml_lang"
         )
+
         domain = c2.selectbox(
             "Domain",
             DOMAINS,
@@ -4898,34 +4912,59 @@ Tutorial, Smart Tutor, and Chatbot Assistant.
             key="ml_tts_code"
         )
 
-        # Optional dependencies
+        # =================================================
+        # OPTIONAL DEPENDENCIES
+        # =================================================
 
         try:
+
             import speech_recognition as sr
+
         except Exception:
+
             sr = None
 
         try:
+
             import pyttsx3
+
         except Exception:
+
             pyttsx3 = None
 
         try:
+
             from gtts import gTTS
+
         except Exception:
+
             gTTS = None
 
+        # =================================================
+        # OPENAI
+        # =================================================
+
         try:
+
             from openai import OpenAI
 
-            if os.getenv("OPENAI_API_KEY"):
+            if os.getenv(
+                "OPENAI_API_KEY"
+            ):
+
                 client = OpenAI()
+
             else:
+
                 client = None
 
         except Exception:
 
             client = None
+
+        # =================================================
+        # MODEL ANSWER
+        # =================================================
 
         def _model_answer(
             user_text
@@ -4976,6 +5015,7 @@ Use short paragraphs and bullet points when useful.
                     ).strip()
 
                 except Exception:
+
                     pass
 
             return (
@@ -4989,6 +5029,10 @@ Use short paragraphs and bullet points when useful.
                 "Smart Farm AI tools for better decisions."
             )
 
+        # =================================================
+        # TEXT TO SPEECH
+        # =================================================
+
         def _speak_text(
             text,
             lang_code="en"
@@ -4999,7 +5043,11 @@ Use short paragraphs and bullet points when useful.
                 try:
 
                     engine = pyttsx3.init()
-                    engine.say(text)
+
+                    engine.say(
+                        text
+                    )
+
                     engine.runAndWait()
 
                     st.caption(
@@ -5009,6 +5057,7 @@ Use short paragraphs and bullet points when useful.
                     return
 
                 except Exception:
+
                     pass
 
             if gTTS is not None:
@@ -5021,6 +5070,7 @@ Use short paragraphs and bullet points when useful.
                         "yo",
                         "ig"
                     }
+
                     use_code = (
                         lang_code
                         if lang_code in allowed_codes
@@ -5058,11 +5108,19 @@ Use short paragraphs and bullet points when useful.
                 "🔇 Audio playback is unavailable."
             )
 
+        # =================================================
+        # CONVERSATION HISTORY
+        # =================================================
+
         if "ml_msgs" not in st.session_state:
 
             st.session_state.ml_msgs = []
 
         query_text = ""
+
+        # =================================================
+        # VOICE / TYPING INPUT
+        # =================================================
 
         if input_mode == "🎙️ Voice":
 
@@ -5089,19 +5147,53 @@ Use short paragraphs and bullet points when useful.
                                 "🎤 Listening..."
                             )
 
+                            try:
+
+                                recognizer.adjust_for_ambient_noise(
+                                    source,
+                                    duration=0.5
+                                )
+
+                            except Exception:
+
+                                pass
+
                             audio = recognizer.listen(
                                 source,
                                 timeout=4,
                                 phrase_time_limit=8
                             )
 
-                        query_text = recognizer.recognize_google(
-                            audio,
-                            language="en"
+                        query_text = (
+                            recognizer
+                            .recognize_google(
+                                audio,
+                                language="en"
+                            )
                         )
 
                         st.success(
                             f"🗣️ Recognized: {query_text}"
+                        )
+
+                    except sr.WaitTimeoutError:
+
+                        st.error(
+                            "Listening timed out. "
+                            "Please try again."
+                        )
+
+                    except sr.UnknownValueError:
+
+                        st.error(
+                            "I could not understand the audio. "
+                            "Please try again."
+                        )
+
+                    except sr.RequestError:
+                        st.error(
+                            "Speech recognition service "
+                            "is unavailable."
                         )
 
                     except Exception as e:
@@ -5128,6 +5220,10 @@ Use short paragraphs and bullet points when useful.
                 height=140
             )
 
+        # =================================================
+        # GENERATE TUTOR RESPONSE
+        # =================================================
+
         if st.button(
             "Generate",
             type="primary",
@@ -5150,19 +5246,34 @@ Use short paragraphs and bullet points when useful.
                         user_text
                     )
 
+                if not reply:
+
+                    reply = (
+                        "Sorry, I could not generate "
+                        "a response right now."
+                    )
+
                 st.session_state.ml_msgs.append(
-                    ("user", user_text)
+                    (
+                        "user",
+                        user_text
+                    )
                 )
 
                 st.session_state.ml_msgs.append(
-                    ("assistant", reply)
+                    (
+                        "assistant",
+                        reply
+                    )
                 )
 
                 st.subheader(
                     "### ✅ Tutor Response"
                 )
 
-                st.write(reply)
+                st.write(
+                    reply
+                )
 
                 if auto_speak:
 
@@ -5177,124 +5288,140 @@ Use short paragraphs and bullet points when useful.
                         code
                     )
 
-        if st.session_state.ml_msgs:
-            st.subheader("💬 Conversation History")
+        # =================================================
+        # CONVERSATION
+        # =================================================
 
-        for index, (role, text) in enumerate(
-            st.session_state.ml_msgs
+        if st.session_state.ml_msgs:
+
+            st.subheader(
+                "💬 Conversation"
+            )
+
+            for index, message in enumerate(
+                st.session_state.ml_msgs
+            ):
+
+                role, text = message
+
+                if role == "user":
+
+                    with st.chat_message(
+                        "user",
+                        avatar="🧑"
+                    ):
+
+                        st.write(
+                            text
+                        )
+
+                else:
+
+                    with st.chat_message(
+                        "assistant",
+                        avatar="🧠"
+                    ):
+
+                        st.write(
+                            text
+                        )
+
+                        if st.button(
+                            "🔊 Speak this reply",
+                            key=f"ml_say_{index}"
+                        ):
+
+                            code = (
+                                "en"
+                                if tts_lang_hint.startswith("auto")
+                                else tts_lang_hint
+                            )
+
+                            _speak_text(
+                                text,
+                                code
+                            )
+                            # =====================================================
+    # 5. CHATBOT ASSISTANT
+    # =====================================================
+
+    elif help_option == "🤖 Chatbot Assistant":
+
+        st.subheader(
+            "🤖 Smart Farm AI Chatbot Assistant"
+        )
+
+        st.write(
+            "Ask me anything about Smart Farm AI "
+            "or farming practices."
+        )
+
+        chatbot_knowledge = {
+
+            "how to add a crop":
+                "Go to Farm Management and add the crop "
+                "details.",
+
+            "how to backup data":
+                "Go to Support & Help > Data Backup & "
+                "Recovery and use the backup option.",
+
+            "how to check soil moisture":
+                "Go to Irrigation & Soil or Sensors & "
+                "Monitoring to check available soil data.",
+
+            "how to detect crop disease":
+                "Go to AI Predictions > Crop Disease "
+                "Detection and upload a crop image.",
+
+            "how to use farm plot mapping":
+                "Go to Farm Management > Farm Plot Mapping "
+                "to add and manage your farm plots.",
+
+            "how to use productivity":
+                "Go to Productivity & Records to manage "
+                "sales, expenses, yields, loans, inventory, "
+                "reports and farm summaries.",
+
+            "how to use calendar":
+                "Go to Calendar & Seasons to access planting, "
+                "harvest and seasonal task planning."
+        }
+
+        user_question = st.text_input(
+            "💬 Type your question here:",
+            key="chat_q"
+        )
+
+        if st.button(
+            "🤖 Get Answer",
+            key="chat_go"
         ):
 
-            if role == "user":
+            question = (
+                user_question or ""
+            ).strip().lower()
 
-                with st.chat_message(
-                    "user",
-                    avatar="🧑"
-                ):
+            if not question:
 
-                    st.write(text)
+                st.warning(
+                    "Please enter a question."
+                )
 
             else:
 
-                with st.chat_message(
-                    "assistant",
-                    avatar="🧠"
-                ):
+                answer = chatbot_knowledge.get(
+                    question,
+                    "❓ I don't have a specific answer "
+                    "for that yet. Please try asking about "
+                    "farm management, productivity, irrigation, "
+                    "AI predictions, calendar, sensors, or "
+                    "other Smart Farm AI features."
+                )
 
-                    st.write(text)
-
-                    if st.button(
-                        "🔊 Speak this reply",
-                        key=f"ml_say_{index}"
-                    ):
-
-                        code = (
-                            "en"
-                            if tts_lang_hint.startswith("auto")
-                            else tts_lang_hint
-                        )
-
-                        _speak_text(
-                            text,
-                            code
-                        )
-
-
-# 🤖 CHATBOT ASSISTANT
-# ========================================================
-
-if help_option == "🤖 Chatbot Assistant":
-
-    st.subheader(
-        "🤖 Smart Farm AI Chatbot Assistant"
-    )
-
-    st.write(
-        "Ask me anything about Smart Farm AI "
-        "or farming practices."
-    )
-
-    chatbot_knowledge = {
-        "how to add a crop":
-            "Go to Farm Management and add the crop details.",
-
-        "how to backup data":
-            "Go to Support & Help > Data Backup & Recovery "
-            "and use the backup option.",
-
-        "how to check soil moisture":
-            "Go to Irrigation & Soil or Sensors & Monitoring "
-            "to check available soil data.",
-
-        "how to detect crop disease":
-            "Go to AI Predictions > Crop Disease Detection "
-            "and upload a crop image.",
-
-        "how to use farm plot mapping":
-            "Go to Farm Management > Farm Plot Mapping "
-            "to add and manage your farm plots.",
-
-        "how to use productivity":
-            "Go to Productivity & Records to manage sales, "
-            "expenses, yields, loans, inventory, reports "
-            "and farm summaries.",
-
-        "how to use calendar":
-            "Go to Calendar & Seasons to access planting, "
-            "harvest and seasonal task planning."
-    }
-
-    user_question = st.text_input(
-        "💬 Type your question here:",
-        key="chat_q"
-    )
-
-    if st.button(
-        "🤖 Get Answer",
-        key="chat_go"
-    ):
-
-        question = (
-            user_question or ""
-        ).strip().lower()
-
-        if not question:
-
-            st.warning(
-                "Please enter a question."
-            )
-
-        else:
-
-            answer = chatbot_knowledge.get(
-                question,
-                "❓ I don't have a specific answer "
-                "for that yet. Please try asking about "
-                "farm management, productivity, irrigation, "
-                "AI predictions, calendar, sensors, or "
-                "other Smart Farm AI features."
-            )
-
-            st.info(answer)
+                st.info(
+                    answer
+                )
 
 
 
