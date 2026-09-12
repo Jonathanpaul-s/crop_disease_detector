@@ -4458,16 +4458,16 @@ def support_help_ui():
     # =====================================================
 
     help_option = st.selectbox(
-        "🆘 Select a Help Feature",
-        [
-            "👨‍🌾 Farmers Community Forum",
-            "💾 Data Backup & Recovery",
-            "📘 Tutorial & Guide",
-            "🧑‍🏫 Smart Tutor (Multi-Language)",
-            "🤖 Chatbot Assistant"
-        ],
-        key="support_help"
-    )
+    "🆘 Select a Help Feature",
+    [
+        "👨‍🌾 Farmers Community Forum",
+        "💾 Data Backup & Recovery",
+        "📘 Tutorial & Guide",
+        "🧑‍🏫 Smart Tutor (Multi-Language)",
+        "🤖 Chatbot Assistant"
+    ],
+    key="support_help_v2"
+)
 
     # =====================================================
     # 1. FARMERS COMMUNITY FORUM
