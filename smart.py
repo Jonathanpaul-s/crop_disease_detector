@@ -6794,91 +6794,463 @@ elif menu_v2 == "📊 Productivity & Records":
 """
         )
         
-# irrigation & soil
+# =========================================================
+# IRRIGATION & SOIL
+# =========================================================
+
 elif menu_v2 == "💧 Irrigation & Soil":
+
+    st.header("💧 Irrigation & Soil")
+
+    # Current Farm Connection
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get(
+        "farm_id",
+        "main_farm"
+    )
+
+    current_farm_name = current_farm.get(
+        "farm_name",
+        "Main Farm"
+    )
+
+    current_crop = current_farm.get(
+        "crop_type",
+        "Not specified"
+    )
+
+    current_location = current_farm.get(
+        "location",
+        "Not specified"
+    )
+
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
+
     option = st.selectbox(
         "Select a Feature",
-        ["Irrigation Schedule", "Soil Health Record"],
+        [
+            "Irrigation Schedule",
+            "Soil Health Record"
+        ],
         key=kirr2("feature")
     )
 
-    if option == "Irrigation Schedule":
-        st.subheader("Irrigation Schedule")
-        farm_location = st.text_input("Farm Location:", key=kirr2("sched_location"))
-        crop_type = st.text_input("Crop Type:", key=kirr2("sched_crop"))
-        irrigation_date = st.date_input("Irrigation Date:", key=kirr2("sched_date"))
-        volume = st.number_input("Water Volume (liters):", min_value=0, key=kirr2("sched_volume"))
+    # =========================================================
+    # IRRIGATION SCHEDULE
+    # =========================================================
 
-        if st.button("Save Irrigation Record", key=kirr2("sched_save_btn")):
-            st.success(
-                f"✅ Irrigation record saved: {farm_location} | {crop_type} | {irrigation_date} | {volume} liters"
+    if option == "Irrigation Schedule":
+
+        st.subheader("💧 Irrigation Schedule")
+
+        st.write(
+            f"🌱 Farm: {current_farm_name}"
+        )
+
+        st.write(
+            f"🌾 Crop: {current_crop}"
+        )
+
+        st.write(
+            f"📍 Location: {current_location}"
+        )
+
+        irrigation_date = st.date_input(
+            "Irrigation Date:",
+            key=kirr2("sched_date")
+        )
+
+        volume = st.number_input(
+            "Water Volume (liters):",
+            min_value=0,
+            step=1,
+            key=kirr2("sched_volume")
+        )
+
+        if st.button(
+            "💾 Save Irrigation Record",
+            key=kirr2("sched_save_btn")
+        ):
+
+            irrigation_record = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "irrigation_date": str(irrigation_date),
+                "water_volume_liters": volume
+            }
+
+            try:
+                with open(
+                    "irrigation_records.json",
+                    "r"
+                ) as file:
+                    irrigation_data = json.load(file)
+
+            except (FileNotFoundError, json.JSONDecodeError):
+                irrigation_data = []
+
+            irrigation_data.append(
+                irrigation_record
             )
 
+            with open(
+                "irrigation_records.json",
+                "w"
+            ) as file:
+                json.dump(
+                    irrigation_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Irrigation record saved for "
+                f"{current_farm_name}."
+            )
+
+        # Show records for current farm
+        st.divider()
+
+        st.subheader(
+            f"📋 Irrigation Records — {current_farm_name}"
+        )
+
+        try:
+            with open(
+                "irrigation_records.json",
+                "r"
+            ) as file:
+                irrigation_data = json.load(file)
+
+            farm_irrigation = [
+                entry
+                for entry in irrigation_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+            if farm_irrigation:
+
+                for entry in farm_irrigation:
+
+                    st.markdown(
+                        f"""
+- 📅 Date: {entry.get('irrigation_date', '')}
+- 💧 Water Volume: {entry.get('water_volume_liters', 0)} liters
+- 🌾 Crop: {entry.get('crop_type', current_crop)}
+- 📍 Location: {entry.get('location', current_location)}
+---
+"""
+                    )
+
+            else:
+                st.info(
+                    f"No irrigation records for "
+                    f"{current_farm_name}."
+                )
+
+        except (FileNotFoundError, json.JSONDecodeError):
+
+            st.info(
+                f"No irrigation records for "
+                f"{current_farm_name} yet."
+            )
+
+    # =========================================================
+    # SOIL HEALTH RECORD
+    # =========================================================
+
     elif option == "Soil Health Record":
-        st.subheader("Soil Health Record")
-        farm_location = st.text_input("Farm Location:", key=kirr2("soil_location"))
-        soil_ph = st.number_input("Soil pH Level:", min_value=0.0, max_value=14.0, key=kirr2("soil_ph"))
-        moisture_content = st.number_input("Moisture Content (%):", min_value=0, key=kirr2("soil_moisture"))
-        nutrient_content = st.text_input("Nutrient Content Summary:", key=kirr2("soil_nutrients"))
-        test_date = st.date_input("Test Date:", key=kirr2("soil_date"))
 
-        if st.button("Save Soil Health Record", key=kirr2("soil_save_btn")):
-            st.success(f"✅ Soil record saved for {farm_location} on {test_date}")
+        st.subheader("🌱 Soil Health Record")
 
-# farm plot mapping
+        st.write(
+            f"🌱 Farm: {current_farm_name}"
+        )
+
+        st.write(
+            f"🌾 Crop: {current_crop}"
+        )
+
+        st.write(
+            f"📍 Location: {current_location}"
+        )
+
+        soil_ph = st.number_input(
+            "Soil pH Level:",
+            min_value=0.0,
+            max_value=14.0,
+            step=0.1,
+            key=kirr2("soil_ph")
+        )
+
+        moisture_content = st.number_input(
+            "Moisture Content (%):",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.1,
+            key=kirr2("soil_moisture")
+        )
+
+        nutrient_content = st.text_input(
+            "Nutrient Content Summary:",
+            key=kirr2("soil_nutrients")
+        )
+
+        test_date = st.date_input(
+            "Test Date:",
+            key=kirr2("soil_date")
+        )
+
+        if st.button(
+            "💾 Save Soil Health Record",
+            key=kirr2("soil_save_btn")
+        ):
+
+            soil_record = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "soil_ph": soil_ph,
+                "moisture_content": moisture_content,
+                "nutrient_content": nutrient_content,
+                "test_date": str(test_date)
+            }
+
+            try:
+                with open(
+                    "soil_health_records.json",
+                    "r"
+                ) as file:
+                    soil_data = json.load(file)
+
+            except (FileNotFoundError, json.JSONDecodeError):
+                soil_data = []
+
+            soil_data.append(
+                soil_record
+            )
+
+            with open(
+                "soil_health_records.json",
+                "w"
+            ) as file:
+                json.dump(
+                    soil_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Soil health record saved for "
+                f"{current_farm_name}."
+            )
+
+        # Show records for current farm
+        st.divider()
+
+        st.subheader(
+            f"📋 Soil Records — {current_farm_name}"
+        )
+
+        try:
+            with open(
+                "soil_health_records.json",
+                "r"
+            ) as file:
+                soil_data = json.load(file)
+
+            farm_soil = [
+                entry
+                for entry in soil_data
+                if str(
+                    entry.get(
+                        "farm_id",
+                        "main_farm"
+                    )
+                ) == str(current_farm_id)
+            ]
+
+            if farm_soil:
+
+                for entry in farm_soil:
+
+                    st.markdown(
+                        f"""
+- 📅 Test Date: {entry.get('test_date', '')}
+- 🧪 Soil pH: {entry.get('soil_ph', 0)}
+- 💧 Moisture: {entry.get('moisture_content', 0)}%
+- 🌿 Nutrients: {entry.get('nutrient_content', '')}
+---
+"""
+                    )
+
+            else:
+
+                st.info(
+                    f"No soil health records for "
+                    f"{current_farm_name}."
+                )
+
+        except (FileNotFoundError, json.JSONDecodeError):
+
+            st.info(
+                f"No soil health records for "
+                f"{current_farm_name} yet."
+            )
+            # =========================================================
+# FARM PLOT MAPPING
+# =========================================================
+
 elif menu_v2 == "🌍 Farm Plot Mapping":
+
     st.header("🌍 Farm Plot Mapping (Upgrade)")
 
     # Session storage for upgraded section
     if kplot("data") not in st.session_state:
-        st.session_state[kplot("data")] = []  # list of dicts
+        st.session_state[kplot("data")] = []
 
     st.subheader("➕ Add New Farm Plot")
 
-    with st.form(kplot("add_form"), clear_on_submit=True):
-        plot_name = st.text_input("Plot Name", key=kplot("name"))
-        plot_size = st.number_input("Size (hectares)", min_value=0.0, step=0.1, key=kplot("size"))
-        plot_location = st.text_input("Location Description", key=kplot("loc"))
+    with st.form(
+        kplot("add_form"),
+        clear_on_submit=True
+    ):
+
+        plot_name = st.text_input(
+            "Plot Name",
+            key=kplot("name")
+        )
+
+        plot_size = st.number_input(
+            "Size (hectares)",
+            min_value=0.0,
+            step=0.1,
+            key=kplot("size")
+        )
+
+        plot_location = st.text_input(
+            "Location Description",
+            key=kplot("loc")
+        )
+
         crop_type = st.selectbox(
             "Crop Planted",
-            ["Maize", "Cassava", "Tomato", "Rice", "Yam", "Other"],
+            [
+                "Maize",
+                "Cassava",
+                "Tomato",
+                "Rice",
+                "Yam",
+                "Other"
+            ],
             key=kplot("crop")
         )
-        submitted = st.form_submit_button("Add Plot", use_container_width=True)
+
+        submitted = st.form_submit_button(
+            "Add Plot",
+            use_container_width=True
+        )
 
     if submitted:
+
         if not plot_name.strip():
-            st.warning("Please enter a plot name.")
+
+            st.warning(
+                "Please enter a plot name."
+            )
+
         else:
+
             new_plot = {
                 "Name": plot_name.strip(),
                 "Size (ha)": float(plot_size),
                 "Location": plot_location.strip(),
                 "Crop": crop_type
             }
-            st.session_state[kplot("data")].append(new_plot)
-            st.success(f"✅ Plot '{new_plot['Name']}' added successfully!")
 
-    plots = st.session_state[kplot("data")]
+            st.session_state[
+                kplot("data")
+            ].append(new_plot)
+
+            st.success(
+                f"✅ Plot '{new_plot['Name']}' "
+                f"added successfully!"
+            )
+
+    plots = st.session_state[
+        kplot("data")
+    ]
 
     if plots:
+
         st.subheader("📋 Mapped Plots")
-        st.dataframe(plots, use_container_width=True)
+
+        st.dataframe(
+            plots,
+            use_container_width=True
+        )
 
         st.divider()
-        st.subheader("🗑 Manage Plots")
-        # Individual delete controls
-        for i, p in enumerate(plots):
-            with st.expander(f"📌 {p['Name']} • {p['Crop']} • {p['Size (ha)']} ha"):
-                st.write(f"**Location:** {p['Location'] or '—'}")
-                if st.button("Delete this plot", key=kplot(f"del_{i}")):
-                    st.session_state[kplot("data")].pop(i)
-                    st.success("Plot deleted.")
-                    st.experimental_rerun()
 
-        # Export CSV
+        st.subheader("🗑 Manage Plots")
+
+        for i, p in enumerate(plots):
+
+            with st.expander(
+                f"📌 {p['Name']} • "
+                f"{p['Crop']} • "
+                f"{p['Size (ha)']} ha"
+            ):
+
+                st.write(
+                    f"Location: "
+                    f"{p['Location'] or '—'}"
+                )
+
+                if st.button(
+                    "Delete this plot",
+                    key=kplot(f"del_{i}")
+                ):
+
+                    st.session_state[
+                        kplot("data")
+                    ].pop(i)
+
+                    st.success(
+                        "Plot deleted."
+                    )
+
+                    st.rerun()
+
         import pandas as pd
-        csv = pd.DataFrame(st.session_state[kplot("data")]).to_csv(index=False).encode("utf-8")
+
+        csv = pd.DataFrame(
+            st.session_state[
+                kplot("data")
+            ]
+        ).to_csv(
+            index=False
+        ).encode("utf-8")
+
         st.download_button(
             "⬇️ Download Plots CSV",
             csv,
@@ -6886,7 +7258,9 @@ elif menu_v2 == "🌍 Farm Plot Mapping":
             mime="text/csv",
             key=kplot("dl")
         )
+
     else:
+
         st.info("No plots added yet.")
 
 # calendar & seasons
