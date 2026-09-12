@@ -7252,7 +7252,6 @@ menu_v2 = st.sidebar.selectbox(
         "🚨 Smart Farm Alerts",
         "🚁 Voice-Controlled Drone Irrigation Assistant",
         "🚁 Drone Flight Scheduler",
-        "🆘 Support & Help",
         "📍 Farm Lot Management",
         "📅 Expanded AI Crop Calendar",
         "🤖 AI Crop Calendar",
