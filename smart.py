@@ -3289,25 +3289,195 @@ def irrigation_ui():
     )
 
     irrigation_option = st.sidebar.selectbox(
-        "💧 Select an Irrigation Feature",
+        "💧 Select an Irrigation & Soil Feature",
         [
+            "💧 Irrigation Schedule",
+            "🌱 Soil Health Record",
             "🌱 Soil Moisture Checker",
             "🚰 Water Usage Log",
-            "💧 Irrigation Cost Estimator"
+            "💰 Irrigation Cost Estimator"
         ],
         key="irrigation_feature"
     )
 
     # =========================================================
-    # SOIL MOISTURE CHECKER
+    # 1. IRRIGATION SCHEDULE
     # =========================================================
 
-    if irrigation_option == "🌱 Soil Moisture Checker":
+    if irrigation_option == "💧 Irrigation Schedule":
+
+        st.subheader("💧 Irrigation Schedule")
+
+        st.write(
+            f"🌱 Current Farm: {current_farm_name}"
+        )
+
+        st.write(
+            f"🌾 Crop: {current_crop}"
+        )
+
+        st.write(
+            f"📍 Location: {current_location}"
+        )
+
+        irrigation_date = st.date_input(
+            "📅 Irrigation Date",
+            key=kirr2("schedule_date")
+        )
+
+        volume = st.number_input(
+            "💧 Water Volume (liters)",
+            min_value=0.0,
+            key=kirr2("schedule_volume")
+        )
+
+        if st.button(
+            "Save Irrigation Record",
+            key=kirr2("schedule_save")
+        ):
+
+            irrigation_record = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "irrigation_date": str(irrigation_date),
+                "water_volume": volume
+            }
+
+            try:
+                with open(
+                    "irrigation_schedule.json",
+                    "r"
+                ) as file:
+                    irrigation_data = json.load(file)
+
+            except (
+                FileNotFoundError,
+                json.JSONDecodeError
+            ):
+                irrigation_data = []
+
+            irrigation_data.append(
+                irrigation_record
+            )
+
+            with open(
+                "irrigation_schedule.json",
+                "w"
+            ) as file:
+                json.dump(
+                    irrigation_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Irrigation schedule saved for "
+                f"{current_farm_name}."
+            )
+
+    # =========================================================
+    # 2. SOIL HEALTH RECORD
+    # =========================================================
+
+    elif irrigation_option == "🌱 Soil Health Record":
+
+        st.subheader("🌱 Soil Health Record")
+
+        st.write(
+            f"🌱 Current Farm: {current_farm_name}"
+        )
+
+        st.write(
+            f"🌾 Crop: {current_crop}"
+        )
+
+        st.write(
+            f"📍 Location: {current_location}"
+        )
+
+        soil_ph = st.number_input(
+            "🧪 Soil pH Level",
+            min_value=0.0,
+            max_value=14.0,
+            key=kirr2("soil_ph")
+        )
+
+        moisture_content = st.number_input(
+            "💦 Moisture Content (%)",
+            min_value=0.0,
+            max_value=100.0,
+            key=kirr2("soil_moisture")
+        )
+        nutrient_content = st.text_input(
+            "🌿 Nutrient Content Summary",
+            key=kirr2("soil_nutrients")
+        )
+
+        test_date = st.date_input(
+            "📅 Test Date",
+            key=kirr2("soil_date")
+        )
+
+        if st.button(
+            "Save Soil Health Record",
+            key=kirr2("soil_save")
+        ):
+
+            soil_record = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "soil_ph": soil_ph,
+                "moisture_content": moisture_content,
+                "nutrient_content": nutrient_content,
+                "test_date": str(test_date)
+            }
+
+            try:
+                with open(
+                    "soil_health_records.json",
+                    "r"
+                ) as file:
+                    soil_data = json.load(file)
+
+            except (
+                FileNotFoundError,
+                json.JSONDecodeError
+            ):
+                soil_data = []
+
+            soil_data.append(
+                soil_record
+            )
+
+            with open(
+                "soil_health_records.json",
+                "w"
+            ) as file:
+                json.dump(
+                    soil_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Soil health record saved for "
+                f"{current_farm_name}."
+            )
+
+    # =========================================================
+    # 3. SOIL MOISTURE CHECKER
+    # =========================================================
+
+    elif irrigation_option == "🌱 Soil Moisture Checker":
 
         st.subheader("🌱 Soil Moisture Checker")
 
         st.write(
-            f"Enter the moisture level reading for "
+            f"Check soil moisture for "
             f"{current_farm_name}."
         )
 
@@ -3320,17 +3490,20 @@ def irrigation_ui():
         )
 
         plot_id = st.text_input(
-            "🆔 Plot ID"
+            "🆔 Plot ID",
+            key=kirr2("moisture_plot")
         )
 
         moisture_level = st.slider(
             "💦 Moisture Level (%)",
             min_value=0,
-            max_value=100
+            max_value=100,
+            key=kirr2("moisture_level")
         )
 
         if st.button(
-            "Save Moisture Reading"
+            "Save Moisture Reading",
+            key=kirr2("moisture_save")
         ):
 
             moisture_record = {
@@ -3349,7 +3522,10 @@ def irrigation_ui():
                 ) as file:
                     moisture_data = json.load(file)
 
-            except (FileNotFoundError, json.JSONDecodeError):
+            except (
+                FileNotFoundError,
+                json.JSONDecodeError
+            ):
                 moisture_data = []
 
             moisture_data.append(
@@ -3374,7 +3550,7 @@ def irrigation_ui():
             )
 
     # =========================================================
-    # WATER USAGE LOG
+    # 4. WATER USAGE LOG
     # =========================================================
 
     elif irrigation_option == "🚰 Water Usage Log":
@@ -3388,20 +3564,23 @@ def irrigation_ui():
         st.write(
             f"🌾 Crop: {current_crop}"
         )
-
         st.write(
             f"📍 Location: {current_location}"
         )
 
-        with st.form("water_log_form"):
+        with st.form(
+            kirr2("water_log_form")
+        ):
 
             date = st.date_input(
-                "📅 Date of Irrigation"
+                "📅 Date of Irrigation",
+                key=kirr2("water_date")
             )
 
             water_used = st.number_input(
                 "💧 Water Used (liters)",
-                min_value=0.0
+                min_value=0.0,
+                key=kirr2("water_used")
             )
 
             submitted = st.form_submit_button(
@@ -3426,7 +3605,10 @@ def irrigation_ui():
                 ) as file:
                     water_data = json.load(file)
 
-            except (FileNotFoundError, json.JSONDecodeError):
+            except (
+                FileNotFoundError,
+                json.JSONDecodeError
+            ):
                 water_data = []
 
             water_data.append(
@@ -3450,12 +3632,12 @@ def irrigation_ui():
             )
 
     # =========================================================
-    # IRRIGATION COST ESTIMATOR
+    # 5. IRRIGATION COST ESTIMATOR
     # =========================================================
 
-    elif irrigation_option == "💧 Irrigation Cost Estimator":
+    elif irrigation_option == "💰 Irrigation Cost Estimator":
 
-        st.subheader("💧 Irrigation Cost Estimator")
+        st.subheader("💰 Irrigation Cost Estimator")
 
         st.write(
             f"🌱 Current Farm: {current_farm_name}"
@@ -3470,17 +3652,20 @@ def irrigation_ui():
         )
 
         water_volume = st.number_input(
-            "🚿 Enter water usage (liters)",
-            min_value=0.0
+            "🚿 Enter Water Usage (liters)",
+            min_value=0.0,
+            key=kirr2("cost_water_volume")
         )
 
         cost_per_liter = st.number_input(
-            "💸 Cost per liter (₦)",
-            min_value=0.0
+            "💸 Cost per Liter (₦)",
+            min_value=0.0,
+            key=kirr2("cost_per_liter")
         )
 
         if st.button(
-            "Estimate Cost"
+            "Estimate Cost",
+            key=kirr2("cost_estimate")
         ):
 
             total_cost = (
@@ -3493,7 +3678,6 @@ def irrigation_ui():
                 f"for {current_farm_name}: "
                 f"₦{total_cost:,.2f}"
             )
-
 
 
 
@@ -6980,34 +7164,19 @@ elif menu_v2 == "💧 Irrigation & Soil":
 
     st.header("💧 Irrigation & Soil")
 
-    # Current Farm Connection
-    current_farm = st.session_state.get(
-        "current_farm",
-        {}
-    )
+    # ---------------------------------------------------------
+    # CURRENT FARM
+    # ---------------------------------------------------------
+
+    current_farm = st.session_state.get("current_farm", {})
 
     if not isinstance(current_farm, dict):
         current_farm = {}
 
-    current_farm_id = current_farm.get(
-        "farm_id",
-        "main_farm"
-    )
-
-    current_farm_name = current_farm.get(
-        "farm_name",
-        "Main Farm"
-    )
-
-    current_crop = current_farm.get(
-        "crop_type",
-        "Not specified"
-    )
-
-    current_location = current_farm.get(
-        "location",
-        "Not specified"
-    )
+    current_farm_id = current_farm.get("farm_id", "main_farm")
+    current_farm_name = current_farm.get("farm_name", "Main Farm")
+    current_crop = current_farm.get("crop_type", "Not specified")
+    current_location = current_farm.get("location", "Not specified")
 
     st.info(
         f"🌱 Current Farm: {current_farm_name}  |  "
@@ -7015,79 +7184,73 @@ elif menu_v2 == "💧 Irrigation & Soil":
         f"📍 Location: {current_location}"
     )
 
+    # ---------------------------------------------------------
+    # FIVE IRRIGATION & SOIL FEATURES
+    # ---------------------------------------------------------
+
     option = st.selectbox(
-        "Select a Feature",
+        "💧 Select a Feature",
         [
-            "Irrigation Schedule",
-            "Soil Health Record"
+            "💧 Irrigation Schedule",
+            "🌱 Soil Health Record",
+            "🌱 Soil Moisture Checker",
+            "🚰 Water Usage Log",
+            "💰 Irrigation Cost Estimator"
         ],
-        key=kirr2("feature")
+        key="irrigation_soil_feature_v2"
     )
 
     # =========================================================
-    # IRRIGATION SCHEDULE
+    # 1. IRRIGATION SCHEDULE
     # =========================================================
 
-    if option == "Irrigation Schedule":
+    if option == "💧 Irrigation Schedule":
 
         st.subheader("💧 Irrigation Schedule")
 
-        st.write(
-            f"🌱 Farm: {current_farm_name}"
-        )
-
-        st.write(
-            f"🌾 Crop: {current_crop}"
-        )
-
-        st.write(
-            f"📍 Location: {current_location}"
-        )
+        st.write(f"🌱 Farm: {current_farm_name}")
+        st.write(f"🌾 Crop: {current_crop}")
+        st.write(f"📍 Location: {current_location}")
 
         irrigation_date = st.date_input(
-            "Irrigation Date:",
-            key=kirr2("sched_date")
+            "📅 Irrigation Date",
+            key="irrigation_schedule_date_v2"
         )
 
-        volume = st.number_input(
-            "Water Volume (liters):",
-            min_value=0,
-            step=1,
-            key=kirr2("sched_volume")
+        water_volume = st.number_input(
+            "💧 Water Volume (liters)",
+            min_value=0.0,
+            step=1.0,
+            key="irrigation_schedule_volume_v2"
         )
 
         if st.button(
             "💾 Save Irrigation Record",
-            key=kirr2("sched_save_btn")
+            key="irrigation_schedule_save_v2"
         ):
 
-            irrigation_record = {
+            new_record = {
                 "farm_id": current_farm_id,
                 "farm_name": current_farm_name,
                 "crop_type": current_crop,
                 "location": current_location,
-                "irrigation_date": str(irrigation_date),
-                "water_volume_liters": volume
+                "date": str(irrigation_date),
+                "water_volume": water_volume
             }
 
             try:
-                with open(
-                    "irrigation_records.json",
-                    "r"
-                ) as file:
+                with open("irrigation_schedule.json", "r") as file:
                     irrigation_data = json.load(file)
+
+                if not isinstance(irrigation_data, list):
+                    irrigation_data = []
 
             except (FileNotFoundError, json.JSONDecodeError):
                 irrigation_data = []
 
-            irrigation_data.append(
-                irrigation_record
-            )
+            irrigation_data.append(new_record)
 
-            with open(
-                "irrigation_records.json",
-                "w"
-            ) as file:
+            with open("irrigation_schedule.json", "w") as file:
                 json.dump(
                     irrigation_data,
                     file,
@@ -7099,107 +7262,46 @@ elif menu_v2 == "💧 Irrigation & Soil":
                 f"{current_farm_name}."
             )
 
-        # Show records for current farm
-        st.divider()
-
-        st.subheader(
-            f"📋 Irrigation Records — {current_farm_name}"
-        )
-
-        try:
-            with open(
-                "irrigation_records.json",
-                "r"
-            ) as file:
-                irrigation_data = json.load(file)
-
-            farm_irrigation = [
-                entry
-                for entry in irrigation_data
-                if str(
-                    entry.get(
-                        "farm_id",
-                        "main_farm"
-                    )
-                ) == str(current_farm_id)
-            ]
-
-            if farm_irrigation:
-
-                for entry in farm_irrigation:
-
-                    st.markdown(
-                        f"""
-- 📅 Date: {entry.get('irrigation_date', '')}
-- 💧 Water Volume: {entry.get('water_volume_liters', 0)} liters
-- 🌾 Crop: {entry.get('crop_type', current_crop)}
-- 📍 Location: {entry.get('location', current_location)}
----
-"""
-                    )
-
-            else:
-                st.info(
-                    f"No irrigation records for "
-                    f"{current_farm_name}."
-                )
-
-        except (FileNotFoundError, json.JSONDecodeError):
-
-            st.info(
-                f"No irrigation records for "
-                f"{current_farm_name} yet."
-            )
-
     # =========================================================
-    # SOIL HEALTH RECORD
+    # 2. SOIL HEALTH RECORD
     # =========================================================
 
-    elif option == "Soil Health Record":
+    elif option == "🌱 Soil Health Record":
 
         st.subheader("🌱 Soil Health Record")
 
-        st.write(
-            f"🌱 Farm: {current_farm_name}"
-        )
-
-        st.write(
-            f"🌾 Crop: {current_crop}"
-        )
-
-        st.write(
-            f"📍 Location: {current_location}"
-        )
+        st.write(f"🌱 Farm: {current_farm_name}")
+        st.write(f"🌾 Crop: {current_crop}")
+        st.write(f"📍 Location: {current_location}")
 
         soil_ph = st.number_input(
-            "Soil pH Level:",
+            "🧪 Soil pH Level",
             min_value=0.0,
             max_value=14.0,
             step=0.1,
-            key=kirr2("soil_ph")
+            key="irrigation_soil_ph_v2"
         )
 
         moisture_content = st.number_input(
-            "Moisture Content (%):",
+            "💧 Moisture Content (%)",
             min_value=0.0,
             max_value=100.0,
             step=0.1,
-            key=kirr2("soil_moisture")
+            key="irrigation_soil_moisture_v2"
         )
-
         nutrient_content = st.text_input(
-            "Nutrient Content Summary:",
-            key=kirr2("soil_nutrients")
+            "🌿 Nutrient Content Summary",
+            key="irrigation_soil_nutrients_v2"
         )
 
         test_date = st.date_input(
-            "Test Date:",
-            key=kirr2("soil_date")
+            "📅 Test Date",
+            key="irrigation_soil_date_v2"
         )
 
         if st.button(
             "💾 Save Soil Health Record",
-            key=kirr2("soil_save_btn")
+            key="irrigation_soil_save_v2"
         ):
 
             soil_record = {
@@ -7214,23 +7316,18 @@ elif menu_v2 == "💧 Irrigation & Soil":
             }
 
             try:
-                with open(
-                    "soil_health_records.json",
-                    "r"
-                ) as file:
+                with open("soil_health_records.json", "r") as file:
                     soil_data = json.load(file)
+
+                if not isinstance(soil_data, list):
+                    soil_data = []
 
             except (FileNotFoundError, json.JSONDecodeError):
                 soil_data = []
 
-            soil_data.append(
-                soil_record
-            )
+            soil_data.append(soil_record)
 
-            with open(
-                "soil_health_records.json",
-                "w"
-            ) as file:
+            with open("soil_health_records.json", "w") as file:
                 json.dump(
                     soil_data,
                     file,
@@ -7242,7 +7339,6 @@ elif menu_v2 == "💧 Irrigation & Soil":
                 f"{current_farm_name}."
             )
 
-        # Show records for current farm
         st.divider()
 
         st.subheader(
@@ -7250,20 +7346,17 @@ elif menu_v2 == "💧 Irrigation & Soil":
         )
 
         try:
-            with open(
-                "soil_health_records.json",
-                "r"
-            ) as file:
+            with open("soil_health_records.json", "r") as file:
                 soil_data = json.load(file)
+
+            if not isinstance(soil_data, list):
+                soil_data = []
 
             farm_soil = [
                 entry
                 for entry in soil_data
                 if str(
-                    entry.get(
-                        "farm_id",
-                        "main_farm"
-                    )
+                    entry.get("farm_id", "main_farm")
                 ) == str(current_farm_id)
             ]
 
@@ -7277,6 +7370,7 @@ elif menu_v2 == "💧 Irrigation & Soil":
 - 🧪 Soil pH: {entry.get('soil_ph', 0)}
 - 💧 Moisture: {entry.get('moisture_content', 0)}%
 - 🌿 Nutrients: {entry.get('nutrient_content', '')}
+
 ---
 """
                     )
@@ -7294,7 +7388,191 @@ elif menu_v2 == "💧 Irrigation & Soil":
                 f"No soil health records for "
                 f"{current_farm_name} yet."
             )
-            # =========================================================
+
+    # =========================================================
+    # 3. SOIL MOISTURE CHECKER
+    # =========================================================
+
+    elif option == "🌱 Soil Moisture Checker":
+
+        st.subheader("🌱 Soil Moisture Checker")
+
+        st.write(f"🌱 Farm: {current_farm_name}")
+        st.write(f"🌾 Crop: {current_crop}")
+        st.write(f"📍 Location: {current_location}")
+
+        plot_id = st.text_input(
+            "🆔 Plot ID",
+            key="soil_moisture_plot_id_v2"
+        )
+
+        moisture_level = st.slider(
+            "💦 Moisture Level (%)",
+            min_value=0,
+            max_value=100,
+            value=50,
+            key="soil_moisture_level_v2"
+        )
+
+        if st.button(
+            "💾 Save Moisture Reading",
+            key="soil_moisture_save_v2"
+        ):
+
+            moisture_record = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "plot_id": plot_id,
+                "moisture_level": moisture_level
+            }
+
+            try:
+                with open(
+                    "soil_moisture_records.json",
+                    "r"
+                ) as file:
+                    moisture_data = json.load(file)
+
+                if not isinstance(moisture_data, list):
+                    moisture_data = []
+
+            except (FileNotFoundError, json.JSONDecodeError):
+                moisture_data = []
+
+            moisture_data.append(moisture_record)
+
+            with open(
+                "soil_moisture_records.json",
+                "w"
+            ) as file:
+                json.dump(
+                    moisture_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ Soil moisture for "
+                f"{current_farm_name} recorded as "
+                f"{moisture_level}%."
+            )
+
+    # =========================================================
+    # 4. WATER USAGE LOG
+    # =========================================================
+
+    elif option == "🚰 Water Usage Log":
+
+        st.subheader("🚰 Water Usage Log")
+
+        st.write(f"🌱 Farm: {current_farm_name}")
+        st.write(f"🌾 Crop: {current_crop}")
+        st.write(f"📍 Location: {current_location}")
+
+        with st.form("water_usage_log_form_v2"):
+
+            water_date = st.date_input(
+                "📅 Date of Irrigation",
+                key="water_usage_date_v2"
+            )
+
+            water_used = st.number_input(
+                "💧 Water Used (liters)",
+                min_value=0.0,
+                step=1.0,
+                key="water_usage_amount_v2"
+            )
+
+            submitted = st.form_submit_button(
+                "💾 Log Water Usage"
+            )
+
+        if submitted:
+
+            water_record = {
+                "farm_id": current_farm_id,
+                "farm_name": current_farm_name,
+                "crop_type": current_crop,
+                "location": current_location,
+                "date": str(water_date),
+                "water_used": water_used
+            }
+
+            try:
+                with open(
+                    "water_usage_records.json",
+                    "r"
+                ) as file:
+                    water_data = json.load(file)
+
+                if not isinstance(water_data, list):
+                    water_data = []
+
+            except (FileNotFoundError, json.JSONDecodeError):
+                water_data = []
+
+            water_data.append(water_record)
+
+            with open(
+                "water_usage_records.json",
+                "w"
+            ) as file:
+                json.dump(
+                    water_data,
+                    file,
+                    indent=4
+                )
+
+            st.success(
+                f"✅ {water_used:,.1f} liters recorded for "
+                f"{current_farm_name}."
+            )
+
+    # =========================================================
+    # 5. IRRIGATION COST ESTIMATOR
+    # =========================================================
+
+    elif option == "💰 Irrigation Cost Estimator":
+
+        st.subheader("💰 Irrigation Cost Estimator")
+
+        st.write(f"🌱 Farm: {current_farm_name}")
+        st.write(f"🌾 Crop: {current_crop}")
+        st.write(f"📍 Location: {current_location}")
+
+        water_volume = st.number_input(
+            "🚿 Enter Water Usage (liters)",
+            min_value=0.0,
+            step=1.0,
+            key="irrigation_cost_water_v2"
+        )
+
+        cost_per_liter = st.number_input(
+            "💸 Cost per Liter (₦)",
+            min_value=0.0,
+            step=0.01,
+            key="irrigation_cost_per_liter_v2"
+        )
+
+        if st.button(
+            "💰 Estimate Cost",
+            key="irrigation_cost_estimate_v2"
+        ):
+
+            total_cost = (
+                water_volume *
+                cost_per_liter
+            )
+
+            st.success(
+                f"💰 Estimated irrigation cost for "
+                f"{current_farm_name}: "
+                f"₦{total_cost:,.2f}"
+            )
+
+ # =========================================================
 # FARM PLOT MAPPING
 # =========================================================
 
