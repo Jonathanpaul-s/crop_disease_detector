@@ -9074,6 +9074,8 @@ elif menu_v2 == "💧 Irrigation & Soil":
                 f"₦{total_cost:,.2f}"
             )
 
+
+
  
 # ========================================================
 # CALENDAR & SEASONS
