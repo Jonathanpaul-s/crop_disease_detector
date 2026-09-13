@@ -9364,11 +9364,6 @@ elif menu_v2 == "📅 Calendar & Seasons":
                 )
 
 
-elif menu == "🆘 Support & Help":
-
-    support_help_ui()
-
-
 
 # ================================
 # 📊 Farm Profit & Loss Statement
