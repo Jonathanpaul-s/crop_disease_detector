@@ -3568,120 +3568,458 @@ def voice_command_ui():
     # Note: we've removed the separate "Go" button handler to avoid mutation-after-widget errors.
 
 
-
-
-
-# =========================
-
-# AI PREDICTIONS (Simple Demos)
-
-# =========================
+# ============================================================
+# AI PREDICTIONS — UNIFIED FARM-AWARE PLATFORM
+# Combines the V2 trigger interface + existing AI tools
+# ============================================================
 
 def ai_predictions_ui():
 
-    ai_option = st.sidebar.selectbox("🧠 Select an AI Feature", [
+    # --------------------------------------------------------
+    # CURRENT FARM CONTEXT
+    # --------------------------------------------------------
+    current_farm = st.session_state.get("current_farm", {})
+    if not isinstance(current_farm, dict):
+        current_farm = {}
 
-        "🦠 Crop Disease Detection",
+    personalized_profile = st.session_state.get("personalized_profile", {})
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
 
-        "📈 Yield Prediction",
+    current_farm_id = str(
+        current_farm.get(
+            "farm_id",
+            personalized_profile.get("current_farm_id", "main_farm")
+        )
+    )
 
-        "🧪 Soil Health Check",
+    current_farm_name = current_farm.get(
+        "farm_name",
+        personalized_profile.get("current_farm_name", "Main Farm")
+    )
 
-        "🤖 Decision-Making Models"
+    current_crop = current_farm.get(
+        "crop_type",
+        personalized_profile.get("crop_type", "Not specified")
+    )
 
-    ], key="ai_predictions_feature")
+    current_location = current_farm.get(
+        "location",
+        personalized_profile.get("location", "Not specified")
+    )
 
+    current_farm_type = current_farm.get(
+        "farm_type",
+        personalized_profile.get("farm_type", "Not specified")
+    )
 
+    current_farm_size = current_farm.get(
+        "farm_size",
+        personalized_profile.get("farm_size", "Not specified")
+    )
 
-    if ai_option == "🦠 Crop Disease Detection":
+    # --------------------------------------------------------
+    # HEADER
+    # --------------------------------------------------------
+    st.header("🧪 AI-Powered Farm Predictions")
 
-        st.subheader("🦠 Crop Disease Detection")
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
 
-        st.write("Upload an image of your crop to detect potential diseases using AI.")
+    # --------------------------------------------------------
+    # ACTIVE TOOL STATE
+    # --------------------------------------------------------
+    active_key = ap("active_tool")
 
-        uploaded_image = st.file_uploader("Upload Crop Image", type=["jpg", "png", "jpeg"])
+    if active_key not in st.session_state:
+        st.session_state[active_key] = None
 
-        if uploaded_image:
+    # Support voice-command navigation
+    if (
+        "ai_prediction_tool" in st.session_state
+        and st.session_state[active_key] is None
+    ):
+        prediction_map = {
+            "Crop Disease Detection": "disease",
+            "Yield Prediction": "yield",
+            "Soil Health Check": "soil",
+            "Decision-Making Models": "decision",
+        }
 
-            st.image(uploaded_image, caption="Uploaded Crop Image", use_column_width=True)
+        st.session_state[active_key] = prediction_map.get(
+            st.session_state["ai_prediction_tool"]
+        )
 
-            st.success("✅ Prediction: Your crop is healthy.")
+    # --------------------------------------------------------
+    # PREDICTION TOOL BUTTONS
+    # --------------------------------------------------------
+    c1, c2, c3, c4, c5 = st.columns(
+        [1.35, 1.25, 1.25, 1.35, 0.85]
+    )
 
-            st.info("🧪 Tip: If infected, apply appropriate treatment and isolate the crop.")
+    with c1:
+        if st.button(
+            "📷 Crop Disease Detection",
+            key=ap("btn_disease")
+        ):
+            st.session_state[active_key] = "disease"
 
+    with c2:
+        if st.button(
+            "📈 Yield Prediction",
+            key=ap("btn_yield")
+        ):
+            st.session_state[active_key] = "yield"
 
+    with c3:
+        if st.button(
+            "🧪 Soil Health Check",
+            key=ap("btn_soil")
+        ):
+            st.session_state[active_key] = "soil"
 
-    elif ai_option == "📈 Yield Prediction":
+    with c4:
+        if st.button(
+            "🤖 Decision Models",
+            key=ap("btn_decision")
+        ):
+            st.session_state[active_key] = "decision"
+
+    with c5:
+        if st.button(
+            "🔄 Reset",
+            key=ap("btn_reset")
+        ):
+            st.session_state[active_key] = None
+            st.rerun()
+
+    tool = st.session_state[active_key]
+
+    # ========================================================
+    # 1. CROP DISEASE DETECTION
+    # ========================================================
+    if tool == "disease":
+
+        st.subheader("📷 Crop Disease Detection")
+        st.write(
+            "Upload an image of your crop to identify potential "
+            "disease conditions."
+        )
+
+        uploaded_image = st.file_uploader(
+            "Upload Crop Image",
+            type=["jpg", "jpeg", "png"],
+            key=ap(f"disease_image_{current_farm_id}")
+        )
+
+        if uploaded_image is not None:
+            st.image(
+                uploaded_image,
+                caption=f"Crop Image — {current_farm_name}",
+                use_column_width=True
+            )
+
+        if st.button(
+            "🔍 Predict Disease",
+            key=ap(f"disease_predict_{current_farm_id}")
+        ):
+
+            if uploaded_image is None:
+
+                st.warning(
+                    "⚠️ Please upload a crop image before prediction."
+                )
+
+            else:
+
+                # Existing demonstration prediction preserved.
+                st.success(
+                    "✅ Predicted condition: Maize Leaf Blight"
+                )
+
+                st.info(
+                    "🧪 Recommendation: Apply appropriate fungicide "
+                    "treatment and monitor irrigation and crop conditions."
+                )
+
+                st.caption(
+                    f"Prediction recorded for: {current_farm_name}"
+                )
+
+    # ========================================================
+    # 2. YIELD PREDICTION
+    # ========================================================
+    elif tool == "yield":
 
         st.subheader("📈 Yield Prediction")
 
-        crop = st.selectbox("🌾 Select Crop Type", ["Maize", "Cassava", "Tomato", "Yam", "Rice"])
+        st.write(
+            "Estimate potential farm yield using crop, farm area, "
+            "rainfall and fertilizer information."
+        )
 
-        area = st.number_input("🌍 Farm Area (hectares)", min_value=0.1)
+        crop_options = [
+            "Maize",
+            "Cassava",
+            "Tomato",
+            "Yam",
+            "Rice"
+        ]
 
-        rainfall = st.number_input("🌧️ Rainfall (mm)")
+        default_crop_index = 0
 
-        fertilizer = st.number_input("💩 Fertilizer Used (kg)")
+        if current_crop in crop_options:
+            default_crop_index = crop_options.index(current_crop)
 
-        if st.button("🔍 Predict Yield"):
+        crop_type = st.selectbox(
+            "🌾 Crop Type",
+            crop_options,
+            index=default_crop_index,
+            key=ap(f"yield_crop_{current_farm_id}")
+        )
 
-            predicted_yield = area * 2.5 + fertilizer * 0.1 + rainfall * 0.05
+        # Try to use the current farm size when available.
+        farm_size_value = 0.1
 
-            st.success(f"📦 Estimated Yield: {predicted_yield:.2f} tons")
+        try:
+            if isinstance(current_farm_size, (int, float)):
+                farm_size_value = max(
+                    0.1,
+                    float(current_farm_size)
+                )
+        except Exception:
+            farm_size_value = 0.1
 
+        area = st.number_input(
+            "🌍 Farm Area (hectares)",
+            min_value=0.1,
+            value=farm_size_value,
+            step=0.1,
+            key=ap(f"yield_area_{current_farm_id}")
+        )
 
+        rainfall = st.number_input(
+            "🌧️ Expected Rainfall (mm)",
+            min_value=0.0,
+            step=1.0,
+            key=ap(f"yield_rainfall_{current_farm_id}")
+        )
 
-    elif ai_option == "🧪 Soil Health Check":
+        fertilizer = st.number_input(
+            "💩 Fertilizer Used (kg)",
+            min_value=0.0,
+            step=1.0,
+            key=ap(f"yield_fertilizer_{current_farm_id}")
+        )
+
+        if st.button(
+            "📊 Predict Yield",
+            key=ap(f"yield_predict_{current_farm_id}")
+        ):
+
+            # Existing yield demonstration logic retained.
+            predicted_yield = (
+                area * 2.5
+                + fertilizer * 0.1
+                + rainfall * 0.05
+            )
+
+            st.success(
+                f"📦 Estimated Yield for {crop_type}: "
+                f"{predicted_yield:.2f} tons"
+            )
+
+            st.caption(
+                f"Prediction based on current farm: "
+                f"{current_farm_name}"
+            )
+
+    # ========================================================
+    # 3. SOIL HEALTH CHECK
+    # ========================================================
+    elif tool == "soil":
 
         st.subheader("🧪 Soil Health Check")
 
-        ph = st.slider("🧪 Soil pH", 0.0, 14.0, 6.5)
+        st.write(
+            "Analyze basic soil conditions using pH, nitrogen, "
+            "potassium and phosphorus measurements."
+        )
+        ph = st.slider(
+            "🧪 Soil pH",
+            0.0,
+            14.0,
+            6.5,
+            step=0.1,
+            key=ap(f"soil_ph_{current_farm_id}")
+        )
 
-        nitrogen = st.number_input("🌱 Nitrogen (mg/kg)")
+        nitrogen = st.number_input(
+            "🌱 Nitrogen (mg/kg)",
+            min_value=0.0,
+            step=1.0,
+            key=ap(f"soil_nitrogen_{current_farm_id}")
+        )
 
-        potassium = st.number_input("🌱 Potassium (mg/kg)")
+        potassium = st.number_input(
+            "🌱 Potassium (mg/kg)",
+            min_value=0.0,
+            step=1.0,
+            key=ap(f"soil_potassium_{current_farm_id}")
+        )
 
-        phosphorus = st.number_input("🌱 Phosphorus (mg/kg)")
+        phosphorus = st.number_input(
+            "🌱 Phosphorus (mg/kg)",
+            min_value=0.0,
+            step=1.0,
+            key=ap(f"soil_phosphorus_{current_farm_id}")
+        )
 
-        if st.button("🧠 Analyze Soil"):
+        if st.button(
+            "🧠 Analyze Soil",
+            key=ap(f"soil_analyze_{current_farm_id}")
+        ):
 
-            if 6 <= ph <= 7 and nitrogen > 50 and potassium > 50 and phosphorus > 50:
+            if (
+                6.0 <= ph <= 7.0
+                and nitrogen > 50
+                and potassium > 50
+                and phosphorus > 50
+            ):
 
-                st.success("✅ Soil is Healthy for Crop Production.")
+                st.success(
+                    "✅ Soil is healthy for crop production."
+                )
+
+                st.info(
+                    "🌱 Continue monitoring soil nutrients and "
+                    "maintain appropriate soil management."
+                )
 
             else:
 
-                st.warning("⚠️ Soil quality may affect productivity. Consider fertilization.")
+                st.warning(
+                    "⚠️ Soil quality may affect productivity."
+                )
 
+                st.info(
+                    "🧪 Consider soil testing and appropriate "
+                    "nutrient management."
+                )
 
-
-    elif ai_option == "🤖 Decision-Making Models":
+    # ========================================================
+    # 4. DECISION-MAKING MODELS
+    # ========================================================
+    elif tool == "decision":
 
         st.subheader("🤖 Decision-Making Models")
 
-        st.write("Answer a few questions and get AI-powered suggestions for better farming decisions.")
+        st.write(
+            "Use farm conditions to receive an AI-assisted "
+            "farming recommendation."
+        )
 
-        crop_type = st.selectbox("🌾 Crop Type", ["Maize", "Tomato", "Rice", "Cassava", "Yam"])
+        crop_options = [
+            "Maize",
+            "Tomato",
+            "Rice",
+            "Cassava",
+            "Yam"
+        ]
 
-        soil_moisture = st.slider("💧 Soil Moisture Level (%)", 0, 100)
+        default_crop_index = 0
 
-        pest_detected = st.radio("🐛 Pests Detected?", ["Yes", "No"])
+        if current_crop in crop_options:
+            default_crop_index = crop_options.index(current_crop)
 
-        market_price = st.number_input("💰 Current Market Price (₦/ton)")
+        crop_type = st.selectbox(
+            "🌾 Crop Type",
+            crop_options,
+            index=default_crop_index,
+            key=ap(f"decision_crop_{current_farm_id}")
+        )
 
-        if st.button("📊 Get Recommendation"):
+        soil_moisture = st.slider(
+            "💧 Soil Moisture Level (%)",
+            0,
+            100,
+            50,
+            key=ap(f"decision_moisture_{current_farm_id}")
+        )
+
+        pest_detected = st.radio(
+            "🐛 Pests Detected?",
+            ["Yes", "No"],
+            key=ap(f"decision_pest_{current_farm_id}")
+        )
+
+        market_price = st.number_input(
+            "💰 Current Market Price (₦/ton)",
+            min_value=0.0,
+            step=100.0,
+            key=ap(f"decision_market_{current_farm_id}")
+        )
+
+        if st.button(
+            "📊 Get Recommendation",
+            key=ap(f"decision_recommend_{current_farm_id}")
+        ):
 
             if pest_detected == "Yes":
 
-                st.error("❗ Treat pest infection before planting.")
+                st.error(
+                    "❗ Pest pressure detected. "
+                    "Inspect and treat the affected crop before proceeding."
+                )
 
             elif soil_moisture < 40:
 
-                st.warning("⚠️ Increase irrigation before planting.")
+                st.warning(
+                    "⚠️ Soil moisture is low. "
+                    "Consider appropriate irrigation before planting."
+                )
+
+            elif market_price <= 0:
+
+                st.info(
+                    f"ℹ️ Enter the current market price for {crop_type} "
+                    "to improve the economic recommendation."
+                )
 
             else:
 
-                st.success(f"✅ You can proceed with planting {crop_type}. Expected profit margin is high.")
+                st.success(
+                    f"✅ Conditions currently support "
+                    f"proceeding with {crop_type}."
+                )
+                st.info(
+                    "📊 AI recommendation: Monitor soil moisture, "
+                    "pest conditions and market conditions before making "
+                    "the final farm decision."
+                )
+
+        st.caption(
+            f"Decision context: {current_farm_name} | "
+            f"{current_location}"
+        )
+
+    # ========================================================
+    # DEFAULT STATE
+    # ========================================================
+    else:
+
+        st.info(
+            "👆 Select a prediction tool above to begin."
+        )
+
+        st.write(
+            "The prediction tools use the selected Current Farm "
+            "as their shared context."
+        )
+
 
 
 # =========================================================
@@ -9951,128 +10289,8 @@ elif menu_v2 == "🤖 AI Crop Calendar":
                 st.rerun()
 
 
-# --- AI Predictions (Trigger Buttons v2) ---
-# Make sure the emoji/text here matches your sidebar label exactly.
 elif menu_v2 == "🧪 AI Predictions":
-
-    st.header("🧪 AI-Powered Farm Predictions")
-
-    # Track active tool in session
-    active_key = ap("active_tool")
-    if active_key not in st.session_state:
-        st.session_state[active_key] = None
-
-    # If another part of the app (e.g., voice commands) sets a sub-tool, adopt it
-    if "ai_prediction_tool" in st.session_state and st.session_state[active_key] is None:
-        _map = {
-            "Crop Disease Detection": "disease",
-            "Yield Prediction": "yield",
-            "Soil Health Check": "soil",
-        }
-        st.session_state[active_key] = _map.get(st.session_state["ai_prediction_tool"])
-
-    # Trigger buttons row
-    c1, c2, c3, c4 = st.columns([1.3, 1.3, 1.3, 0.9])
-    with c1:
-        if st.button("📷 Crop Disease Detection", key=ap("btn_disease")):
-            st.session_state[active_key] = "disease"
-    with c2:
-        if st.button("📈 Yield Prediction", key=ap("btn_yield")):
-            st.session_state[active_key] = "yield"
-    with c3:
-        if st.button("🧪 Soil Health Check", key=ap("btn_soil")):
-            st.session_state[active_key] = "soil"
-    with c4:
-        if st.button("🔄 Reset", key=ap("btn_reset")):
-            st.session_state[active_key] = None
-            st.rerun()
-
-    tool = st.session_state[active_key]
-
-    # =======================
-    # Tool: Crop Disease Detection
-    # =======================
-    if tool == "disease":
-        st.subheader("📷 Upload an image of your crop")
-        uploaded_image = st.file_uploader(
-            "Upload Image",
-            type=["jpg", "jpeg", "png"],
-            key=ap("image")
-        )
-        if uploaded_image is not None:
-            st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
-
-        if st.button("🔍 Predict Disease", key=ap("predict")):
-            if uploaded_image is None:
-                st.warning("⚠️ Please upload an image before prediction.")
-            else:
-                # Placeholder prediction/result
-                st.success("✅ Predicted: Maize Leaf Blight")
-                st.info("🧪 Recommendation: Apply fungicide spray and monitor irrigation.")
-
-    # =======================
-    # Tool: Yield Prediction
-    # =======================
-    elif tool == "yield":
-        st.subheader("📈 Enter details for yield prediction")
-
-        crop_type = st.selectbox(
-            "Crop Type",
-            ["Maize", "Rice", "Cassava", "Yam", "Tomato"],
-            key=ap("yield_crop")
-        )
-        area = st.number_input(
-            "Farm Area (ha)",
-            min_value=0.1,
-            step=0.1,
-            key=ap("yield_area")
-        )
-        rainfall = st.number_input(
-            "Expected Rainfall (mm)",
-            min_value=0.0,
-            step=1.0,
-            key=ap("yield_rain")
-        )
-
-        if st.button("📊 Predict Yield", key=ap("yield_btn")):
-            predicted = round(area * rainfall * 0.05, 2)  # placeholder logic
-            st.success(f"✅ Predicted Yield for {crop_type}: {predicted} tons")
-
-    # =======================
-    # Tool: Soil Health Check
-    # =======================
-    elif tool == "soil":
-        st.subheader("🧪 Enter soil details")
-
-        ph = st.number_input(
-            "Soil pH Level",
-            min_value=0.0,
-            max_value=14.0,
-            step=0.1,
-            key=ap("soil_ph")
-        )
-        nitrogen = st.number_input(
-            "Nitrogen Content (mg/kg)",
-            min_value=0,
-            step=1,
-            key=ap("soil_n")
-        )
-        potassium = st.number_input(
-            "Potassium Content (mg/kg)",
-            min_value=0,
-            step=1,
-            key=ap("soil_k")
-        )
-
-        if st.button("🧪 Check Soil Health", key=ap("soil_btn")):
-            if 6.0 <= ph <= 7.5 and nitrogen >= 50 and potassium >= 40:
-                st.success("✅ Soil is healthy for planting.")
-            else:
-                st.warning("⚠️ Soil may need treatment. Consider testing or adding fertilizer.")
-
-    else:
-        st.info("Click a button above to open a prediction tool.")
-
+    ai_predictions_ui()
  
 # =========================
 # ================================
