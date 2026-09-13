@@ -9369,117 +9369,522 @@ elif menu_v2 == "📅 Calendar & Seasons":
 # 📊 Farm Profit & Loss Statement
 # ================================
 elif menu_v2 == "📊 farm profit & loss statement":
-    st.header("📊 Farm Profit & Loss Statement (Upgrade)")
-    st.write("Add income/expense rows below. Totals and chart update instantly.")
 
-    # ---- State (namespaced keys so no collisions) ----
-    sales_key = kpl("sales_df")
-    exp_key   = kpl("expense_df")
+    st.header("📊 Farm Profit & Loss Statement")
+
+    st.write(
+        "Record farm income and expenses, monitor profitability, "
+        "and review your farm's financial performance."
+    )
+
+    # ------------------------------------------------
+    # CURRENT FARM CONTEXT
+    # ------------------------------------------------
+
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    )
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
+
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_farm_id = str(
+        current_farm.get(
+            "farm_id",
+            "main_farm"
+        )
+    )
+
+    current_farm_name = current_farm.get(
+        "farm_name",
+        personalized_profile.get(
+            "current_farm_name",
+            "Main Farm"
+        )
+    )
+
+    current_crop = current_farm.get(
+        "crop_type",
+        personalized_profile.get(
+            "crop_type",
+            "Not specified"
+        )
+    )
+
+    current_location = current_farm.get(
+        "location",
+        personalized_profile.get(
+            "location",
+            "Not specified"
+        )
+    )
+
+    st.info(
+        f"🌱 Current Farm: {current_farm_name}  |  "
+        f"🌾 Crop: {current_crop}  |  "
+        f"📍 Location: {current_location}"
+    )
+
+    # ------------------------------------------------
+    # NAMESPACED SESSION KEYS
+    # ------------------------------------------------
+
+    sales_key = kpl(
+        f"sales_df_{current_farm_id}"
+    )
+
+    expense_key = kpl(
+        f"expense_df_{current_farm_id}"
+    )
+
+    # ------------------------------------------------
+    # INITIALIZE SALES DATA
+    # ------------------------------------------------
 
     if sales_key not in st.session_state:
-        st.session_state[sales_key] = pd.DataFrame(columns=["Date", "Item", "Amount"])
-    if exp_key not in st.session_state:
-        st.session_state[exp_key] = pd.DataFrame(columns=["Date", "Category", "Amount"])
 
-    # ---- Add rows (two forms, unique keys) ----
+        st.session_state[sales_key] = pd.DataFrame(
+            columns=[
+                "Date",
+                "Item",
+                "Amount"
+            ]
+        )
+
+    # ------------------------------------------------
+    # INITIALIZE EXPENSE DATA
+    # ------------------------------------------------
+
+    if expense_key not in st.session_state:
+
+        st.session_state[expense_key] = pd.DataFrame(
+            columns=[
+                "Date",
+                "Category",
+                "Amount"
+            ]
+        )
+
+    # =================================================
+    # ADD INCOME / EXPENSE
+    # =================================================
+
     c1, c2 = st.columns(2)
 
+    # ------------------------------------------------
+    # ADD SALE
+    # ------------------------------------------------
+
     with c1:
+
         st.subheader("➕ Add Sale")
-        with st.form(kpl("form_add_sale"), clear_on_submit=True):
-            s_date = st.date_input("Date", value=date.today(), key=kpl("s_date"))
-            s_item = st.text_input("Item", key=kpl("s_item"))
-            s_amt  = st.number_input("Amount (₦)", min_value=0.0, step=100.0, key=kpl("s_amt"))
-            add_sale = st.form_submit_button("Add Sale", use_container_width=True)
+
+        with st.form(
+            kpl(
+                f"form_add_sale_{current_farm_id}"
+            ),
+            clear_on_submit=True
+        ):
+
+            s_date = st.date_input(
+                "Date",
+                value=datetime.now().date(),
+                key=kpl(
+                    f"s_date_{current_farm_id}"
+                )
+            )
+
+            s_item = st.text_input(
+                "Item",
+                placeholder="e.g. Cassava harvest",
+                key=kpl(
+                    f"s_item_{current_farm_id}"
+                )
+            )
+
+            s_amt = st.number_input(
+                "Amount (₦)",
+                min_value=0.0,
+                step=100.0,
+                key=kpl(
+                    f"s_amt_{current_farm_id}"
+                )
+            )
+
+            add_sale = st.form_submit_button(
+                "Add Sale",
+                use_container_width=True
+            )
 
         if add_sale:
+
             if s_item.strip() and s_amt > 0:
+
+                new_sale = pd.DataFrame(
+                    [
+                        {
+                            "Date": str(s_date),
+                            "Item": s_item.strip(),
+                            "Amount": float(s_amt)
+                        }
+                    ]
+                )
+
                 st.session_state[sales_key] = pd.concat(
                     [
                         st.session_state[sales_key],
-                        pd.DataFrame([{"Date": str(s_date), "Item": s_item.strip(), "Amount": float(s_amt)}]),
+                        new_sale
                     ],
                     ignore_index=True
                 )
-                st.success("✅ Sale added.")
+
+                st.success(
+                    "✅ Sale added successfully."
+                )
+
             else:
-                st.warning("Please enter an item and amount > 0.")
+
+                st.warning(
+                    "Please enter an item and an amount greater than 0."
+                )
+
+    # ------------------------------------------------
+    # ADD EXPENSE
+    # ------------------------------------------------
 
     with c2:
+
         st.subheader("➕ Add Expense")
-        with st.form(kpl("form_add_expense"), clear_on_submit=True):
-            e_date = st.date_input("Date", value=date.today(), key=kpl("e_date"))
-            e_cat  = st.text_input("Category", key=kpl("e_cat"))
-            e_amt  = st.number_input("Amount (₦)", min_value=0.0, step=100.0, key=kpl("e_amt"))
-            add_exp = st.form_submit_button("Add Expense", use_container_width=True)
+
+        with st.form(
+            kpl(
+                f"form_add_expense_{current_farm_id}"
+            ),
+            clear_on_submit=True
+        ):
+
+            e_date = st.date_input(
+                "Date",
+                value=datetime.now().date(),
+                key=kpl(
+                    f"e_date_{current_farm_id}"
+                )
+            )
+
+            e_cat = st.text_input(
+                "Category",
+                placeholder="e.g. Fertilizer",
+                key=kpl(
+                    f"e_cat_{current_farm_id}"
+                )
+            )
+
+            e_amt = st.number_input(
+                "Amount (₦)",
+                min_value=0.0,
+                step=100.0,
+                key=kpl(
+                    f"e_amt_{current_farm_id}"
+                )
+            )
+
+            add_exp = st.form_submit_button(
+                "Add Expense",
+                use_container_width=True
+            )
 
         if add_exp:
+
             if e_cat.strip() and e_amt > 0:
-                st.session_state[exp_key] = pd.concat(
+
+                new_expense = pd.DataFrame(
                     [
-                        st.session_state[exp_key],
-                        pd.DataFrame([{"Date": str(e_date), "Category": e_cat.strip(), "Amount": float(e_amt)}]),
+                        {
+                            "Date": str(e_date),
+                            "Category": e_cat.strip(),
+                            "Amount": float(e_amt)
+                        }
+                    ]
+                )
+
+                st.session_state[expense_key] = pd.concat(
+                    [
+                        st.session_state[expense_key],
+                        new_expense
                     ],
                     ignore_index=True
                 )
-                st.success("✅ Expense added.")
-            else:
-                st.warning("Please enter a category and amount > 0.")
 
-    # ---- Tables ----
+                st.success(
+                    "✅ Expense added successfully."
+                )
+
+            else:
+
+                st.warning(
+                    "Please enter a category and an amount greater than 0."
+                )
+
+    st.divider()
+
+    # =================================================
+    # SALES TABLE
+    # =================================================
+
     st.subheader("💰 Income (Sales)")
-    st.dataframe(st.session_state[sales_key], use_container_width=True)
+
+    sales_df = st.session_state[sales_key]
+
+    if not sales_df.empty:
+
+        st.dataframe(
+            sales_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+
+        st.info(
+            "No sales recorded for the current farm yet."
+        )
+
+    # =================================================
+    # EXPENSE TABLE
+    # =================================================
 
     st.subheader("💸 Expenses")
-    st.dataframe(st.session_state[exp_key], use_container_width=True)
 
-    # ---- Summary ----
-    total_income  = float(st.session_state[sales_key]["Amount"].sum()) if not st.session_state[sales_key].empty else 0.0
-    total_expense = float(st.session_state[exp_key]["Amount"].sum()) if not st.session_state[exp_key].empty else 0.0
-    net_profit    = total_income - total_expense
+    expense_df = st.session_state[expense_key]
 
-    st.markdown("---")
-    st.subheader("📈 Summary")
-    a, b, c = st.columns(3)
-    a.metric("Total Income",   f"₦{total_income:,.2f}")
-    b.metric("Total Expenses", f"₦{total_expense:,.2f}")
-    c.metric(
-        "Net Profit",
-        f"₦{net_profit:,.2f}",
-        delta=f"{net_profit:,.2f}",
-        delta_color="normal" if net_profit >= 0 else "inverse"
+    if not expense_df.empty:
+
+        st.dataframe(
+            expense_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+
+        st.info(
+            "No expenses recorded for the current farm yet."
+        )
+
+    st.divider()
+
+    # =================================================
+    # FINANCIAL CALCULATION
+    # =================================================
+
+    total_income = 0.0
+
+    if not sales_df.empty:
+
+        total_income = float(
+            pd.to_numeric(
+                sales_df["Amount"],
+                errors="coerce"
+            ).fillna(0).sum()
+        )
+
+    total_expense = 0.0
+
+    if not expense_df.empty:
+        total_expense = float(
+            pd.to_numeric(
+                expense_df["Amount"],
+                errors="coerce"
+            ).fillna(0).sum()
+        )
+
+    net_profit = (
+        total_income - total_expense
     )
 
-    # ---- Chart ----
-    st.markdown("### 📊 Profit/Loss Visualization")
-    st.bar_chart(pd.DataFrame({"Amount": [total_income, total_expense, net_profit]},
-                              index=["Income", "Expenses", "Profit"]))
+    # =================================================
+    # SUMMARY
+    # =================================================
 
-    # ---- Export / Clear ----
+    st.subheader("📈 Financial Summary")
+
+    a, b, c = st.columns(3)
+
+    with a:
+
+        st.metric(
+            "💰 Total Income",
+            f"₦{total_income:,.2f}"
+        )
+
+    with b:
+
+        st.metric(
+            "💸 Total Expenses",
+            f"₦{total_expense:,.2f}"
+        )
+
+    with c:
+
+        st.metric(
+            "📊 Net Profit",
+            f"₦{net_profit:,.2f}",
+            delta=f"₦{net_profit:,.2f}",
+            delta_color=(
+                "normal"
+                if net_profit >= 0
+                else "inverse"
+            )
+        )
+
+    # =================================================
+    # PROFIT / LOSS STATUS
+    # =================================================
+
+    if net_profit > 0:
+
+        st.success(
+            f"📈 Your current farm is showing a profit of "
+            f"₦{net_profit:,.2f}."
+        )
+
+    elif net_profit < 0:
+
+        st.error(
+            f"📉 Your current farm is showing a loss of "
+            f"₦{abs(net_profit):,.2f}."
+        )
+
+    else:
+
+        st.info(
+            "⚖️ Income and expenses are currently balanced."
+        )
+
+    # =================================================
+    # PROFIT / LOSS VISUALIZATION
+    # =================================================
+
+    st.markdown(
+        "### 📊 Profit/Loss Visualization"
+    )
+
+    chart_df = pd.DataFrame(
+        {
+            "Amount": [
+                total_income,
+                total_expense,
+                net_profit
+            ]
+        },
+        index=[
+            "Income",
+            "Expenses",
+            "Profit"
+        ]
+    )
+
+    st.bar_chart(
+        chart_df,
+        use_container_width=True
+    )
+
+    # =================================================
+    # EXPORT / CLEAR
+    # =================================================
+
+    st.divider()
+
+    st.subheader("📦 Data Management")
+
     x1, x2, x3 = st.columns(3)
+
+    # ------------------------------------------------
+    # DOWNLOAD SALES
+    # ------------------------------------------------
+
     with x1:
+
         st.download_button(
             "⬇️ Download Sales CSV",
-            st.session_state[sales_key].to_csv(index=False).encode("utf-8"),
-            file_name="sales.csv",
+            data=sales_df.to_csv(
+                index=False
+            ).encode("utf-8"),
+            file_name=(
+                f"{current_farm_id}_sales.csv"
+            ),
             mime="text/csv",
-            key=kpl("dl_sales")
+            key=kpl(
+                f"dl_sales_{current_farm_id}"
+            ),
+            use_container_width=True
         )
+
+    # ------------------------------------------------
+    # DOWNLOAD EXPENSES
+    # ------------------------------------------------
+
     with x2:
+
         st.download_button(
             "⬇️ Download Expenses CSV",
-            st.session_state[exp_key].to_csv(index=False).encode("utf-8"),
-            file_name="expenses.csv",
+            data=expense_df.to_csv(
+                index=False
+            ).encode("utf-8"),
+            file_name=(
+                f"{current_farm_id}_expenses.csv"
+            ),
             mime="text/csv",
-            key=kpl("dl_exp")
+            key=kpl(
+                f"dl_exp_{current_farm_id}"
+            ),
+            use_container_width=True
         )
-    with x3:
-        if st.button("🧹 Clear All", key=kpl("clear_all")):
-            st.session_state[sales_key] = st.session_state[sales_key].iloc[0:0]
-            st.session_state[exp_key]   = st.session_state[exp_key].iloc[0:0]
-            st.success("Cleared.")
-            st.rerun()
 
+    # ------------------------------------------------
+    # CLEAR CURRENT FARM DATA
+    # ------------------------------------------------
+
+    with x3:
+
+        if st.button(
+            "🧹 Clear All",
+            key=kpl(
+                f"clear_all_{current_farm_id}"
+            ),
+            use_container_width=True
+        ):
+
+            st.session_state[sales_key] = pd.DataFrame(
+                columns=[
+                    "Date",
+                    "Item",
+                    "Amount"
+                ]
+            )
+
+            st.session_state[expense_key] = pd.DataFrame(
+                columns=[
+                    "Date",
+                    "Category",
+                    "Amount"
+                ]
+                )
+
+            st.success(
+                "✅ Profit & Loss records cleared for the current farm."
+            )
+
+            st.rerun()
 
 # ===================
 # 🤖 AI Crop Calendar
