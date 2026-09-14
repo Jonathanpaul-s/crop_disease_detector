@@ -4692,6 +4692,198 @@ def ai_predictions_ui():
                 "sensor, disease, yield and market intelligence."
             )
 
+
+# ================================
+# 📚 AI Farm Tips
+# ================================
+
+def ai_farm_tips_ui():
+    st.header("📚 AI Farm Tips")
+
+    current_farm = st.session_state.get("current_farm", {})
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get("farm_id", "main_farm")
+    current_farm_name = current_farm.get("farm_name", "Main Farm")
+    current_crop = current_farm.get("crop_type", "")
+    current_location = current_farm.get("location", "")
+
+    farmer_profile = st.session_state.get("farmer_profile", {})
+    if not isinstance(farmer_profile, dict):
+        farmer_profile = {}
+
+    personalized_profile = st.session_state.get("personalized_profile", {})
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Not specified"
+    )
+
+    st.info(
+        f"🌿 Current Farm: {current_farm_name} | "
+        f"Crop: {current_crop or 'Not specified'} | "
+        f"Location: {current_location or 'Not specified'} | "
+        f"Country: {current_country}"
+    )
+
+    active_key = f"ai_farm_tips_{current_farm_id}_active_tool"
+
+    if active_key not in st.session_state:
+        st.session_state[active_key] = None
+
+    c1, c2, c3 = st.columns([1.3, 1.3, 0.9])
+
+    with c1:
+        if st.button(
+            "💡 Ask AI Tip",
+            key=f"ai_farm_tips_{current_farm_id}_ask"
+        ):
+            st.session_state[active_key] = "ask"
+
+    with c2:
+        if st.button(
+            "🌞 View Daily Tip",
+            key=f"ai_farm_tips_{current_farm_id}_daily"
+        ):
+            st.session_state[active_key] = "daily"
+
+    with c3:
+        if st.button(
+            "🔄 Reset",
+            key=f"ai_farm_tips_{current_farm_id}_reset"
+        ):
+            st.session_state[active_key] = None
+            st.rerun()
+
+    tool = st.session_state.get(active_key)
+
+    if tool == "ask":
+        st.subheader("💡 Ask AI Farm Tip")
+
+        user_q = st.text_input(
+            "Ask your farming question:",
+            key=f"ai_farm_tips_{current_farm_id}_question"
+        )
+
+        if st.button(
+            "🧠 Get AI Tip",
+            key=f"ai_farm_tips_{current_farm_id}_get_tip"
+        ):
+            if not user_q.strip():
+                st.warning("Please enter a farming question first.")
+
+            else:
+                q = user_q.lower()
+
+                crop_text = current_crop or "your crop"
+
+                if any(word in q for word in ["fertilizer", "npk", "manure", "compost"]):
+                    tip = (
+                        f"For {crop_text}, base fertilizer decisions on soil "
+                        f"condition and crop growth stage. Split nutrient "
+                        f"applications where appropriate to reduce losses."
+                    )
+
+                elif any(word in q for word in ["irrigation", "water", "drip", "sprinkler", "moisture"]):
+                    tip = (
+                        f"Monitor soil moisture on {current_farm_name} before irrigation. "
+                        f"Avoid both prolonged water stress and overwatering."
+                    )
+
+                elif any(word in q for word in ["pest", "insect", "worm", "aphid", "armyworm"]):
+                    tip = (
+                        f"Inspect {crop_text} regularly for pests. "
+                        f"Use integrated pest management and identify the pest "
+                        f"before applying treatment."
+                    )
+
+                elif any(word in q for word in ["disease", "blight", "fungus", "mildew", "virus"]):
+                    tip = (
+                        f"Inspect affected {crop_text} carefully, remove severely "
+                        f"infected material where appropriate, and improve field hygiene."
+                    )
+
+                elif any(word in q for word in ["soil", "ph", "nutrient", "organic matter"]):
+                    tip = (
+                        f"Use soil-test information for {current_farm_name} whenever "
+                        f"available. Nutrient and pH recommendations should depend "
+                        f"on the crop and local soil conditions."
+                    )
+
+                elif any(word in q for word in ["harvest", "maturity", "storage"]):
+                    tip = (
+                        f"Harvest {crop_text} at the correct maturity stage and "
+                        f"use suitable handling and storage conditions."
+                    )
+
+                elif any(word in q for word in ["market", "price", "sell", "profit"]):
+                    tip = (
+                        f"Compare market price with production, transport, and "
+                        f"storage costs before selling {crop_text}."
+                    )
+
+                elif any(word in q for word in ["seed", "variety", "germination", "planting"]):
+                    tip = (
+                        f"Use healthy planting material for {crop_text} and select "
+                        f"varieties suitable for {current_location or 'your location'}."
+                    )
+
+                elif any(word in q for word in ["weather", "rain", "rainfall", "climate"]):
+                    tip = (
+                        f"Check rainfall, temperature, and local weather conditions "
+                        f"before making planting, spraying, irrigation, or harvesting decisions."
+                    )
+
+                else:
+                    tip = (
+                        f"For {current_farm_name}, consider crop condition, soil, "
+                        f"weather, crop stage, and farm records before making decisions."
+                    )
+
+                st.success("✅ Smart Farm AI Recommendation")
+                st.write(tip)
+
+                st.caption(
+                    f"Farm: {current_farm_name} | "
+                    f"Crop: {current_crop or 'Not specified'} | "
+                    f"Location: {current_location or 'Not specified'}"
+                )
+
+    elif tool == "daily":
+        st.subheader("🌞 Daily Farm Tip")
+
+        tips_pool = [
+            "Scout crops regularly for pests and diseases.",
+            "Check soil moisture before irrigating.",
+            "Keep records of inputs, labour, yield, and sales.",
+            "Clean farm tools to reduce disease spread.",
+            "Use mulch where suitable to conserve soil moisture.",
+            "Match fertilizer use to crop and soil requirements.",
+            "Check weather conditions before spraying.",
+            "Inspect irrigation systems for leaks and blockage.",
+            "Harvest crops at the correct maturity stage.",
+            "Compare market prices with production costs before selling."
+        ]
+
+        day_index = date.today().timetuple().tm_yday % len(tips_pool)
+
+        st.info(f"🌿 {tips_pool[day_index]}")
+
+        st.caption(
+            f"Daily tip for {current_farm_name} | "
+            f"{current_crop or 'Crop not specified'}"
+        )
+
+    else:
+        st.info("Choose Ask AI Tip or View Daily Tip above.")
+
+
 # =========================================================
 # IRRIGATION & SOIL
 # =========================================================
@@ -10899,95 +11091,9 @@ elif menu_v2 in (
 ):
     farm_performance_indicators_ui()
 
-# ==================================
-# ================================# ================================
-# 📚 AI Farm Tips — Trigger Buttons
-# ================================
 
-import streamlit as st
-from datetime import date
-
-def ai_farm_tips_ui():
-    st.header("📚 AI Farm Tips")
-
-    # Track active sub-tool in session state
-    active_key = ktips("active_tool")
-    if active_key not in st.session_state:
-        st.session_state[active_key] = None
-
-    # Trigger buttons
-    c1, c2, c3 = st.columns([1.3, 1.3, 0.9])
-    with c1:
-        if st.button("💡 Ask AI Tip", key=ktips("btn_ask")):
-            st.session_state[active_key] = "ask"
-    with c2:
-        if st.button("🌞 View Daily Tip", key=ktips("btn_daily")):
-            st.session_state[active_key] = "daily"
-    with c3:
-        if st.button("🔄 Reset", key=ktips("btn_reset")):
-            st.session_state[active_key] = None
-            st.rerun()
-
-    tool = st.session_state[active_key]
-
-    # Helper: simple keyword mapper
-    def _ai_tip_from_question(q: str) -> str:
-        ql = (q or "").lower()
-        if any(w in ql for w in ["fertilizer", "npk", "manure", "compost"]):
-            return "Use well-decomposed compost at land prep; split NPK (basal + top-dress) to reduce losses."
-        if any(w in ql for w in ["irrigation", "water", "drip", "sprinkler"]):
-            return "Irrigate early morning/evening; target ~60% soil moisture and mulch to reduce evaporation."
-        if any(w in ql for w in ["pest", "insect", "worm", "aphid", "fall armyworm"]):
-            return "Scout twice weekly; use traps and IPM first. Rotate actives to avoid resistance."
-        if any(w in ql for w in ["disease", "blight", "fungus", "mildew", "virus"]):
-            return "Improve airflow, avoid late overhead watering, and remove infected leaves promptly."
-        if any(w in ql for w in ["soil", "ph", "nutrient", "ec"]):
-            return "Keep pH 6.0–7.0 for most crops; lime if acidic and add organic matter each season."
-        if any(w in ql for w in ["harvest", "maturity", "ripen", "storage"]):
-            return "Harvest in cool hours; shade immediately and store at the crop’s recommended temp/RH."
-        if any(w in ql for w in ["market", "price", "sell", "profit"]):
-            return "Sort/grade produce; time sales to peak market days and use simple packaging to add value."
-        if any(w in ql for w in ["seed", "variety", "germination"]):
-            return "Buy certified seed; do a quick germination test and treat seed against soil-borne pathogens."
-        return "Start with soil testing, good seed, clean water, and consistent scouting; small improvements stack."
-
-    # Tool views
-    if tool == "ask":
-        st.subheader("💡 Ask AI Tip")
-        user_q = st.text_input("Ask your farming question here:", key=ktips("q"))
-        if st.button("Get AI Tip", key=ktips("get_tip")):
-            if user_q.strip():
-                st.success(f"✅ AI Farm Tip: {_ai_tip_from_question(user_q)}")
-            else:
-                st.warning("Please enter a question to get a tip.")
-
-    elif tool == "daily":
-        st.subheader("🌞 Daily Farm Tip")
-        tips_pool = [
-            "Water early morning to reduce evaporation and disease pressure.",
-            "Mulch around plants to conserve moisture and suppress weeds.",
-            "Rotate crops each season to break pest and disease cycles.",
-            "Scout fields twice a week; early detection saves money.",
-            "Keep pH near 6.0–7.0; test soil yearly and amend as needed.",
-            "Clean tools between fields to avoid spreading pathogens.",
-            "Use shade nets or windbreaks to reduce heat stress.",
-            "Split nitrogen applications to match crop uptake and reduce leaching.",
-            "Harvest during cool hours; shade produce immediately.",
-            "Record inputs and yields; data helps optimize costs.",
-        ]
-        idx = (date.today().timetuple().tm_yday) % len(tips_pool)
-        st.info(f"🌿 {tips_pool[idx]}")
-
-    else:
-        st.info("Choose a tool above to get farm tips.")
-
-# ---------------------------
-# Router hook (use IF, not ELIF)
-# ---------------------------
-if (globals().get("menu_v2") == "📚 AI Farm Tips") or (globals().get("menu") == "📚 AI Farm Tips"):
+elif menu_v2 == "📚 AI Farm Tips":
     ai_farm_tips_ui()
-
-
 
 
 # 📈 Market & Economic Tools (Trigger Buttons)
