@@ -6158,7 +6158,6 @@ if menu == "🌿 Farm Management":
 
         "Smart Fertilizer & Pesticide Stock Manager",
 
-        "AI Crop Calendar",
 
         "Drone Flight Scheduler",
 
