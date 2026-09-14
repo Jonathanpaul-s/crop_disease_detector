@@ -4693,6 +4693,370 @@ def ai_predictions_ui():
             )
 
 
+# ==========================================
+# 📈 Market & Economic Tools
+# ==========================================
+
+def market_economic_tools_ui():
+    st.header("📈 Market & Economic Tools")
+
+    # ==========================================================
+    # CURRENT FARM CONTEXT
+    # ==========================================================
+    current_farm = st.session_state.get("current_farm", {})
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get("farm_id", "main_farm")
+    current_farm_name = current_farm.get("farm_name", "Main Farm")
+    current_crop = current_farm.get("crop_type", "")
+    current_location = current_farm.get("location", "")
+
+    farmer_profile = st.session_state.get("farmer_profile", {})
+    if not isinstance(farmer_profile, dict):
+        farmer_profile = {}
+
+    personalized_profile = st.session_state.get("personalized_profile", {})
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Nigeria"
+    )
+
+    # ==========================================================
+    # CURRENCY CONTEXT
+    # ==========================================================
+    currency_map = {
+        "Nigeria": ("₦", "NGN"),
+        "Canada": ("C$", "CAD"),
+        "Iran": ("﷼", "IRR"),
+        "Cyprus": ("€", "EUR"),
+        "United States": ("$", "USD"),
+        "USA": ("$", "USD"),
+        "United Kingdom": ("£", "GBP"),
+    }
+
+    currency_symbol, currency_code = currency_map.get(
+        current_country,
+        ("$", "USD")
+    )
+
+    st.info(
+        f"🌿 Current Farm: {current_farm_name} | "
+        f"Crop: {current_crop or 'Not specified'} | "
+        f"Location: {current_location or 'Not specified'} | "
+        f"Currency: {currency_code}"
+    )
+
+    # ==========================================================
+    # UNIQUE FARM KEYS
+    # ==========================================================
+    def market_key(name):
+        return f"market_{current_farm_id}_{name}"
+
+    active_key = market_key("active_tool")
+
+    if active_key not in st.session_state:
+        st.session_state[active_key] = None
+
+    # ==========================================================
+    # TOOL BUTTONS
+    # ==========================================================
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 0.6])
+
+    with c1:
+        if st.button(
+            "💰 ROI Calculator",
+            key=market_key("btn_roi"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = "roi"
+
+    with c2:
+        if st.button(
+            "📈 Price Trend Checker",
+            key=market_key("btn_trend"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = "trend"
+
+    with c3:
+        if st.button(
+            "⚖️ Break-even Calculator",
+            key=market_key("btn_breakeven"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = "breakeven"
+
+    with c4:
+        if st.button(
+            "🔄 Reset",
+            key=market_key("btn_reset"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = None
+            st.rerun()
+
+    tool = st.session_state.get(active_key)
+
+    # ==========================================================
+    # ROI CALCULATOR
+    # ==========================================================
+    if tool == "roi":
+        st.subheader("💰 ROI Calculator")
+
+        st.write(
+            f"Estimate the return on investment for {current_farm_name}."
+        )
+
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            investment = st.number_input(
+                f"Investment amount ({currency_symbol})",
+                min_value=0.0,
+                step=1000.0,
+                format="%.2f",
+                key=market_key("roi_investment")
+            )
+
+        with col_b:
+            return_value = st.number_input(
+                f"Total return ({currency_symbol})",
+                min_value=0.0,
+                step=1000.0,
+                format="%.2f",
+                key=market_key("roi_return")
+            )
+
+        if st.button(
+            "Calculate ROI",
+            key=market_key("roi_calc"),
+            use_container_width=True
+        ):
+            if investment <= 0:
+                st.warning(
+                    f"Enter an investment greater than {currency_symbol}0."
+                )
+
+            else:
+                net_profit = return_value - investment
+                roi = (net_profit / investment) * 100
+
+                r1, r2 = st.columns(2)
+
+                with r1:
+                    st.metric(
+                        "Net Profit",
+                        f"{currency_symbol}{net_profit:,.2f}"
+                    )
+
+                with r2:
+                    st.metric(
+                        "ROI",
+                        f"{roi:.2f}%"
+                    )
+
+                if roi > 0:
+                    st.success(
+                        "✅ The entered figures indicate a positive return."
+                    )
+
+                elif roi == 0:
+                    st.info(
+                        "The investment currently breaks even."
+                    )
+
+                else:
+                    st.warning(
+                        "The entered figures indicate a negative return."
+                    )
+
+    # ==========================================================
+    # PRICE TREND CHECKER
+    # ==========================================================
+    elif tool == "trend":
+        st.subheader("📈 Price Trend Checker")
+
+        crop_name = st.text_input(
+            "Crop name",
+            value=current_crop or "Maize",
+            key=market_key("trend_crop")
+        )
+
+        prices_csv = st.text_area(
+            f"Enter recent prices in {currency_code}, separated by commas",
+            value="120, 125, 130, 128, 135, 140",
+            key=market_key("trend_prices"),
+            help="Example: 120, 125, 130, 128, 135, 140"
+        )
+
+        if st.button(
+            "Show Trend",
+            key=market_key("trend_show"),
+            use_container_width=True
+        ):
+            try:
+                values = [
+                    float(x.strip())
+                    for x in prices_csv.split(",")
+                    if x.strip()
+                ]
+
+                if len(values) < 2:
+                    st.warning(
+                        "Enter at least two price points."
+                    )
+
+                else:
+                    df = pd.DataFrame(
+                        {
+                            "Period": list(
+                                range(1, len(values) + 1)
+                            ),
+                            "Price": values
+                        }
+                    ).set_index("Period")
+
+                    st.line_chart(df)
+
+                    first_price = values[0]
+                    last_price = values[-1]
+
+                    change = last_price - first_price
+
+                    if first_price != 0:
+                        pct_change = (
+                            change / first_price
+                        ) * 100
+                    else:
+                        pct_change = 0.0
+
+                    if change > 0:
+                        direction = "increased"
+
+                    elif change < 0:
+                        direction = "decreased"
+
+                    else:
+                        direction = "not changed"
+
+                    st.info(
+                        f"{crop_name} price has {direction} by "
+                        f"{currency_symbol}{abs(change):,.2f} "
+                        f"(≈ {abs(pct_change):.2f}%) over the entered period."
+                    )
+
+            except ValueError:
+                st.error(
+                    "Invalid price input. Enter numbers separated by commas."
+                )
+                # ==========================================================
+    # BREAK-EVEN CALCULATOR
+    # ==========================================================
+    elif tool == "breakeven":
+        st.subheader("⚖️ Break-even Calculator")
+
+        st.write(
+            "Calculate how many units must be sold to cover farm costs."
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            fixed_costs = st.number_input(
+                f"Fixed costs ({currency_symbol})",
+                min_value=0.0,
+                step=1000.0,
+                format="%.2f",
+                key=market_key("be_fixed")
+            )
+
+        with c2:
+            variable_cost = st.number_input(
+                f"Variable cost per unit ({currency_symbol})",
+                min_value=0.0,
+                step=100.0,
+                format="%.2f",
+                key=market_key("be_variable")
+            )
+
+        with c3:
+            price_per_unit = st.number_input(
+                f"Selling price per unit ({currency_symbol})",
+                min_value=0.0,
+                step=100.0,
+                format="%.2f",
+                key=market_key("be_price")
+            )
+
+        if st.button(
+            "Calculate Break-even",
+            key=market_key("be_calc"),
+            use_container_width=True
+        ):
+            contribution_margin = (
+                price_per_unit - variable_cost
+            )
+
+            if contribution_margin <= 0:
+                st.error(
+                    "Selling price must be greater than "
+                    "variable cost per unit."
+                )
+
+            elif fixed_costs <= 0:
+                st.warning(
+                    f"Enter fixed costs greater than {currency_symbol}0."
+                )
+
+            else:
+                units = (
+                    fixed_costs / contribution_margin
+                )
+
+                units_whole = int(units)
+
+                if units > units_whole:
+                    units_whole += 1
+
+                break_even_revenue = (
+                    units_whole * price_per_unit
+                )
+
+                b1, b2 = st.columns(2)
+
+                with b1:
+                    st.metric(
+                        "Break-even Units",
+                        f"{units_whole:,}"
+                    )
+
+                with b2:
+                    st.metric(
+                        "Break-even Revenue",
+                        f"{currency_symbol}{break_even_revenue:,.2f}"
+                    )
+
+                st.success(
+                    f"🎯 You need to sell approximately "
+                    f"{units_whole:,} units to cover the entered costs."
+                )
+
+    # ==========================================================
+    # DEFAULT VIEW
+    # ==========================================================
+    else:
+        st.info(
+            "Choose ROI Calculator, Price Trend Checker, "
+            "or Break-even Calculator above."
+        )
+
 # ================================
 # 📚 AI Farm Tips
 # ================================
@@ -11096,170 +11460,8 @@ elif menu_v2 == "📚 AI Farm Tips":
     ai_farm_tips_ui()
 
 
-# 📈 Market & Economic Tools (Trigger Buttons)
-
 elif menu_v2 == "📈 Market & Economic Tools":
-    st.header("📈 Market & Economic Tools")
-
-    # Track which tool is active
-    if mkey("active_tool") not in st.session_state:
-        st.session_state[mkey("active_tool")] = None
-
-    # --- Trigger buttons row ---
-    c1, c2, c3, c4 = st.columns([1, 1, 1, 0.6])
-    with c1:
-        if st.button("💰 ROI Calculator", key=mkey("btn_roi")):
-            st.session_state[mkey("active_tool")] = "roi"
-    with c2:
-        if st.button("📈 Price Trend Checker", key=mkey("btn_trend")):
-            st.session_state[mkey("active_tool")] = "trend"
-    with c3:
-        if st.button("⚖️ Break-even Calculator", key=mkey("btn_be")):
-            st.session_state[mkey("active_tool")] = "breakeven"
-    with c4:
-        if st.button("🔄 Reset", key=mkey("btn_reset")):
-            # reset only your app keys (safer) — adjust prefix if your mkey uses one
-            # Example conservative reset: only clear known keys for this section
-            keys_to_clear = [
-                mkey("active_tool"),
-                mkey("btn_roi"),
-                mkey("btn_trend"),
-                mkey("btn_be"),
-                mkey("roi_investment"),
-                mkey("roi_profit"),
-                mkey("trend_prices"),
-                mkey("trend_crop"),
-                mkey("trend_show"),
-                mkey("be_fixed"),
-                mkey("be_var"),
-                mkey("be_price"),
-                mkey("be_calc"),
-            ]
-            for k in keys_to_clear:
-                if k in st.session_state:
-                    del st.session_state[k]
-
-            # attempt a robust rerun compatible with multiple Streamlit versions
-            try:
-                if hasattr(st, "rerun"):
-                    st.rerun()  # modern API
-                elif hasattr(st, "experimental_rerun"):
-                    st.experimental_rerun()  # older API
-                else:
-                    # fallback: toggle a dummy session key to force UI update
-                    st.session_state["_sfai_force_update"] = not st.session_state.get("_sfai_force_update", False)
-            except Exception as _e:
-                # If rerun fails for any reason, at least avoid crashing the app
-                st.warning("Reset performed but automatic rerun failed. The UI should update on the next interaction.")
-
-    tool = st.session_state.get(mkey("active_tool"))
-
-    # =============== TOOL 1: ROI CALCULATOR ===============
-    if tool == "roi":
-        st.subheader("💰 ROI (Return on Investment) Calculator")
-        st.write("Estimate your farm's return on investment.")
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            investment = st.number_input(
-                "Investment amount (₦)",
-                min_value=0.0,
-                step=1000.0,
-                format="%.2f",
-                key=mkey("roi_investment"),
-            )
-        with col_b:
-            profit = st.number_input(
-                "Profit amount (₦)",
-                min_value=0.0,
-                step=1000.0,
-                format="%.2f",
-                key=mkey("roi_profit"),
-            )
-
-        if st.button("Calculate ROI", key=mkey("roi_calc")):
-            if investment <= 0:
-                st.warning("Enter an investment greater than ₦0.")
-            else:
-                roi = ((profit - investment) / investment) * 100
-                st.success(f"✅ ROI: {roi:.2f}%")
-
-    # =============== TOOL 2: PRICE TREND CHECKER ===============
-    elif tool == "trend":
-        st.subheader("📈 Price Trend Checker")
-        st.write("Paste recent prices for a crop to see the trend.")
-
-        crop_name = st.text_input(
-            "Crop name",
-            value="Maize",
-            key=mkey("trend_crop"),
-        )
-
-        prices_csv = st.text_area(
-            "Enter prices separated by commas",
-            value="120, 125, 130, 128, 135, 140",
-            key=mkey("trend_prices"),
-            help="Example: 120, 125, 130, 128, 135, 140",
-        )
-
-        if st.button("Show Trend", key=mkey("trend_show")):
-            try:
-                values = [float(x.strip()) for x in prices_csv.split(",") if x.strip()]
-                if len(values) < 2:
-                    st.warning("Enter at least two price points.")
-                else:
-                    df = pd.DataFrame({"Index": list(range(1, len(values) + 1)), "Price": values}).set_index("Index")
-                    st.line_chart(df)  # quick visual
-                    change = values[-1] - values[0]
-                    pct = (change / values[0]) * 100 if values[0] != 0 else 0.0
-                    direction = "increased" if change > 0 else "decreased" if change < 0 else "not changed"
-                    st.info(f"{crop_name} price has {direction} by {abs(change):.2f} (≈ {abs(pct):.2f}%) over the period.")
-            except Exception as e:
-                st.error(f"Invalid input. Please enter numbers only. Details: {e}")
-
-    # =============== TOOL 3: BREAK-EVEN CALCULATOR ===============
-    elif tool == "breakeven":
-        st.subheader("⚖️ Break-even Calculator")
-        st.write("Find the number of units you need to sell to cover costs.")
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            fixed_costs = st.number_input(
-                "Fixed costs (₦)",
-                min_value=0.0,
-                step=1000.0,
-                format="%.2f",
-                key=mkey("be_fixed"),
-            )
-        with c2:
-            variable_cost = st.number_input(
-                "Variable cost per unit (₦)",
-                min_value=0.0,
-                step=100.0,
-                format="%.2f",
-                key=mkey("be_var"),
-            )
-        with c3:
-            price_per_unit = st.number_input(
-                "Selling price per unit (₦)",
-                min_value=0.0,
-                step=100.0,
-                format="%.2f",
-                key=mkey("be_price"),
-            )
-
-        if st.button("Calculate Break-even", key=mkey("be_calc")):
-            margin = price_per_unit - variable_cost
-            if margin <= 0:
-                st.error("Selling price must be greater than variable cost per unit.")
-            elif fixed_costs <= 0:
-                st.warning("Enter fixed costs greater than ₦0.")
-            else:
-                units = fixed_costs / margin
-                units_int = int(units) if units.is_integer() else int(units) + 1  # round up to whole units
-                st.success(f"🎯 You need to sell about {units:.2f} units (≈ {units_int} whole units) to break even.")
-
-
+    market_economic_tools_ui()
 
 # 📈 Decision-Making Models — Trigger Buttons
 elif (('menu_v2' in globals() and menu_v2 == "📈 Decision-Making Models") or
