@@ -3090,34 +3090,296 @@ def smart_tutor_voice():
         else:
             st.warning("❌ Please ask a question by typing or speaking.")
 
-
-
-
+#Ai crop calendar
 def ai_crop_calendar_ui():
+    st.header("🤖 AI Crop Calendar")
 
-    st.subheader("🧠 AI Crop Calendar")
+    # ==========================================================
+    # CURRENT FARM CONTEXT
+    # ==========================================================
+    current_farm = st.session_state.get("current_farm", {})
 
-    crop = st.selectbox("Select Crop", ["Maize", "Rice", "Tomato", "Yam", "Cassava"], key="cal_crop")
+    if not isinstance(current_farm, dict):
+        current_farm = {}
 
-    zone = st.selectbox("Agro-ecological Zone", ["South-South", "South-West", "South-East", "Middle Belt", "North"], key="cal_zone")
+    current_farm_id = current_farm.get("farm_id", "main_farm")
+    current_farm_name = current_farm.get("farm_name", "Main Farm")
+    current_crop = current_farm.get("crop_type", "")
+    current_location = current_farm.get("location", "")
 
-    if st.button("Generate Calendar", key="cal_btn"):
+    # Try to get country from personalization/profile
+    personalized_profile = st.session_state.get("personalized_profile", {})
 
-        suggestion = {
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
 
-            "Maize": "April–June (rain-fed); Oct–Nov (irrigated)",
+    farmer_profile = st.session_state.get("farmer_profile", {})
 
-            "Rice": "May–July (rain-fed); Nov–Jan (irrigated)",
+    if not isinstance(farmer_profile, dict):
+        farmer_profile = {}
 
-            "Tomato": "Aug–Oct (dry-season irrigated); Feb–Apr (early wet-season)",
+    current_country = (
+        personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or current_farm.get("country")
+        or "Not specified"
+    )
 
-            "Yam": "Dec–Feb (setts); harvest 6–8 months later",
+    st.info(
+        f"🌿 Current Farm: {current_farm_name} | "
+        f"Crop: {current_crop or 'Not specified'} | "
+        f"Location: {current_location or 'Not specified'} | "
+        f"Country: {current_country}"
+    )
 
-            "Cassava": "All year if moisture adequate; best with onset of rains",
+    st.write(
+        "Generate planting and harvesting guidance using the selected crop, "
+        "farm location and agro-ecological conditions."
+    )
 
-        }.get(crop, "Check local rainfall pattern.")
+    # ==========================================================
+    # CROP OPTIONS
+    # ==========================================================
+    crops = [
+        "Maize",
+        "Rice",
+        "Cassava",
+        "Yam",
+        "Tomato",
+    ]
 
-        st.success(f"📅 Suggested window for {crop} in {zone}: {suggestion}")
+    default_crop_index = 0
+
+    if current_crop:
+        for i, crop_name in enumerate(crops):
+            if crop_name.lower() == str(current_crop).lower():
+                default_crop_index = i
+                break
+
+    # ==========================================================
+    # INPUTS
+    # ==========================================================
+    col1, col2 = st.columns(2)
+
+    with col1:
+        crop = st.selectbox(
+            "🌾 Select Crop",
+            crops,
+            index=default_crop_index,
+            key=f"ai_calendar_crop_{current_farm_id}",
+        )
+
+    with col2:
+        location = st.text_input(
+            "📍 Farm Location",
+            value=current_location or "",
+            key=f"ai_calendar_location_{current_farm_id}",
+        )
+
+    zone_options = [
+        "South-South",
+        "South-West",
+        "South-East",
+        "Middle Belt",
+        "North",
+        "Other / International",
+    ]
+
+    zone = st.selectbox(
+        "🌍 Agro-Ecological Zone",
+        zone_options,
+        key=f"ai_calendar_zone_{current_farm_id}",
+    )
+
+    farming_method = st.selectbox(
+        "💧 Farming Method",
+        [
+            "Rain-fed",
+            "Irrigated",
+        ],
+        key=f"ai_calendar_method_{current_farm_id}",
+    )
+
+    # ==========================================================
+    # CONSOLIDATED CALENDAR KNOWLEDGE
+    # ==========================================================
+    rainfed_calendar = {
+        "Maize": {
+            "planting": "April – June",
+            "harvest": "About 3–4 months after planting",
+            "note": "Plant near the beginning of reliable rainfall.",
+        },
+
+        "Rice": {
+            "planting": "May – July",
+            "harvest": "About 3–5 months after planting",
+            "note": "Water availability and rice variety strongly affect timing.",
+        },
+
+        "Cassava": {
+            "planting": "At the onset of reliable rains",
+            "harvest": "About 8–18 months after planting",
+            "note": "Adequate soil moisture is important during establishment.",
+        },
+
+        "Yam": {
+            "planting": "December – April depending on rainfall pattern",
+            "harvest": "About 6–10 months after planting",
+            "note": "Planting timing varies significantly by region and variety.",
+        },
+
+        "Tomato": {
+            "planting": "February – April or suitable local wet-season window",
+            "harvest": "About 2–4 months after transplanting",
+            "note": "Avoid periods of excessive rainfall and disease pressure where possible.",
+        },
+    }
+
+    irrigated_calendar = {
+        "Maize": {
+            "planting": "Can be planted outside the normal rainy-season window",
+            "harvest": "About 3–4 months after planting",
+            "note": "Maintain adequate irrigation according to crop stage.",
+        },
+
+        "Rice": {
+            "planting": "Dry-season production is possible with reliable irrigation",
+            "harvest": "About 3–5 months after planting",
+            "note": "Ensure sufficient and controlled water supply.",
+        },
+
+        "Cassava": {
+            "planting": "Most months where sufficient moisture can be maintained",
+            "harvest": "About 8–18 months after planting",
+            "note": "Avoid severe moisture stress during establishment.",
+        },
+
+        "Yam": {
+            "planting": "Timing can be adjusted where reliable water is available",
+            "harvest": "About 6–10 months after planting",
+            "note": "Variety, seed material and local climate remain important.",
+        },
+
+        "Tomato": {
+            "planting": "Often suitable for dry-season irrigated production",
+            "harvest": "About 2–4 months after transplanting",
+            "note": "Monitor heat, humidity, irrigation and disease pressure.",
+        },
+    }
+
+    # ==========================================================
+    # GENERATE CALENDAR
+    # ==========================================================
+    if st.button(
+        "📅 Generate AI Crop Calendar",
+        key=f"ai_calendar_generate_{current_farm_id}",
+        use_container_width=True,
+    ):
+        if farming_method == "Rain-fed":
+            calendar_data = rainfed_calendar.get(crop)
+        else:
+            calendar_data = irrigated_calendar.get(crop)
+
+        if calendar_data:
+            planting_window = calendar_data["planting"]
+            harvest_window = calendar_data["harvest"]
+            calendar_note = calendar_data["note"]
+
+            st.success(
+                f"🌱 Recommended planting window for {crop}: "
+                f"{planting_window}"
+            )
+
+            st.success(
+                f"🌾 Estimated harvest timing: {harvest_window}"
+            )
+
+            st.write("### 🧠 Calendar Context")
+
+            st.write(f"Farm: {current_farm_name}")
+            st.write(f"Crop: {crop}")
+            st.write(f"Location: {location or 'Not specified'}")
+            st.write(f"Country: {current_country}")
+            st.write(f"Agro-Ecological Zone: {zone}")
+            st.write(f"Production Method: {farming_method}")
+
+            st.info(calendar_note)
+
+            # ==================================================
+            # SAVE SCHEDULE
+            # ==================================================
+            rows_key = f"ai_calendar_rows_{current_farm_id}"
+
+            if rows_key not in st.session_state:
+                st.session_state[rows_key] = []
+
+            schedule = {
+                "Farm ID": current_farm_id,
+                "Farm": current_farm_name,
+                "Crop": crop,
+                "Country": current_country,
+                "Location": location,
+                "Zone": zone,
+                "Method": farming_method,
+                "Planting Window": planting_window,
+                "Harvest Timing": harvest_window,
+                "Added On": date.today().isoformat(),
+            }
+
+            st.session_state[rows_key].append(schedule)
+            st.warning(
+                "🟡 This calendar currently uses consolidated seasonal "
+                "agronomic rules. Final intelligence will combine local "
+                "weather, rainfall forecasts, soil conditions, crop variety, "
+                "PA and CSA information."
+            )
+
+    # ==========================================================
+    # SAVED FARM CALENDARS
+    # ==========================================================
+    rows_key = f"ai_calendar_rows_{current_farm_id}"
+    rows = st.session_state.get(rows_key, [])
+
+    if rows:
+        st.divider()
+
+        st.subheader(
+            f"🧾 Saved Schedules — {current_farm_name}"
+        )
+
+        df = pd.DataFrame(rows)
+
+        st.dataframe(
+            df,
+            use_container_width=True,
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.download_button(
+                "⬇️ Download Calendar CSV",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name=f"{current_farm_name}_crop_calendar.csv",
+                mime="text/csv",
+                key=f"ai_calendar_download_{current_farm_id}",
+                use_container_width=True,
+            )
+
+        with col2:
+            if st.button(
+                "🧹 Clear Farm Schedules",
+                key=f"ai_calendar_clear_{current_farm_id}",
+                use_container_width=True,
+            ):
+                st.session_state[rows_key] = []
+
+                st.success(
+                    "✅ Calendar schedules cleared."
+                )
+
+                st.rerun()
+
 
 # put this ABOVE the router
 def drone_irrigation_assistant_ui_impl():
@@ -10253,70 +10515,8 @@ elif menu_v2 == "📊 farm profit & loss statement":
 
             st.rerun()
 
-# ===================
-# 🤖 AI Crop Calendar
-# ===================
 elif menu_v2 == "🤖 AI Crop Calendar":
-    st.header("🤖 AI Crop Calendar")
-    st.write("Get AI-recommended planting and harvesting dates based on crop and location.")
-
-    # Simple calendar data (swap in a real model later)
-    crop_calendar = {
-        "Maize":   {"planting": "2025-04-01", "harvesting": "2025-07-30"},
-        "Rice":    {"planting": "2025-05-15", "harvesting": "2025-09-15"},
-        "Cassava": {"planting": "2025-03-01", "harvesting": "2026-01-01"},
-        "Yam":     {"planting": "2025-04-10", "harvesting": "2025-10-20"},
-        "Tomato":  {"planting": "2025-02-20", "harvesting": "2025-05-30"},
-    }
-
-    # Inputs (keys are namespaced)
-    c1, c2 = st.columns(2)
-    with c1:
-        crop = st.selectbox("🌾 Select Crop", list(crop_calendar.keys()), key=kcal("crop"))
-    with c2:
-        location = st.text_input("📍 Location", value="Benue", key=kcal("loc"))
-
-    # Generate button (namespaced key so it always fires)
-    if st.button("📅 Generate AI Crop Calendar", key=kcal("generate")):
-        data = crop_calendar[crop]
-        st.success(f"🌱 Plant {crop} around **{data['planting']}** in {location}.")
-        st.success(f"🌾 Expected harvest around **{data['harvesting']}**.")
-        st.info("Note: Dates are AI-estimated from typical seasonal trends; refine with your local weather data.")
-
-        # Store rows in session (so users can build a small calendar list)
-        rows_key = kcal("rows")
-        if rows_key not in st.session_state:
-            st.session_state[rows_key] = []
-        st.session_state[rows_key].append({
-            "Crop": crop,
-            "Location": location,
-            "Planting": data["planting"],
-            "Harvesting": data["harvesting"],
-            "Added On": date.today().isoformat(),
-        })
-
-    # Show saved rows + export / clear
-    rows = st.session_state.get(kcal("rows"), [])
-    if rows:
-        st.subheader("🧾 Saved Schedules")
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True)
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.download_button(
-                "⬇️ Download CSV",
-                df.to_csv(index=False).encode("utf-8"),
-                file_name="ai_crop_calendar.csv",
-                mime="text/csv",
-                key=kcal("dl")
-            )
-        with col_b:
-            if st.button("🧹 Clear Schedules", key=kcal("clear")):
-                st.session_state[kcal("rows")] = []
-                st.success("✅ All schedules cleared successfully!")
-                st.rerun()
-
+    ai_crop_calendar_ui()
 
 elif menu_v2 == "🧪 AI Predictions":
     ai_predictions_ui()
