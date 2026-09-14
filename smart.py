@@ -6180,9 +6180,7 @@ if menu == "🌿 Farm Management":
 
         smart_fert_pest_ui()
 
-    elif farm_option == "AI Crop Calendar":
-
-        ai_crop_calendar_ui()
+    
 
     elif farm_option == "Drone Flight Scheduler":
 
