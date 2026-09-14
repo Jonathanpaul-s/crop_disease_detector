@@ -3407,6 +3407,642 @@ def drone_irrigation_assistant_ui_impl():
     for line in S["log"][-200:]:
         st.write("•", line)
 
+# ==========================================
+# 📈 DECISION-MAKING MODELS
+# ==========================================
+
+def decision_making_models_ui():
+    st.header("📈 Decision-Making Models")
+
+    st.write(
+        "Smart Farm AI uses current farm conditions and farmer inputs "
+        "to support irrigation, fertilizer, and crop-rotation decisions."
+    )
+
+    # ------------------------------------------
+    # CURRENT FARM
+    # ------------------------------------------
+    current_farm = st.session_state.get("current_farm", {})
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get("farm_id", "main_farm")
+    current_farm_name = current_farm.get("farm_name", "Main Farm")
+    current_crop = current_farm.get("crop_type", "")
+    current_location = current_farm.get("location", "")
+    current_farm_type = current_farm.get("farm_type", "")
+    current_farm_size = current_farm.get("farm_size", 0)
+
+    farmer_profile = st.session_state.get("farmer_profile", {})
+
+    if not isinstance(farmer_profile, dict):
+        farmer_profile = {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
+
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Not specified"
+    )
+
+    st.info(
+        f"🌿 Current Farm: {current_farm_name} | "
+        f"Crop: {current_crop or 'Not specified'} | "
+        f"Location: {current_location or 'Not specified'} | "
+        f"Country: {current_country}"
+    )
+
+    # ------------------------------------------
+    # UNIQUE KEYS
+    # ------------------------------------------
+    def dm_key(name):
+        return f"decision_model_{current_farm_id}_{name}"
+
+    active_key = dm_key("active_tool")
+
+    if active_key not in st.session_state:
+        st.session_state[active_key] = None
+
+    # ------------------------------------------
+    # TOOL BUTTONS
+    # ------------------------------------------
+    c1, c2, c3, c4 = st.columns([1.4, 1.4, 1.6, 0.8])
+
+    with c1:
+        if st.button(
+            "💧 Irrigation",
+            key=dm_key("btn_irrigation")
+        ):
+            st.session_state[active_key] = "irrigation"
+
+    with c2:
+        if st.button(
+            "🌿 Fertilizer",
+            key=dm_key("btn_fertilizer")
+        ):
+            st.session_state[active_key] = "fertilizer"
+
+    with c3:
+        if st.button(
+            "🔄 Crop Rotation",
+            key=dm_key("btn_rotation")
+        ):
+            st.session_state[active_key] = "rotation"
+
+    with c4:
+        if st.button(
+            "🔄 Reset",
+            key=dm_key("btn_reset")
+        ):
+            st.session_state[active_key] = None
+            st.rerun()
+
+    tool = st.session_state.get(active_key)
+
+    # ==========================================
+    # 💧 IRRIGATION DECISION
+    # ==========================================
+    if tool == "irrigation":
+        st.subheader("💧 Irrigation Decision")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            soil_moisture = st.slider(
+                "Soil Moisture (%)",
+                0,
+                100,
+                50,
+                key=dm_key("soil_moisture")
+            )
+
+        with col2:
+            temperature = st.slider(
+                "Temperature (°C)",
+                -10,
+                50,
+                30,
+                key=dm_key("temperature")
+            )
+
+        col3, col4 = st.columns(2)
+
+        with col3:
+            rainfall = st.selectbox(
+                "Rainfall Expected Soon?",
+                [
+                    "Unknown",
+                    "Yes",
+                    "No"
+                ],
+                key=dm_key("rainfall")
+            )
+
+        with col4:
+            growth_stage = st.selectbox(
+                "Crop Growth Stage",
+                [
+                    "Not specified",
+                    "Establishment",
+                    "Vegetative",
+                    "Flowering",
+                    "Fruiting",
+                    "Maturity"
+                ],
+                key=dm_key("growth_stage")
+            )
+
+        irrigation_score = 0
+        reasons = []
+
+        if soil_moisture < 25:
+            irrigation_score += 4
+            reasons.append(
+                "Soil moisture is critically low."
+            )
+
+        elif soil_moisture < 40:
+            irrigation_score += 3
+            reasons.append(
+                "Soil moisture is below the preferred range."
+            )
+
+        elif soil_moisture < 60:
+            irrigation_score += 1
+            reasons.append(
+                "Soil moisture is moderate."
+            )
+
+        else:
+            irrigation_score -= 2
+            reasons.append(
+                "Soil moisture is currently adequate."
+            )
+
+        if temperature >= 35:
+            irrigation_score += 2
+            reasons.append(
+                "High temperature increases crop water demand."
+            )
+
+        elif temperature >= 30:
+            irrigation_score += 1
+            reasons.append(
+                "Temperature may increase water demand."
+            )
+
+        if rainfall == "Yes":
+            irrigation_score -= 3
+            reasons.append(
+                "Rainfall is expected soon."
+            )
+
+        elif rainfall == "No":
+            irrigation_score += 1
+            reasons.append(
+                "No rainfall is expected soon."
+            )
+
+        if growth_stage in [
+            "Flowering",
+            "Fruiting"
+        ]:
+            irrigation_score += 1
+            reasons.append(
+                f"{growth_stage} can be sensitive to water stress."
+            )
+
+        if irrigation_score >= 5:
+            decision = "Irrigation strongly recommended"
+
+            recommendation = (
+                "Apply irrigation according to crop root depth, "
+                "soil type, and field conditions. Prefer early "
+                "morning or evening irrigation where practical."
+            )
+
+            risk = "High water-stress risk"
+
+        elif irrigation_score >= 2:
+            decision = "Moderate irrigation recommended"
+
+            recommendation = (
+                "Apply controlled irrigation and monitor soil "
+                "moisture before the next irrigation cycle."
+            )
+
+            risk = "Moderate water-stress risk"
+
+        elif irrigation_score >= 0:
+            decision = "Monitor before irrigating"
+
+            recommendation = (
+                "Water stress is not severe. Check soil moisture "
+                "and local weather again before irrigation."
+            )
+
+            risk = "Low to moderate water-stress risk"
+
+        else:
+            decision = "Irrigation not required now"
+
+            recommendation = (
+                "Avoid unnecessary irrigation. Continue monitoring "
+                "soil moisture to reduce water waste and waterlogging."
+            )
+
+            risk = "Low water-stress risk"
+
+        st.success(
+            f"✅ Decision: {decision}"
+        )
+
+        st.write(
+            f"Risk Level: {risk}"
+        )
+
+        st.write(
+            f"Recommended Action: {recommendation}"
+        )
+
+        st.write(
+            "Decision Factors:"
+        )
+
+        for reason in reasons:
+            st.write(
+                f"• {reason}"
+            )
+
+        st.caption(
+            f"Farm: {current_farm_name} | "
+            f"Crop: {current_crop or 'Not specified'} | "
+            f"Location: {current_location or 'Not specified'}"
+        )
+
+    # ==========================================
+    # 🌿 FERTILIZER DECISION
+    # ==========================================
+    elif tool == "fertilizer":
+        st.subheader("🌿 Fertilizer Decision")
+
+        crop_options = [
+            "Maize",
+            "Rice",
+            "Cassava",
+            "Yam",
+            "Tomato",
+            "Soybean",
+            "Cowpea",
+            "Other"
+        ]
+        crop_index = 0
+
+        if current_crop in crop_options:
+            crop_index = crop_options.index(
+                current_crop
+            )
+
+        crop_type = st.selectbox(
+            "Crop Type",
+            crop_options,
+            index=crop_index,
+            key=dm_key("fert_crop")
+        )
+
+        growth_stage = st.selectbox(
+            "Growth Stage",
+            [
+                "Establishment",
+                "Vegetative",
+                "Flowering",
+                "Fruiting",
+                "Maturity"
+            ],
+            key=dm_key("fert_growth_stage")
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            nitrogen = st.selectbox(
+                "Nitrogen Status",
+                [
+                    "Unknown",
+                    "Low",
+                    "Adequate",
+                    "High"
+                ],
+                key=dm_key("nitrogen")
+            )
+
+        with c2:
+            phosphorus = st.selectbox(
+                "Phosphorus Status",
+                [
+                    "Unknown",
+                    "Low",
+                    "Adequate",
+                    "High"
+                ],
+                key=dm_key("phosphorus")
+            )
+
+        with c3:
+            potassium = st.selectbox(
+                "Potassium Status",
+                [
+                    "Unknown",
+                    "Low",
+                    "Adequate",
+                    "High"
+                ],
+                key=dm_key("potassium")
+            )
+
+        soil_ph = st.number_input(
+            "Soil pH",
+            min_value=3.0,
+            max_value=10.0,
+            value=6.5,
+            step=0.1,
+            key=dm_key("soil_ph")
+        )
+
+        recommendations = []
+        warnings = []
+
+        if nitrogen == "Low":
+            recommendations.append(
+                "Nitrogen appears low. Consider an appropriate "
+                "nitrogen source based on crop requirement and "
+                "local agronomic guidance."
+            )
+
+        elif nitrogen == "High":
+            warnings.append(
+                "Nitrogen is already high. Avoid unnecessary "
+                "additional nitrogen."
+            )
+
+        elif nitrogen == "Adequate":
+            recommendations.append(
+                "Nitrogen level appears adequate."
+            )
+
+        if phosphorus == "Low":
+            recommendations.append(
+                "Phosphorus appears low. Correcting deficiency "
+                "may support root development and crop establishment."
+            )
+
+        elif phosphorus == "High":
+            warnings.append(
+                "Phosphorus is already high. Additional application "
+                "may not be necessary."
+            )
+
+        elif phosphorus == "Adequate":
+            recommendations.append(
+                "Phosphorus level appears adequate."
+            )
+
+        if potassium == "Low":
+            recommendations.append(
+                "Potassium appears low. Potassium management may "
+                "be important for crop strength and yield formation."
+            )
+
+        elif potassium == "High":
+            warnings.append(
+                "Potassium is already high. Avoid excessive application."
+            )
+
+        elif potassium == "Adequate":
+            recommendations.append(
+                "Potassium level appears adequate."
+            )
+
+        if soil_ph < 5.5:
+            warnings.append(
+                "Soil is strongly acidic for many crops. "
+                "Consider proper soil testing before applying amendments."
+            )
+
+        elif soil_ph > 8.0:
+            warnings.append(
+                "Soil is alkaline. Some nutrients may become less available."
+            )
+
+        else:
+            recommendations.append(
+                "Soil pH is within a generally workable range "
+                "for many crops."
+            )
+
+        if growth_stage == "Establishment":
+            recommendations.append(
+                "Prioritize healthy root establishment and avoid "
+                "excessive fertilizer concentration near young roots."
+            )
+
+        elif growth_stage == "Vegetative":
+            recommendations.append(
+                "Vegetative growth can increase nutrient demand. "
+                "Correct confirmed deficiencies appropriately."
+            )
+
+        elif growth_stage == "Flowering":
+            recommendations.append(
+                "Maintain balanced nutrition during flowering "
+                "and avoid excessive nitrogen."
+            )
+
+        elif growth_stage == "Fruiting":
+            recommendations.append(
+                "Balanced nutrition is important during fruit "
+                "and yield development."
+            )
+
+        elif growth_stage == "Maturity":
+            recommendations.append(
+                "Avoid unnecessary late fertilizer applications "
+                "unless a diagnosed deficiency requires correction."
+            )
+
+        st.success(
+            f"✅ Fertilizer assessment prepared for "
+            f"{crop_type} at the {growth_stage.lower()} stage."
+        )
+
+        if recommendations:
+            st.write(
+                "Recommended Actions:"
+            )
+
+            for item in recommendations:
+                st.write(
+                    f"• {item}"
+                )
+
+        if warnings:
+            st.warning(
+                "⚠️ Important Considerations"
+            )
+
+            for item in warnings:
+                st.write(
+                    f"• {item}"
+                )
+
+        if (
+            nitrogen == "Unknown"
+            or phosphorus == "Unknown"
+            or potassium == "Unknown"
+        ):
+            st.info(
+                "Connect soil-test or sensor data for nitrogen, "
+                "phosphorus, and potassium to improve this decision."
+            )
+
+        st.caption(
+            f"Farm: {current_farm_name} | "
+            f"Crop: {crop_type} | "
+            f"Location: {current_location or 'Not specified'}"
+        )
+
+    # ==========================================
+    # 🔄 CROP ROTATION DECISION
+    # ==========================================
+    elif tool == "rotation":
+        st.subheader("🔄 Crop Rotation Decision")
+
+        crop_options = [
+            "Maize",
+            "Cassava",
+            "Tomato",
+            "Yam",
+            "Rice",
+            "Soybean",
+            "Cowpea"
+        ]
+
+        crop_index = 0
+
+        if current_crop in crop_options:
+            crop_index = crop_options.index(
+                current_crop
+            )
+
+        previous_crop = st.selectbox(
+            "Previous Crop",
+            crop_options,
+            index=crop_index,
+            key=dm_key("previous_crop")
+        )
+
+        rotation_goal = st.selectbox(
+            "Main Rotation Goal",
+            [
+                "Improve Soil Fertility",
+                "Reduce Pest and Disease Pressure",
+                "Improve Soil Structure",
+                "Diversify Production"
+            ],
+            key=dm_key("rotation_goal")
+        )
+
+        rotation_options = {
+            "Maize": {
+                "Improve Soil Fertility": "Soybean or Cowpea",
+                "Reduce Pest and Disease Pressure": "Soybean, Cowpea, or another non-cereal crop",
+                "Improve Soil Structure": "Legume or suitable cover crop",
+                "Diversify Production": "Cassava, vegetables, or legumes"
+            },
+            "Cassava": {
+                "Improve Soil Fertility": "Cowpea or Soybean",
+                "Reduce Pest and Disease Pressure": "Maize, Sorghum, or legumes",
+                "Improve Soil Structure": "Legume or suitable cover crop",
+                "Diversify Production": "Maize, vegetables, or legumes"
+            },
+            "Tomato": {
+                "Improve Soil Fertility": "Cowpea or Soybean",
+                "Reduce Pest and Disease Pressure": "Maize, Sorghum, or another non-solanaceous crop",
+                "Improve Soil Structure": "Legume or suitable cover crop",
+                "Diversify Production": "Cereal or legume crop"
+            },
+            "Yam": {
+                "Improve Soil Fertility": "Cowpea or Soybean",
+                "Reduce Pest and Disease Pressure": "Maize, vegetables, or legumes",
+                "Improve Soil Structure": "Legume or suitable cover crop",
+                "Diversify Production": "Vegetables, maize, or legumes"
+            },
+            "Rice": {
+                "Improve Soil Fertility": "Cowpea or Soybean",
+                "Reduce Pest and Disease Pressure": "Legume or suitable upland crop",
+                "Improve Soil Structure": "Legume or cover crop where suitable",
+                "Diversify Production": "Legume or vegetable crop"
+            },
+            "Soybean": {
+                "Improve Soil Fertility": "Maize",
+                "Reduce Pest and Disease Pressure": "Maize, Sorghum, or another cereal",
+                "Improve Soil Structure": "Maize or suitable cover crop",
+                "Diversify Production": "Maize, vegetables, or root crops"
+            },
+            "Cowpea": {
+                "Improve Soil Fertility": "Maize",
+                "Reduce Pest and Disease Pressure": "Maize, Sorghum, or another cereal",
+                "Improve Soil Structure": "Maize or suitable cover crop",
+                "Diversify Production": "Maize, vegetables, or root crops"
+            }
+        }
+
+        suggestion = rotation_options.get(
+            previous_crop,
+            {}
+        ).get(
+            rotation_goal,
+            "Consider rotating with a crop from a different botanical family."
+        )
+
+        st.success(
+            f"✅ Suggested Next Crop: {suggestion}"
+        )
+
+        st.write(
+            f"Reason: The recommendation considers the previous "
+            f"crop ({previous_crop}) and your goal "
+            f"({rotation_goal.lower()})."
+        )
+
+        st.info(
+            "Final rotation decisions should also consider local climate, "
+            "soil condition, water availability, planting season, "
+            "previous disease history, and market conditions."
+        )
+
+        st.caption(
+            f"Farm: {current_farm_name} | "
+            f"Location: {current_location or 'Not specified'}"
+        )
+
+    # ==========================================
+    # DEFAULT VIEW
+    # ==========================================
+    else:
+        st.info(
+            "Choose Irrigation, Fertilizer, or Crop Rotation above."
+        )
+
 
 # ================================
 # 💾 Data Backup & Recovery (drop-in)
@@ -11464,99 +12100,8 @@ elif menu_v2 == "📚 AI Farm Tips":
 elif menu_v2 == "📈 Market & Economic Tools":
     market_economic_tools_ui()
 
-# 📈 Decision-Making Models — Trigger Buttons
-elif (('menu_v2' in globals() and menu_v2 == "📈 Decision-Making Models") or
-      ('menu'   in globals() and menu   == "📈 Decision-Making Models")):
-
-    st.header("📈 Decision-Making Models")
-    st.write("These models help farmers take the best actions based on farm data.")
-
-    # track active sub-tool
-    active_key = kdm("active_tool")
-    if active_key not in st.session_state:
-        st.session_state[active_key] = None
-
-    # trigger buttons row
-    c1, c2, c3, c4 = st.columns([1.4, 1.8, 1.8, 0.8])
-    with c1:
-        if st.button("💧 Irrigation", key=kdm("btn_irr")):
-            st.session_state[active_key] = "irr"
-    with c2:
-        if st.button("🌿 Fertilizer", key=kdm("btn_fert")):
-            st.session_state[active_key] = "fert"
-    with c3:
-        if st.button("🔄 Crop Rotation", key=kdm("btn_rot")):
-            st.session_state[active_key] = "rot"
-    with c4:
-        if st.button("🔄 Reset", key=kdm("btn_reset")):
-            st.session_state[active_key] = None
-            st.rerun()
-
-    tool = st.session_state[active_key]
-
-    # =======================
-    # Tool: Irrigation Recommendation
-    # =======================
-    if tool == "irr":
-        st.subheader("💧 Irrigation Recommendation")
-        soil_moisture = st.slider("Soil Moisture Level (%)", 0, 100, 50, key=kdm("irr_sm"))
-        temperature   = st.slider("Temperature (°C)", 10, 45, 30, key=kdm("irr_temp"))
-
-        if soil_moisture < 30:
-            recommendation = "Irrigate the crops with ~3 liters/day."
-        elif soil_moisture < 60:
-            recommendation = "Irrigate moderately: ~1.5 liters/day."
-        else:
-            recommendation = "No irrigation needed today."
-
-        # optional tweak for heat stress
-        if temperature >= 35 and soil_moisture < 60:
-            recommendation += " (High temp: prefer evening irrigation.)"
-
-        st.success(f"✅ Recommendation: {recommendation}")
-
-    # =======================
-    # Tool: Fertilizer Optimization
-    # =======================
-    elif tool == "fert":
-        st.subheader("🌿 Fertilizer Optimization")
-        crop_type    = st.selectbox("Select Crop Type", ["Maize", "Tomato", "Rice", "Yam", "Cassava"], key=kdm("fert_crop"))
-        growth_stage = st.selectbox("Growth Stage", ["Early", "Mid", "Late"], key=kdm("fert_stage"))
-
-        if crop_type == "Maize" and growth_stage == "Early":
-            rec = "Apply NPK 15-15-15 at ~2 kg/ha."
-        elif crop_type == "Tomato" and growth_stage == "Mid":
-            rec = "Use potassium-rich fertilizer weekly."
-        else:
-            rec = "Use standard fertilizer guidance for this stage."
-
-            st.success(f"✅ Fertilizer Advice: {rec}")
-
-    # =======================
-    # Tool: Crop Rotation Suggestion
-    # =======================
-    elif tool == "rot":
-        st.subheader("🔄 Crop Rotation Suggestion")
-        previous_crop = st.selectbox(
-            "Last Planted Crop",
-            ["Maize", "Cassava", "Tomato", "Yam", "Rice"],
-            key=kdm("rot_prev")
-        )
-
-        rotation = {
-            "Maize":  "Plant legumes like Soybean or Cowpea next.",
-            "Cassava": "Switch to leafy vegetables or grains (e.g., Maize/Sorghum).",
-            "Tomato": "Rotate with cereals (Maize/Sorghum) or legumes.",
-            "Yam":    "Use the land for vegetables (Okra/leafy greens) or legumes.",
-            "Rice":   "Rotate with legumes (Cowpea/Soybean) or a short cover-crop fallow.",
-        }
-
-        suggestion = rotation.get(
-            previous_crop,
-            "Consider rotating with legumes or cereals to break pest cycles and rebuild soil."
-        )
-
-        st.success(f"✅ Suggested rotation: {suggestion}")
+elif menu_v2 == "📈 Decision-Making Models":
+    decision_making_models_ui()
 
 
 # IRRIGATION PACK (One file)
