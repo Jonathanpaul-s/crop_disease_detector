@@ -8802,6 +8802,7 @@ menu_v2 = st.sidebar.selectbox(
         "📅 Calendar & Seasons",
         "🧪 AI Predictions",
         "📚 AI Farm Tips",
+        "📈 Market & Economic Tools",
         "🧪 Smart Fertilizer & Pesticide",
         "📡 Live Sensor Dashboard",
         "🎙️ Voice Command Interface",
