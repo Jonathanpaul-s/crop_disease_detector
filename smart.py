@@ -3830,6 +3830,380 @@ def voice_command_ui():
     # Note: we've removed the separate "Go" button handler to avoid mutation-after-widget errors.
 
 
+# farm performance indicators
+def farm_performance_indicators_ui():
+    import pandas as pd
+    from datetime import datetime
+
+    st.header("📍 Farm Performance Indicators")
+
+    current_farm = st.session_state.get("current_farm", {})
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get("farm_id", "main_farm")
+    current_farm_name = current_farm.get("farm_name", "Main Farm")
+    current_crop = current_farm.get("crop_type", "")
+    current_location = current_farm.get("location", "")
+    current_farm_size = current_farm.get("farm_size", 0)
+
+    farmer_profile = st.session_state.get("farmer_profile", {})
+    if not isinstance(farmer_profile, dict):
+        farmer_profile = {}
+
+    personalized_profile = st.session_state.get("personalized_profile", {})
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Nigeria"
+    )
+
+    currency_map = {
+        "Nigeria": ("₦", "NGN"),
+        "Canada": ("C$", "CAD"),
+        "Iran": ("﷼", "IRR"),
+        "Cyprus": ("€", "EUR"),
+        "United States": ("$", "USD"),
+        "USA": ("$", "USD"),
+        "United Kingdom": ("£", "GBP"),
+    }
+
+    currency_symbol, currency_code = currency_map.get(
+        current_country,
+        ("$", "USD")
+    )
+
+    st.info(
+        f"🌿 Current Farm: {current_farm_name} | "
+        f"Crop: {current_crop or 'Not specified'} | "
+        f"Location: {current_location or 'Not specified'} | "
+        f"Country: {current_country}"
+    )
+
+    st.write(
+        "Evaluate field health, crop water stress and market readiness "
+        "for the Current Farm."
+    )
+
+    def fpi_key(name):
+        return f"fpi_{current_farm_id}_{name}"
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        pest = st.number_input(
+            "🐛 Pest incidence (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=10.0,
+            step=1.0,
+            key=fpi_key("pest")
+        )
+
+        disease = st.number_input(
+            "🦠 Disease incidence (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=8.0,
+            step=1.0,
+            key=fpi_key("disease")
+        )
+
+        soil_moist = st.number_input(
+            "💧 Soil moisture (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=55.0,
+            step=1.0,
+            key=fpi_key("soil_moisture")
+        )
+
+    with c2:
+        ndvi = st.number_input(
+            "🌿 Vegetation Index / NDVI (0–1)",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.65,
+            step=0.01,
+            key=fpi_key("ndvi")
+        )
+
+        temp = st.number_input(
+            "🌡️ Temperature (°C)",
+            min_value=-20.0,
+            max_value=60.0,
+            value=30.0,
+            step=0.5,
+            key=fpi_key("temperature")
+        )
+
+        et0 = st.number_input(
+            "☀️ ET₀ (mm/day)",
+            min_value=0.0,
+            max_value=20.0,
+            value=4.5,
+            step=0.1,
+            key=fpi_key("et0")
+        )
+
+    with c3:
+        expected_yield = st.number_input(
+            "🌾 Expected yield (tons)",
+            min_value=0.0,
+            value=5.0,
+            step=0.1,
+            key=fpi_key("yield")
+        )
+
+        price = st.number_input(
+            f"💰 Current price ({currency_symbol}/ton)",
+            min_value=0.0,
+            value=250000.0 if current_country == "Nigeria" else 1000.0,
+            step=100.0,
+            key=fpi_key("price")
+        )
+
+        cost = st.number_input(
+            f"📉 Production cost ({currency_symbol}/ton)",
+            min_value=0.0,
+            value=180000.0 if current_country == "Nigeria" else 700.0,
+            step=100.0,
+            key=fpi_key("cost")
+        )
+
+        storage_days = st.number_input(
+            "📦 Storage days if sale is delayed",
+            min_value=0,
+            value=7,
+            step=1,
+            key=fpi_key("storage_days")
+        )
+
+        storage_cost_day = st.number_input(
+            f"🏪 Storage cost ({currency_symbol}/ton/day)",
+            min_value=0.0,
+            value=200.0 if current_country == "Nigeria" else 5.0,
+            step=10.0 if current_country == "Nigeria" else 1.0,
+            key=fpi_key("storage_cost")
+        )
+
+    if st.button(
+        "📊 Calculate Farm Indicators",
+        key=fpi_key("calculate"),
+        use_container_width=True
+    ):
+        score = 100.0
+        score -= 0.45 * pest
+        score -= 0.45 * disease
+
+        if 45 <= soil_moist <= 70:
+            score += 5
+        elif soil_moist < 30 or soil_moist > 85:
+            score -= 10
+
+        if ndvi >= 0.70:
+            score += 8
+        elif ndvi >= 0.50:
+            score += 4
+        elif ndvi < 0.30:
+            score -= 12
+
+        score = max(0.0, min(100.0, score))
+
+        if score >= 80:
+            health_status = "Excellent"
+        elif score >= 65:
+            health_status = "Good"
+        elif score >= 45:
+            health_status = "Moderate"
+        else:
+            health_status = "Needs Attention"
+
+        stress_points = 0
+
+        if soil_moist < 30:
+            stress_points += 2
+        elif soil_moist < 45:
+            stress_points += 1
+
+        if temp > 35:
+            stress_points += 2
+        elif temp > 30:
+            stress_points += 1
+
+        if et0 > 6:
+            stress_points += 2
+        elif et0 > 4:
+            stress_points += 1
+
+        if stress_points >= 4:
+            water_level = "High"
+            water_rec = "Irrigation should be prioritised."
+
+        elif stress_points >= 2:
+            water_level = "Moderate"
+            water_rec = "Monitor soil moisture closely."
+
+        else:
+            water_level = "Low"
+            water_rec = "Current indicators do not suggest significant water stress."
+
+        margin_per_ton = price - cost
+        gross_margin = margin_per_ton * expected_yield
+        delay_cost = storage_days * storage_cost_day * expected_yield
+        adjusted_margin = gross_margin - delay_cost
+
+        if margin_per_ton <= 0:
+            market_status = "Needs Attention"
+            market_note = "Current selling price does not cover estimated production cost."
+
+        elif adjusted_margin <= 0:
+            market_status = "High Storage Risk"
+            market_note = "Storage costs could remove the expected profit."
+
+        elif delay_cost > gross_margin * 0.10:
+            market_status = "Moderate"
+            market_note = "Storage costs are reducing the expected margin."
+
+        else:
+            market_status = "Ready"
+            market_note = "Current price and estimated costs indicate a positive selling margin."
+
+        st.divider()
+
+        r1, r2, r3 = st.columns(3)
+
+        with r1:
+            st.metric(
+                "🌿 Field Health Score",
+                f"{score:.1f}/100",
+                health_status
+            )
+
+        with r2:
+            st.metric(
+                "💧 Water Stress",
+                water_level
+            )
+
+        with r3:
+            st.metric(
+                "💹 Market Readiness",
+                market_status
+            )
+
+        st.write("### 🌱 Field Assessment")
+        st.write(f"Health Status: {health_status}")
+        st.write(f"Water Recommendation: {water_rec}")
+
+        st.write("### 💰 Farm Economics")
+
+        e1, e2, e3 = st.columns(3)
+
+        with e1:
+            st.metric(
+                "Margin / Ton",
+                f"{currency_symbol}{margin_per_ton:,.2f}"
+            )
+
+        with e2:
+            st.metric(
+                "Gross Margin",
+                f"{currency_symbol}{gross_margin:,.2f}"
+            )
+
+        with e3:
+            st.metric(
+                "Adjusted Margin",
+                f"{currency_symbol}{adjusted_margin:,.2f}"
+            )
+
+        st.info(market_note)
+
+        rows_key = fpi_key("rows")
+
+        if rows_key not in st.session_state:
+            st.session_state[rows_key] = []
+            st.session_state[rows_key].append({
+            "Timestamp": datetime.now().isoformat(timespec="seconds"),
+            "Farm ID": current_farm_id,
+            "Farm": current_farm_name,
+            "Crop": current_crop,
+            "Location": current_location,
+            "Country": current_country,
+            "Farm Size": current_farm_size,
+            "Pest %": pest,
+            "Disease %": disease,
+            "Soil Moisture %": soil_moist,
+            "NDVI": ndvi,
+            "Temperature °C": temp,
+            "ET0 mm/day": et0,
+            "Expected Yield Tons": expected_yield,
+            f"Price {currency_code}/Ton": price,
+            f"Cost {currency_code}/Ton": cost,
+            "Storage Days": storage_days,
+            f"Storage Cost {currency_code}/Ton/Day": storage_cost_day,
+            "Field Health Score": round(score, 1),
+            "Health Status": health_status,
+            "Water Stress": water_level,
+            f"Margin/Ton {currency_code}": round(margin_per_ton, 2),
+            f"Gross Margin {currency_code}": round(gross_margin, 2),
+            f"Adjusted Margin {currency_code}": round(adjusted_margin, 2),
+            "Market Status": market_status,
+            "Recommendation": market_note,
+        })
+
+        st.success(
+            f"✅ Performance snapshot saved for {current_farm_name}."
+        )
+
+    rows_key = fpi_key("rows")
+    rows = st.session_state.get(rows_key, [])
+
+    if rows:
+        st.divider()
+
+        st.subheader(
+            f"🧾 Performance History — {current_farm_name}"
+        )
+
+        df = pd.DataFrame(rows)
+
+        st.dataframe(
+            df,
+            use_container_width=True
+        )
+
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.download_button(
+                "⬇️ Download CSV",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name=f"{current_farm_name}_farm_performance_indicators.csv",
+                mime="text/csv",
+                key=fpi_key("download"),
+                use_container_width=True
+            )
+
+        with col_b:
+            if st.button(
+                "🧹 Clear Snapshots",
+                key=fpi_key("clear"),
+                use_container_width=True
+            ):
+                st.session_state[rows_key] = []
+                st.rerun()
+
+    else:
+        st.info(
+            "No performance snapshots saved for this farm yet."
+        )
+
 # ============================================================
 # AI PREDICTIONS — UNIFIED FARM-AWARE PLATFORM
 # ============================================================
@@ -10518,129 +10892,12 @@ elif menu_v2 == "🤖 AI Crop Calendar":
 elif menu_v2 == "🧪 AI Predictions":
     ai_predictions_ui()
  
-# =========================
-# ================================
-# 📍 Farm Performance Indicators
-# ================================
-elif menu_v2 in ("📍 Farm Performance Indicators", "📍 Farm performance Indicators"):
-    import pandas as pd
-    from datetime import date, datetime
 
-    st.header("📍 Farm Performance Indicators")
-    st.write("Enter quick field and market info. Click calculate to get health, water stress, and market readiness. Save snapshots for later.")
-
-    # -------- Inputs (namespaced keys) --------
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        pest = st.number_input("Pest incidence (%)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, key="fpi_pest")
-        disease = st.number_input("Disease incidence (%)", min_value=0.0, max_value=100.0, value=8.0, step=1.0, key="fpi_dis")
-        soil_moist = st.number_input("Soil moisture (%)", min_value=0.0, max_value=100.0, value=55.0, step=1.0, key="fpi_sm")
-    with c2:
-        ndvi = st.number_input("Vegetation index (0–1)", min_value=0.0, max_value=1.0, value=0.65, step=0.01, key="fpi_ndvi")
-        temp = st.number_input("Temperature (°C)", min_value=0.0, max_value=60.0, value=32.0, step=0.5, key="fpi_temp")
-        et0 = st.number_input("ET₀ (mm/day)", min_value=0.0, max_value=20.0, value=4.5, step=0.1, key="fpi_et0")
-    with c3:
-        expected_yield = st.number_input("Expected yield (tons)", min_value=0.0, value=5.0, step=0.1, key="fpi_yield")
-        price = st.number_input("Current price (₦/ton)", min_value=0.0, value=250000.0, step=1000.0, key="fpi_price")
-        cost = st.number_input("Cost per ton (₦/ton)", min_value=0.0, value=180000.0, step=1000.0, key="fpi_cost")
-        storage_days = st.number_input("Storage days if delayed", min_value=0, value=7, step=1, key="fpi_store_days")
-        storage_cost_day = st.number_input("Storage cost (₦/ton/day)", min_value=0.0, value=200.0, step=10.0, key="fpi_store_cost")
-
-    # -------- Calculate button --------
-    if st.button("📊 Calculate Indicators", key="fpi_calc"):
-        # Health score (0-100)
-        score = 100.0
-        score -= 0.45 * pest
-        score -= 0.45 * disease
-        score += 0.20 * (soil_moist - 50.0)   # around 50% is neutral
-        score += 12.0 * ndvi
-        score = max(0.0, min(100.0, score))
-
-        # Water stress level
-        stress_points = 0
-        if soil_moist < 30: stress_points += 2
-        elif soil_moist < 45: stress_points += 1
-        if temp > 35: stress_points += 2
-        elif temp > 30: stress_points += 1
-        if et0 > 6: stress_points += 2
-        elif et0 > 4: stress_points += 1
-        if stress_points >= 4:
-            water_level = "High"
-            water_rec = "Irrigate today. Target field capacity, avoid midday heat."
-        elif stress_points >= 2:
-            water_level = "Moderate"
-            water_rec = "Monitor closely, consider evening irrigation."
-        else:
-            water_level = "Low"
-            water_rec = "No irrigation required now."
-
-        # Market readiness
-        margin_per_ton = price - cost
-        gross_margin = margin_per_ton * expected_yield
-        delay_cost = storage_days * storage_cost_day * expected_yield
-        adj_margin = gross_margin - delay_cost
-        if margin_per_ton <= 0:
-            market_note = "Unprofitable at current price. Improve price or reduce cost."
-        elif adj_margin > gross_margin * 0.95:
-            market_note = "Ready to sell. Good margins and low storage drag."
-        else:
-            market_note = "Viable, but storage drag is notable. Recheck in a few days."
-
-        # Show results
-        st.success(f"🌿 Field Health Score: **{score:.1f}/100**")
-        st.info(f"💧 Water Stress Level: **{water_level}** — {water_rec}")
-        st.success(f"💹 Margin/ton: **₦{margin_per_ton:,.0f}**, Gross Margin: **₦{gross_margin:,.0f}**, Adj. Margin: **₦{adj_margin:,.0f}**")
-        st.caption(market_note)
-
-        # Save snapshot
-        rows_key = "fpi_rows"
-        if rows_key not in st.session_state:
-            st.session_state[rows_key] = []
-        st.session_state[rows_key].append({
-            "Timestamp": datetime.now().isoformat(timespec="seconds"),
-            "Pest%": pest,
-            "Disease%": disease,
-            "SoilMoist%": soil_moist,
-            "NDVI": ndvi,
-            "TempC": temp,
-            "ET0": et0,
-            "YieldTons": expected_yield,
-            "PriceNperTon": price,
-            "CostNperTon": cost,
-            "StorageDays": storage_days,
-            "StorageCostPerTonDay": storage_cost_day,
-            "HealthScore": round(score, 1),
-            "WaterLevel": water_level,
-            "MarginPerTon": margin_per_ton,
-            "GrossMargin": gross_margin,
-            "AdjMargin": adj_margin,
-            "Note": market_note,
-        })
-        st.success("✅ Snapshot saved.")
-
-    # -------- Saved snapshots + export / clear --------
-    rows = st.session_state.get("fpi_rows", [])
-    if rows:
-        st.subheader("🧾 Saved Indicator Snapshots")
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True)
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.download_button(
-                "⬇️ Download CSV",
-                df.to_csv(index=False).encode("utf-8"),
-                file_name="farm_performance_indicators.csv",
-                mime="text/csv",
-                key="fpi_dl"
-            )
-        with col_b:
-            if st.button("🧹 Clear Snapshots", key="fpi_clear"):
-                      st.rerun()
-    else:
-        st.info("No snapshots saved yet. Calculate an indicator and click \"Save Snapshot\".")
-
-
+elif menu_v2 in (
+    "📍 Farm Performance Indicators",
+    "📍 Farm performance Indicators"
+):
+    farm_performance_indicators_ui()
 
 # ==================================
 # ================================# ================================
