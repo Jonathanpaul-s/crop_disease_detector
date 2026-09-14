@@ -6982,8 +6982,7 @@ elif menu == "📊 Productivity & Records":
 
 
 elif menu == "🧠 AI Predictions":
-
-    ai_predictions_ui()
+    pass
 
 
 
