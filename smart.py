@@ -5813,8 +5813,6 @@ menu = st.sidebar.selectbox(
 
         "📊 Productivity & Records",
 
-        "🧠 AI Predictions",
-
         "💧 Irrigation & Soil",
 
         "💹 Market & Finance",
@@ -6981,8 +6979,6 @@ elif menu == "📊 Productivity & Records":
     
 
 
-elif menu == "🧠 AI Predictions":
-    pass
 
 
 
