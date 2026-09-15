@@ -7009,6 +7009,810 @@ def market_economic_tools_ui():
             "or Break-even Calculator above."
         )
 
+
+# farm lot management 
+def farm_lot_management_ui():
+    import streamlit as st
+    import pandas as pd
+    import uuid
+    from datetime import date
+
+    # =========================================================
+    # CURRENT FARM CONTEXT
+    # =========================================================
+    current_farm = st.session_state.get("current_farm", {}) or {}
+    personalized_profile = st.session_state.get("personalized_profile", {}) or {}
+    farmer_profile = st.session_state.get("farmer_profile", {}) or {}
+
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or "main_farm"
+    )
+
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or "Main Farm"
+    )
+
+    farm_crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or "Not selected"
+    )
+
+    location = (
+        current_farm.get("location")
+        or personalized_profile.get("location")
+        or farmer_profile.get("location")
+        or "Not selected"
+    )
+
+    country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Not selected"
+    )
+
+    st.header("📍 Farm Lot Management")
+
+    st.info(
+        f"🌾 Current Farm: {farm_name} | "
+        f"Crop: {farm_crop} | "
+        f"Location: {location} | "
+        f"Country: {country}"
+    )
+
+    st.write(
+        "Create and manage individual lots or field sections "
+        "belonging to the selected farm."
+    )
+
+    # =========================================================
+    # FARM-SPECIFIC KEYS
+    # =========================================================
+    def lk(name):
+        return f"farm_lot_{farm_id}_{name}"
+
+    rows_key = lk("rows")
+    active_key = lk("active_tool")
+
+    if rows_key not in st.session_state:
+        st.session_state[rows_key] = []
+
+    if active_key not in st.session_state:
+        st.session_state[active_key] = None
+
+    # =========================================================
+    # SUMMARY
+    # =========================================================
+    lots = st.session_state[rows_key]
+
+    total_area = sum(
+        float(item.get("Area (ha)", 0) or 0)
+        for item in lots
+    )
+
+    planted_lots = sum(
+        1
+        for item in lots
+        if item.get("Status") == "Planted"
+    )
+
+    m1, m2, m3 = st.columns(3)
+
+    m1.metric(
+        "Total Lots",
+        len(lots)
+    )
+
+    m2.metric(
+        "Total Lot Area",
+        f"{total_area:.2f} ha"
+    )
+
+    m3.metric(
+        "Planted Lots",
+        planted_lots
+    )
+
+    # =========================================================
+    # TOOL BUTTONS
+    # =========================================================
+    c1, c2, c3, c4 = st.columns(
+        [1.5, 1.8, 2.0, 0.9]
+    )
+
+    with c1:
+        if st.button(
+            "➕ Add Lot",
+            key=lk("btn_add"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = "add"
+
+    with c2:
+        if st.button(
+            "📋 View / Edit Lots",
+            key=lk("btn_view"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = "view"
+
+    with c3:
+        if st.button(
+            "📤 Export / 📥 Import",
+            key=lk("btn_io"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = "io"
+
+    with c4:
+        if st.button(
+            "🔄 Reset",
+            key=lk("btn_reset"),
+            use_container_width=True
+        ):
+            st.session_state[active_key] = None
+            st.rerun()
+
+    tool = st.session_state[active_key]
+
+    # =========================================================
+    # ADD LOT
+    # =========================================================
+    if tool == "add":
+        st.subheader("➕ Add New Lot")
+
+        with st.form(
+            lk("form_add"),
+            clear_on_submit=True
+        ):
+            cA, cB, cC = st.columns(3)
+
+            with cA:
+                name = st.text_input(
+                    "Lot Name",
+                    key=lk("name")
+                )
+
+            with cB:
+                area = st.number_input(
+                    "Area (ha)",
+                    min_value=0.0,
+                    step=0.1,
+                    key=lk("area")
+                )
+
+            with cC:
+                status = st.selectbox(
+                    "Status",
+                    [
+                        "Fallow",
+                        "Prepared",
+                        "Planted",
+                        "Harvested"
+                    ],
+                    key=lk("status")
+                )
+
+            cD, cE = st.columns(2)
+
+            with cD:
+                crop = st.text_input(
+                    "Crop",
+                    value=(
+                        ""
+                        if farm_crop == "Not selected"
+                        else str(farm_crop)
+                    ),
+                    key=lk("crop")
+                )
+
+            with cE:
+                gps = st.text_input(
+                    "GPS (lat, lon)",
+                    placeholder="Example: 5.6037, 5.9314",
+                    key=lk("gps")
+                )
+
+            notes = st.text_area(
+                "Notes",
+                key=lk("notes")
+            )
+
+            submitted = st.form_submit_button(
+                "💾 Save Lot",
+                use_container_width=True
+            )
+
+        if submitted:
+            clean_name = name.strip()
+
+            if not clean_name:
+                st.warning(
+                    "Please enter a lot name."
+                )
+
+            elif area <= 0:
+                st.warning(
+                    "Lot area must be greater than 0 hectares."
+                )
+
+            else:
+                duplicate_name = any(
+                    str(item.get("Name", "")).strip().lower()
+                    == clean_name.lower()
+                    for item in st.session_state[rows_key]
+                )
+
+                if duplicate_name:
+                    st.warning(
+                        "A lot with this name already exists "
+                        "for the current farm."
+                    )
+
+                else:
+                    st.session_state[rows_key].append(
+                        {
+                            "ID": str(uuid.uuid4())[:8],
+                            "Farm ID": farm_id,
+                            "Farm Name": farm_name,
+                            "Name": clean_name,
+                            "Area (ha)": float(area),
+                            "Status": status,
+                            "Crop": crop.strip(),
+                            "GPS": gps.strip(),
+                            "Notes": notes.strip(),
+                            "Added": date.today().isoformat()
+                        }
+                    )
+
+                    st.success(
+                        f"✅ Lot '{clean_name}' saved "
+                        f"under {farm_name}."
+                    )
+
+    # =========================================================
+    # VIEW / EDIT LOTS
+    # =========================================================
+    elif tool == "view":
+        lots = st.session_state.get(
+            rows_key,
+            []
+        )
+
+        if lots:
+            st.subheader("📋 Farm Lots")
+
+            df = pd.DataFrame(lots)
+
+            f1, f2, f3 = st.columns(
+                [1.6, 1.6, 1]
+            )
+
+            with f1:
+                q = st.text_input(
+                    "Search (name or crop)",
+                    key=lk("q")
+                )
+
+            with f2:
+                f_status = st.multiselect(
+                    "Status Filter",
+                    [
+                        "Fallow",
+                        "Prepared",
+                        "Planted",
+                        "Harvested"
+                    ],
+                    key=lk("f_status")
+                )
+
+            with f3:
+                min_area = st.number_input(
+                    "Min Area (ha)",
+                    min_value=0.0,
+                    step=0.1,
+                    key=lk("min_area")
+                )
+
+            mask = pd.Series(
+                True,
+                index=df.index
+            )
+
+            if q:
+                query = q.strip()
+
+                mask &= (
+                    df["Name"]
+                    .fillna("")
+                    .astype(str)
+                    .str.contains(
+                        query,
+                        case=False,
+                        regex=False
+                    )
+                    |
+                    df["Crop"]
+                    .fillna("")
+                    .astype(str)
+                    .str.contains(
+                        query,
+                        case=False,
+                        regex=False
+                    )
+                )
+
+            if f_status:
+                mask &= df["Status"].isin(
+                    f_status
+                )
+
+            if min_area > 0:
+                mask &= (
+                    pd.to_numeric(
+                        df["Area (ha)"],
+                        errors="coerce"
+                    ).fillna(0)
+                    >= min_area
+                )
+
+            view_df = df[mask].copy()
+
+            if not view_df.empty:
+                st.dataframe(
+                    view_df,
+                    use_container_width=True
+                )
+
+                st.divider()
+
+                st.subheader("✏️ Edit / Delete")
+
+                statuses = [
+                    "Fallow",
+                    "Prepared",
+                    "Planted",
+                    "Harvested"
+                ]
+
+                for _, row in view_df.iterrows():
+                    row_id = str(row["ID"])
+
+                    current_status = str(
+                        row.get(
+                            "Status",
+                            "Fallow"
+                        )
+                    )
+
+                    if current_status not in statuses:
+                        current_status = "Fallow"
+
+                    with st.expander(
+                        f"📌 {row['Name']} • "
+                        f"{row['Area (ha)']} ha • "
+                        f"{current_status}"
+                    ):
+                        c1, c2, c3 = st.columns(3)
+
+                        with c1:
+                            new_status = st.selectbox(
+                                "Status",
+                                statuses,
+                                index=statuses.index(
+                                    current_status
+                                ),
+                                key=lk(
+                                    f"st_{row_id}"
+                                )
+                            )
+
+                        with c2:
+                            new_area = st.number_input(
+                                "Area (ha)",
+                                min_value=0.0,
+                                step=0.1,
+                                value=float(
+                                    row.get(
+                                        "Area (ha)",
+                                        0
+                                    )
+                                ),
+                                key=lk(
+                                    f"ar_{row_id}"
+                                )
+                            )
+
+                        with c3:
+                            new_crop = st.text_input(
+                                "Crop",
+                                value=str(
+                                    row.get(
+                                        "Crop",
+                                        ""
+                                    )
+                                ),
+                                key=lk(
+                                    f"cr_{row_id}"
+                                )
+                            )
+
+                        g1, g2 = st.columns(2)
+                        with g1:
+                            new_gps = st.text_input(
+                                "GPS (lat, lon)",
+                                value=str(
+                                    row.get(
+                                        "GPS",
+                                        ""
+                                    )
+                                ),
+                                key=lk(
+                                    f"gps_{row_id}"
+                                )
+                            )
+
+                        with g2:
+                            new_notes = st.text_area(
+                                "Notes",
+                                value=str(
+                                    row.get(
+                                        "Notes",
+                                        ""
+                                    )
+                                ),
+                                key=lk(
+                                    f"nt_{row_id}"
+                                )
+                            )
+
+                        s1, s2 = st.columns(2)
+
+                        with s1:
+                            if st.button(
+                                "💾 Save",
+                                key=lk(
+                                    f"save_{row_id}"
+                                ),
+                                use_container_width=True
+                            ):
+                                if new_area <= 0:
+                                    st.warning(
+                                        "Lot area must be "
+                                        "greater than 0."
+                                    )
+
+                                else:
+                                    for item in st.session_state[
+                                        rows_key
+                                    ]:
+                                        if str(
+                                            item.get("ID")
+                                        ) == row_id:
+
+                                            item["Status"] = (
+                                                new_status
+                                            )
+
+                                            item["Area (ha)"] = (
+                                                float(new_area)
+                                            )
+
+                                            item["Crop"] = (
+                                                new_crop.strip()
+                                            )
+
+                                            item["GPS"] = (
+                                                new_gps.strip()
+                                            )
+
+                                            item["Notes"] = (
+                                                new_notes.strip()
+                                            )
+
+                                            break
+
+                                    st.success(
+                                        "✅ Lot updated."
+                                    )
+
+                                    st.rerun()
+
+                        with s2:
+                            if st.button(
+                                "🗑 Delete",
+                                key=lk(
+                                    f"del_{row_id}"
+                                ),
+                                use_container_width=True
+                            ):
+                                st.session_state[
+                                    rows_key
+                                ] = [
+                                    item
+                                    for item
+                                    in st.session_state[
+                                        rows_key
+                                    ]
+                                    if str(
+                                        item.get("ID")
+                                    ) != row_id
+                                ]
+                                st.success(
+                                    "Lot deleted."
+                                )
+
+                                st.rerun()
+
+            else:
+                st.info(
+                    "No lots match the selected filters."
+                )
+
+        else:
+            st.info(
+                "No lots yet. Add one first."
+            )
+
+    # =========================================================
+    # EXPORT / IMPORT
+    # =========================================================
+    elif tool == "io":
+        st.subheader("📤 Export / 📥 Import")
+
+        lots = st.session_state.get(
+            rows_key,
+            []
+        )
+
+        columns = [
+            "ID",
+            "Farm ID",
+            "Farm Name",
+            "Name",
+            "Area (ha)",
+            "Status",
+            "Crop",
+            "GPS",
+            "Notes",
+            "Added"
+        ]
+
+        if lots:
+            df = pd.DataFrame(lots)
+
+            for column in columns:
+                if column not in df.columns:
+                    df[column] = ""
+
+            df = df[columns]
+
+        else:
+            df = pd.DataFrame(
+                columns=columns
+            )
+
+        safe_farm_name = "".join(
+            ch if ch.isalnum() or ch in ("-", "_")
+            else "_"
+            for ch in farm_name
+        )
+
+        st.download_button(
+            "⬇️ Download Lots CSV",
+            data=df.to_csv(
+                index=False
+            ).encode("utf-8"),
+            file_name=(
+                f"{safe_farm_name}_farm_lots.csv"
+            ),
+            mime="text/csv",
+            key=lk("download")
+        )
+
+        st.divider()
+
+        uploaded = st.file_uploader(
+            "Upload Lots CSV",
+            type=["csv"],
+            key=lk("upload")
+        )
+
+        if uploaded is not None:
+            try:
+                imp = pd.read_csv(
+                    uploaded
+                )
+
+                required = {
+                    "Name",
+                    "Area (ha)",
+                    "Status",
+                    "Crop",
+                    "GPS",
+                    "Notes"
+                }
+
+                if not required.issubset(
+                    imp.columns
+                ):
+                    st.warning(
+                        "CSV must include columns: "
+                        + ", ".join(
+                            sorted(required)
+                        )
+                    )
+
+                else:
+                    valid_statuses = {
+                        "Fallow",
+                        "Prepared",
+                        "Planted",
+                        "Harvested"
+                    }
+
+                    preview = imp.copy()
+
+                    st.write("Import Preview")
+
+                    st.dataframe(
+                        preview,
+                        use_container_width=True
+                    )
+
+                    if st.button(
+                        "📥 Import Lots",
+                        key=lk("confirm_import"),
+                        use_container_width=True
+                    ):
+                        count = 0
+                        skipped = 0
+
+                        existing_names = {
+                            str(
+                                item.get(
+                                    "Name",
+                                    ""
+                                )
+                            ).strip().lower()
+                            for item
+                            in st.session_state[
+                                rows_key
+                            ]
+                        }
+
+                        for _, row in imp.iterrows():
+                            lot_name = str(
+                                row.get(
+                                    "Name",
+                                    ""
+                                )
+                            ).strip()
+
+                            try:
+                                lot_area = float(
+                                    row.get(
+                                        "Area (ha)",
+                                        0
+                                    )
+                                )
+                            except (TypeError, ValueError):
+                                lot_area = 0.0
+
+                            lot_status = str(
+                                row.get(
+                                    "Status",
+                                    "Fallow"
+                                )
+                            ).strip()
+
+                            if (
+                                not lot_name
+                                or lot_area <= 0
+                                or lot_name.lower()
+                                in existing_names
+                            ):
+                                skipped += 1
+                                continue
+
+                            if (
+                                lot_status
+                                not in valid_statuses
+                            ):
+                                lot_status = "Fallow"
+
+                            st.session_state[
+                                rows_key
+                            ].append(
+                                {
+                                    "ID": str(
+                                        uuid.uuid4()
+                                    )[:8],
+
+                                    "Farm ID": farm_id,
+                                    "Farm Name": farm_name,
+
+                                    "Name": lot_name,
+
+                                    "Area (ha)": (
+                                        lot_area
+                                    ),
+
+                                    "Status": (
+                                        lot_status
+                                    ),
+
+                                    "Crop": str(
+                                        row.get(
+                                            "Crop",
+                                            ""
+                                        )
+                                    ).strip(),
+
+                                    "GPS": str(
+                                        row.get(
+                                            "GPS",
+                                            ""
+                                        )
+                                    ).strip(),
+
+                                    "Notes": str(
+                                        row.get(
+                                            "Notes",
+                                            ""
+                                        )
+                                    ).strip(),
+
+                                    "Added": (
+                                        date.today()
+                                        .isoformat()
+                                    )
+                                }
+                            )
+
+                            existing_names.add(
+                                lot_name.lower()
+                            )
+
+                            count += 1
+
+                        st.success(
+                            f"✅ Imported {count} lot(s)."
+                        )
+
+                        if skipped:
+                            st.info(
+                                f"{skipped} invalid or "
+                                "duplicate lot(s) were skipped."
+                            )
+
+                        st.rerun()
+
+            except Exception as e:
+                st.error(
+                    f"❌ Import failed: {e}"
+                )
+                # =========================================================
+    # DEFAULT
+    # =========================================================
+    else:
+        st.info(
+            "Choose an action above to manage "
+            "the lots belonging to the current farm."
+        )
+
+    st.caption(
+        "🟡 Farm Lot Management is connected to Current Farm. "
+        "GPS mapping, field boundaries, PA, CIG, sensor and "
+        "satellite intelligence can be connected during final integration."
+    )
+
+
 # ================================
 # 📚 AI Farm Tips
 # ================================
@@ -13799,808 +14603,6 @@ def _init_state():
 
 _init_state()
 
-
-# farm lot management 
-def farm_lot_management_ui():
-    import streamlit as st
-    import pandas as pd
-    import uuid
-    from datetime import date
-
-    # =========================================================
-    # CURRENT FARM CONTEXT
-    # =========================================================
-    current_farm = st.session_state.get("current_farm", {}) or {}
-    personalized_profile = st.session_state.get("personalized_profile", {}) or {}
-    farmer_profile = st.session_state.get("farmer_profile", {}) or {}
-
-    farm_id = str(
-        st.session_state.get("current_farm_id")
-        or current_farm.get("farm_id")
-        or "main_farm"
-    )
-
-    farm_name = (
-        current_farm.get("farm_name")
-        or current_farm.get("name")
-        or "Main Farm"
-    )
-
-    farm_crop = (
-        current_farm.get("crop_type")
-        or current_farm.get("crop")
-        or "Not selected"
-    )
-
-    location = (
-        current_farm.get("location")
-        or personalized_profile.get("location")
-        or farmer_profile.get("location")
-        or "Not selected"
-    )
-
-    country = (
-        current_farm.get("country")
-        or personalized_profile.get("country")
-        or farmer_profile.get("country")
-        or "Not selected"
-    )
-
-    st.header("📍 Farm Lot Management")
-
-    st.info(
-        f"🌾 Current Farm: {farm_name} | "
-        f"Crop: {farm_crop} | "
-        f"Location: {location} | "
-        f"Country: {country}"
-    )
-
-    st.write(
-        "Create and manage individual lots or field sections "
-        "belonging to the selected farm."
-    )
-
-    # =========================================================
-    # FARM-SPECIFIC KEYS
-    # =========================================================
-    def lk(name):
-        return f"farm_lot_{farm_id}_{name}"
-
-    rows_key = lk("rows")
-    active_key = lk("active_tool")
-
-    if rows_key not in st.session_state:
-        st.session_state[rows_key] = []
-
-    if active_key not in st.session_state:
-        st.session_state[active_key] = None
-
-    # =========================================================
-    # SUMMARY
-    # =========================================================
-    lots = st.session_state[rows_key]
-
-    total_area = sum(
-        float(item.get("Area (ha)", 0) or 0)
-        for item in lots
-    )
-
-    planted_lots = sum(
-        1
-        for item in lots
-        if item.get("Status") == "Planted"
-    )
-
-    m1, m2, m3 = st.columns(3)
-
-    m1.metric(
-        "Total Lots",
-        len(lots)
-    )
-
-    m2.metric(
-        "Total Lot Area",
-        f"{total_area:.2f} ha"
-    )
-
-    m3.metric(
-        "Planted Lots",
-        planted_lots
-    )
-
-    # =========================================================
-    # TOOL BUTTONS
-    # =========================================================
-    c1, c2, c3, c4 = st.columns(
-        [1.5, 1.8, 2.0, 0.9]
-    )
-
-    with c1:
-        if st.button(
-            "➕ Add Lot",
-            key=lk("btn_add"),
-            use_container_width=True
-        ):
-            st.session_state[active_key] = "add"
-
-    with c2:
-        if st.button(
-            "📋 View / Edit Lots",
-            key=lk("btn_view"),
-            use_container_width=True
-        ):
-            st.session_state[active_key] = "view"
-
-    with c3:
-        if st.button(
-            "📤 Export / 📥 Import",
-            key=lk("btn_io"),
-            use_container_width=True
-        ):
-            st.session_state[active_key] = "io"
-
-    with c4:
-        if st.button(
-            "🔄 Reset",
-            key=lk("btn_reset"),
-            use_container_width=True
-        ):
-            st.session_state[active_key] = None
-            st.rerun()
-
-    tool = st.session_state[active_key]
-
-    # =========================================================
-    # ADD LOT
-    # =========================================================
-    if tool == "add":
-        st.subheader("➕ Add New Lot")
-
-        with st.form(
-            lk("form_add"),
-            clear_on_submit=True
-        ):
-            cA, cB, cC = st.columns(3)
-
-            with cA:
-                name = st.text_input(
-                    "Lot Name",
-                    key=lk("name")
-                )
-
-            with cB:
-                area = st.number_input(
-                    "Area (ha)",
-                    min_value=0.0,
-                    step=0.1,
-                    key=lk("area")
-                )
-
-            with cC:
-                status = st.selectbox(
-                    "Status",
-                    [
-                        "Fallow",
-                        "Prepared",
-                        "Planted",
-                        "Harvested"
-                    ],
-                    key=lk("status")
-                )
-
-            cD, cE = st.columns(2)
-
-            with cD:
-                crop = st.text_input(
-                    "Crop",
-                    value=(
-                        ""
-                        if farm_crop == "Not selected"
-                        else str(farm_crop)
-                    ),
-                    key=lk("crop")
-                )
-
-            with cE:
-                gps = st.text_input(
-                    "GPS (lat, lon)",
-                    placeholder="Example: 5.6037, 5.9314",
-                    key=lk("gps")
-                )
-
-            notes = st.text_area(
-                "Notes",
-                key=lk("notes")
-            )
-
-            submitted = st.form_submit_button(
-                "💾 Save Lot",
-                use_container_width=True
-            )
-
-        if submitted:
-            clean_name = name.strip()
-
-            if not clean_name:
-                st.warning(
-                    "Please enter a lot name."
-                )
-
-            elif area <= 0:
-                st.warning(
-                    "Lot area must be greater than 0 hectares."
-                )
-
-            else:
-                duplicate_name = any(
-                    str(item.get("Name", "")).strip().lower()
-                    == clean_name.lower()
-                    for item in st.session_state[rows_key]
-                )
-
-                if duplicate_name:
-                    st.warning(
-                        "A lot with this name already exists "
-                        "for the current farm."
-                    )
-
-                else:
-                    st.session_state[rows_key].append(
-                        {
-                            "ID": str(uuid.uuid4())[:8],
-                            "Farm ID": farm_id,
-                            "Farm Name": farm_name,
-                            "Name": clean_name,
-                            "Area (ha)": float(area),
-                            "Status": status,
-                            "Crop": crop.strip(),
-                            "GPS": gps.strip(),
-                            "Notes": notes.strip(),
-                            "Added": date.today().isoformat()
-                        }
-                    )
-
-                    st.success(
-                        f"✅ Lot '{clean_name}' saved "
-                        f"under {farm_name}."
-                    )
-
-    # =========================================================
-    # VIEW / EDIT LOTS
-    # =========================================================
-    elif tool == "view":
-        lots = st.session_state.get(
-            rows_key,
-            []
-        )
-
-        if lots:
-            st.subheader("📋 Farm Lots")
-
-            df = pd.DataFrame(lots)
-
-            f1, f2, f3 = st.columns(
-                [1.6, 1.6, 1]
-            )
-
-            with f1:
-                q = st.text_input(
-                    "Search (name or crop)",
-                    key=lk("q")
-                )
-
-            with f2:
-                f_status = st.multiselect(
-                    "Status Filter",
-                    [
-                        "Fallow",
-                        "Prepared",
-                        "Planted",
-                        "Harvested"
-                    ],
-                    key=lk("f_status")
-                )
-
-            with f3:
-                min_area = st.number_input(
-                    "Min Area (ha)",
-                    min_value=0.0,
-                    step=0.1,
-                    key=lk("min_area")
-                )
-
-            mask = pd.Series(
-                True,
-                index=df.index
-            )
-
-            if q:
-                query = q.strip()
-
-                mask &= (
-                    df["Name"]
-                    .fillna("")
-                    .astype(str)
-                    .str.contains(
-                        query,
-                        case=False,
-                        regex=False
-                    )
-                    |
-                    df["Crop"]
-                    .fillna("")
-                    .astype(str)
-                    .str.contains(
-                        query,
-                        case=False,
-                        regex=False
-                    )
-                )
-
-            if f_status:
-                mask &= df["Status"].isin(
-                    f_status
-                )
-
-            if min_area > 0:
-                mask &= (
-                    pd.to_numeric(
-                        df["Area (ha)"],
-                        errors="coerce"
-                    ).fillna(0)
-                    >= min_area
-                )
-
-            view_df = df[mask].copy()
-
-            if not view_df.empty:
-                st.dataframe(
-                    view_df,
-                    use_container_width=True
-                )
-
-                st.divider()
-
-                st.subheader("✏️ Edit / Delete")
-
-                statuses = [
-                    "Fallow",
-                    "Prepared",
-                    "Planted",
-                    "Harvested"
-                ]
-
-                for _, row in view_df.iterrows():
-                    row_id = str(row["ID"])
-
-                    current_status = str(
-                        row.get(
-                            "Status",
-                            "Fallow"
-                        )
-                    )
-
-                    if current_status not in statuses:
-                        current_status = "Fallow"
-
-                    with st.expander(
-                        f"📌 {row['Name']} • "
-                        f"{row['Area (ha)']} ha • "
-                        f"{current_status}"
-                    ):
-                        c1, c2, c3 = st.columns(3)
-
-                        with c1:
-                            new_status = st.selectbox(
-                                "Status",
-                                statuses,
-                                index=statuses.index(
-                                    current_status
-                                ),
-                                key=lk(
-                                    f"st_{row_id}"
-                                )
-                            )
-
-                        with c2:
-                            new_area = st.number_input(
-                                "Area (ha)",
-                                min_value=0.0,
-                                step=0.1,
-                                value=float(
-                                    row.get(
-                                        "Area (ha)",
-                                        0
-                                    )
-                                ),
-                                key=lk(
-                                    f"ar_{row_id}"
-                                )
-                            )
-
-                        with c3:
-                            new_crop = st.text_input(
-                                "Crop",
-                                value=str(
-                                    row.get(
-                                        "Crop",
-                                        ""
-                                    )
-                                ),
-                                key=lk(
-                                    f"cr_{row_id}"
-                                )
-                            )
-
-                        g1, g2 = st.columns(2)
-                        with g1:
-                            new_gps = st.text_input(
-                                "GPS (lat, lon)",
-                                value=str(
-                                    row.get(
-                                        "GPS",
-                                        ""
-                                    )
-                                ),
-                                key=lk(
-                                    f"gps_{row_id}"
-                                )
-                            )
-
-                        with g2:
-                            new_notes = st.text_area(
-                                "Notes",
-                                value=str(
-                                    row.get(
-                                        "Notes",
-                                        ""
-                                    )
-                                ),
-                                key=lk(
-                                    f"nt_{row_id}"
-                                )
-                            )
-
-                        s1, s2 = st.columns(2)
-
-                        with s1:
-                            if st.button(
-                                "💾 Save",
-                                key=lk(
-                                    f"save_{row_id}"
-                                ),
-                                use_container_width=True
-                            ):
-                                if new_area <= 0:
-                                    st.warning(
-                                        "Lot area must be "
-                                        "greater than 0."
-                                    )
-
-                                else:
-                                    for item in st.session_state[
-                                        rows_key
-                                    ]:
-                                        if str(
-                                            item.get("ID")
-                                        ) == row_id:
-
-                                            item["Status"] = (
-                                                new_status
-                                            )
-
-                                            item["Area (ha)"] = (
-                                                float(new_area)
-                                            )
-
-                                            item["Crop"] = (
-                                                new_crop.strip()
-                                            )
-
-                                            item["GPS"] = (
-                                                new_gps.strip()
-                                            )
-
-                                            item["Notes"] = (
-                                                new_notes.strip()
-                                            )
-
-                                            break
-
-                                    st.success(
-                                        "✅ Lot updated."
-                                    )
-
-                                    st.rerun()
-
-                        with s2:
-                            if st.button(
-                                "🗑 Delete",
-                                key=lk(
-                                    f"del_{row_id}"
-                                ),
-                                use_container_width=True
-                            ):
-                                st.session_state[
-                                    rows_key
-                                ] = [
-                                    item
-                                    for item
-                                    in st.session_state[
-                                        rows_key
-                                    ]
-                                    if str(
-                                        item.get("ID")
-                                    ) != row_id
-                                ]
-                                st.success(
-                                    "Lot deleted."
-                                )
-
-                                st.rerun()
-
-            else:
-                st.info(
-                    "No lots match the selected filters."
-                )
-
-        else:
-            st.info(
-                "No lots yet. Add one first."
-            )
-
-    # =========================================================
-    # EXPORT / IMPORT
-    # =========================================================
-    elif tool == "io":
-        st.subheader("📤 Export / 📥 Import")
-
-        lots = st.session_state.get(
-            rows_key,
-            []
-        )
-
-        columns = [
-            "ID",
-            "Farm ID",
-            "Farm Name",
-            "Name",
-            "Area (ha)",
-            "Status",
-            "Crop",
-            "GPS",
-            "Notes",
-            "Added"
-        ]
-
-        if lots:
-            df = pd.DataFrame(lots)
-
-            for column in columns:
-                if column not in df.columns:
-                    df[column] = ""
-
-            df = df[columns]
-
-        else:
-            df = pd.DataFrame(
-                columns=columns
-            )
-
-        safe_farm_name = "".join(
-            ch if ch.isalnum() or ch in ("-", "_")
-            else "_"
-            for ch in farm_name
-        )
-
-        st.download_button(
-            "⬇️ Download Lots CSV",
-            data=df.to_csv(
-                index=False
-            ).encode("utf-8"),
-            file_name=(
-                f"{safe_farm_name}_farm_lots.csv"
-            ),
-            mime="text/csv",
-            key=lk("download")
-        )
-
-        st.divider()
-
-        uploaded = st.file_uploader(
-            "Upload Lots CSV",
-            type=["csv"],
-            key=lk("upload")
-        )
-
-        if uploaded is not None:
-            try:
-                imp = pd.read_csv(
-                    uploaded
-                )
-
-                required = {
-                    "Name",
-                    "Area (ha)",
-                    "Status",
-                    "Crop",
-                    "GPS",
-                    "Notes"
-                }
-
-                if not required.issubset(
-                    imp.columns
-                ):
-                    st.warning(
-                        "CSV must include columns: "
-                        + ", ".join(
-                            sorted(required)
-                        )
-                    )
-
-                else:
-                    valid_statuses = {
-                        "Fallow",
-                        "Prepared",
-                        "Planted",
-                        "Harvested"
-                    }
-
-                    preview = imp.copy()
-
-                    st.write("Import Preview")
-
-                    st.dataframe(
-                        preview,
-                        use_container_width=True
-                    )
-
-                    if st.button(
-                        "📥 Import Lots",
-                        key=lk("confirm_import"),
-                        use_container_width=True
-                    ):
-                        count = 0
-                        skipped = 0
-
-                        existing_names = {
-                            str(
-                                item.get(
-                                    "Name",
-                                    ""
-                                )
-                            ).strip().lower()
-                            for item
-                            in st.session_state[
-                                rows_key
-                            ]
-                        }
-
-                        for _, row in imp.iterrows():
-                            lot_name = str(
-                                row.get(
-                                    "Name",
-                                    ""
-                                )
-                            ).strip()
-
-                            try:
-                                lot_area = float(
-                                    row.get(
-                                        "Area (ha)",
-                                        0
-                                    )
-                                )
-                            except (TypeError, ValueError):
-                                lot_area = 0.0
-
-                            lot_status = str(
-                                row.get(
-                                    "Status",
-                                    "Fallow"
-                                )
-                            ).strip()
-
-                            if (
-                                not lot_name
-                                or lot_area <= 0
-                                or lot_name.lower()
-                                in existing_names
-                            ):
-                                skipped += 1
-                                continue
-
-                            if (
-                                lot_status
-                                not in valid_statuses
-                            ):
-                                lot_status = "Fallow"
-
-                            st.session_state[
-                                rows_key
-                            ].append(
-                                {
-                                    "ID": str(
-                                        uuid.uuid4()
-                                    )[:8],
-
-                                    "Farm ID": farm_id,
-                                    "Farm Name": farm_name,
-
-                                    "Name": lot_name,
-
-                                    "Area (ha)": (
-                                        lot_area
-                                    ),
-
-                                    "Status": (
-                                        lot_status
-                                    ),
-
-                                    "Crop": str(
-                                        row.get(
-                                            "Crop",
-                                            ""
-                                        )
-                                    ).strip(),
-
-                                    "GPS": str(
-                                        row.get(
-                                            "GPS",
-                                            ""
-                                        )
-                                    ).strip(),
-
-                                    "Notes": str(
-                                        row.get(
-                                            "Notes",
-                                            ""
-                                        )
-                                    ).strip(),
-
-                                    "Added": (
-                                        date.today()
-                                        .isoformat()
-                                    )
-                                }
-                            )
-
-                            existing_names.add(
-                                lot_name.lower()
-                            )
-
-                            count += 1
-
-                        st.success(
-                            f"✅ Imported {count} lot(s)."
-                        )
-
-                        if skipped:
-                            st.info(
-                                f"{skipped} invalid or "
-                                "duplicate lot(s) were skipped."
-                            )
-
-                        st.rerun()
-
-            except Exception as e:
-                st.error(
-                    f"❌ Import failed: {e}"
-                )
-                # =========================================================
-    # DEFAULT
-    # =========================================================
-    else:
-        st.info(
-            "Choose an action above to manage "
-            "the lots belonging to the current farm."
-        )
-
-    st.caption(
-        "🟡 Farm Lot Management is connected to Current Farm. "
-        "GPS mapping, field boundaries, PA, CIG, sensor and "
-        "satellite intelligence can be connected during final integration."
-    )
 
 
 # =========================
