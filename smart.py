@@ -3407,6 +3407,445 @@ def drone_irrigation_assistant_ui_impl():
     for line in S["log"][-200:]:
         st.write("•", line)
 
+
+# ==========================================
+# 💦 IRRIGATION SCHEDULER
+# ==========================================
+
+def irrigation_scheduler_ui():
+    st.header("💦 Irrigation Scheduler")
+    st.write(
+        "Plan and manage irrigation sessions using the Current Farm, crop, "
+        "field conditions, timing, irrigation purpose, and water requirements."
+    )
+
+    # ==========================================
+    # CURRENT FARM CONTEXT
+    # ==========================================
+    current_farm = st.session_state.get("current_farm", {})
+
+    if not isinstance(current_farm, dict):
+        current_farm = {}
+
+    current_farm_id = current_farm.get("farm_id", "main_farm")
+    current_farm_name = current_farm.get("farm_name", "Main Farm")
+    current_crop = current_farm.get("crop_type", "")
+    current_location = current_farm.get("location", "")
+    current_farm_type = current_farm.get("farm_type", "")
+    current_farm_size = current_farm.get("farm_size", 0)
+
+    farmer_profile = st.session_state.get("farmer_profile", {})
+
+    if not isinstance(farmer_profile, dict):
+        farmer_profile = {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    )
+
+    if not isinstance(personalized_profile, dict):
+        personalized_profile = {}
+
+    current_country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Not specified"
+    )
+
+    st.info(
+        f"🌿 Current Farm: {current_farm_name} | "
+        f"Crop: {current_crop or 'Not specified'} | "
+        f"Location: {current_location or 'Not specified'} | "
+        f"Country: {current_country}"
+    )
+
+    # ==========================================
+    # FARM-SPECIFIC KEYS
+    # ==========================================
+    def irrigation_key(name):
+        return f"irrigation_scheduler_{current_farm_id}_{name}"
+
+    schedule_key = irrigation_key("schedule")
+    view_key = irrigation_key("view")
+
+    if schedule_key not in st.session_state:
+        st.session_state[schedule_key] = []
+
+    if view_key not in st.session_state:
+        st.session_state[view_key] = None
+
+    # ==========================================
+    # MAIN BUTTONS
+    # ==========================================
+    c1, c2, c3 = st.columns([1.4, 1.4, 0.8])
+
+    with c1:
+        if st.button(
+            "📤 Schedule Irrigation",
+            key=irrigation_key("btn_schedule"),
+            use_container_width=True
+        ):
+            st.session_state[view_key] = "add"
+
+    with c2:
+        if st.button(
+            "📋 View Schedule",
+            key=irrigation_key("btn_list"),
+            use_container_width=True
+        ):
+            st.session_state[view_key] = "list"
+
+    with c3:
+        if st.button(
+            "🔄 Reset View",
+            key=irrigation_key("btn_reset"),
+            use_container_width=True
+        ):
+            st.session_state[view_key] = None
+            st.rerun()
+
+    view = st.session_state.get(view_key)
+
+    # ==========================================
+    # SCHEDULE IRRIGATION
+    # ==========================================
+    if view == "add":
+        st.subheader("📤 Schedule New Irrigation")
+
+        with st.form(
+            irrigation_key("schedule_form"),
+            clear_on_submit=True
+        ):
+            c1, c2 = st.columns(2)
+
+            with c1:
+                irrigation_date = st.date_input(
+                    "📅 Irrigation Date",
+                    value=datetime.now().date(),
+                    key=irrigation_key("date")
+                )
+
+            with c2:
+                irrigation_time = st.time_input(
+                    "⏰ Irrigation Time",
+                    value=datetime.now().replace(
+                        second=0,
+                        microsecond=0
+                    ).time(),
+                    key=irrigation_key("time")
+                )
+
+            c3, c4 = st.columns(2)
+
+            with c3:
+                purpose = st.selectbox(
+                    "🎯 Purpose",
+                    [
+                        "General Irrigation",
+                        "Spot Watering",
+                        "Fertigation",
+                        "Crop Treatment Support"
+                    ],
+                    key=irrigation_key("purpose")
+                )
+
+            with c4:
+                irrigation_method = st.selectbox(
+                    "💧 Irrigation Method",
+                    [
+                        "Drip",
+                        "Sprinkler",
+                        "Surface",
+                        "Manual",
+                        "Drone",
+                        "Other"
+                    ],
+                    key=irrigation_key("method")
+                )
+
+            default_plot = (
+                current_farm.get("plot_name")
+                or current_farm.get("farm_plot")
+                or ""
+            )
+
+            plot = st.text_input(
+                "📍 Farm Plot / Block",
+                value=default_plot,
+                key=irrigation_key("plot")
+            )
+
+            c5, c6 = st.columns(2)
+
+            with c5:
+                duration_min = st.number_input(
+                    "⏱ Duration (minutes)",
+                    min_value=1,
+                    max_value=1440,
+                    value=30,
+                    step=5,
+                    key=irrigation_key("duration")
+                )
+
+            with c6:
+                soil_moisture = st.number_input(
+                    "🌱 Current Soil Moisture (%)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=50.0,
+                    step=1.0,
+                    key=irrigation_key("soil_moisture")
+                )
+
+            c7, c8 = st.columns(2)
+
+            with c7:
+                temperature = st.number_input(
+                    "🌡 Temperature (°C)",
+                    min_value=-20.0,
+                    max_value=60.0,
+                    value=30.0,
+                    step=0.5,
+                    key=irrigation_key("temperature")
+                )
+
+            with c8:
+                rainfall_expected = st.selectbox(
+                    "🌧 Rainfall Expected?",
+                    [
+                        "Unknown",
+                        "Yes",
+                        "No"
+                    ],
+                    key=irrigation_key("rainfall")
+                )
+
+            submit = st.form_submit_button(
+                "💾 Save Irrigation Schedule",
+                use_container_width=True
+            )
+
+        if submit:
+            irrigation_status = "Scheduled"
+            intelligence_note = ""
+
+            if soil_moisture >= 70:
+                irrigation_status = "Review Before Irrigating"
+                intelligence_note = (
+                    "Soil moisture is already relatively high. "
+                    "Check field conditions before irrigation to reduce "
+                    "overwatering and waterlogging risk."
+                )
+
+            elif soil_moisture < 30:
+                intelligence_note = (
+                    "Soil moisture is low, so irrigation demand may be high."
+                )
+
+            else:
+                intelligence_note = (
+                    "Soil moisture is moderate. Continue monitoring conditions "
+                    "before and after irrigation."
+                )
+
+            if rainfall_expected == "Yes":
+                irrigation_status = "Weather Review Required"
+                intelligence_note += (
+                    " Rainfall is expected, so irrigation may need to be "
+                    "reduced, delayed, or cancelled."
+                )
+
+            if temperature >= 35:
+                intelligence_note += (
+                    " High temperature may increase crop water demand. "
+                    "Early-morning or evening irrigation may reduce evaporation."
+                )
+
+            item = {
+                "Farm ID": current_farm_id,
+                "Farm": current_farm_name,
+                "Crop": current_crop or "Not specified",
+                "Location": current_location or "Not specified",
+                "Date": irrigation_date.strftime("%Y-%m-%d"),
+                "Time": irrigation_time.strftime("%H:%M"),
+                "Purpose": purpose,
+                "Method": irrigation_method,
+                "Farm Plot": plot or "Not specified",
+                "Duration (min)": int(duration_min),
+                "Soil Moisture (%)": float(soil_moisture),
+                "Temperature (°C)": float(temperature),
+                "Rainfall Expected": rainfall_expected,
+                "Status": irrigation_status,
+                "Smart Farm AI Note": intelligence_note,
+                "Created": datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            }
+
+            st.session_state[schedule_key].append(item)
+
+            st.success(
+                f"✅ Irrigation scheduled for "
+                f"{item['Date']} at {item['Time']}."
+            )
+
+            if irrigation_status == "Scheduled":
+                st.info(
+                    f"💧 {intelligence_note}"
+                )
+            else:
+                st.warning(
+                    f"⚠️ {irrigation_status}: {intelligence_note}"
+                )
+
+    # ==========================================
+    # VIEW SCHEDULE
+    # ==========================================
+    elif view == "list":
+        st.subheader("📋 Irrigation Schedule")
+
+        items = st.session_state.get(
+            schedule_key,
+            []
+        )
+
+        if items:
+            df = pd.DataFrame(items)
+
+            st.dataframe(
+                df,
+                use_container_width=True
+            )
+
+            total_sessions = len(items)
+
+            total_minutes = sum(
+                int(item.get("Duration (min)", 0))
+                for item in items
+            )
+
+            review_count = sum(
+                1
+                for item in items
+                if item.get("Status") != "Scheduled"
+            )
+
+            m1, m2, m3 = st.columns(3)
+
+            with m1:
+                st.metric(
+                    "Scheduled Sessions",
+                    total_sessions
+                )
+
+            with m2:
+                st.metric(
+                    "Total Irrigation Time",
+                    f"{total_minutes} min"
+                )
+
+            with m3:
+                st.metric(
+                    "Sessions Requiring Review",
+                    review_count
+                )
+
+            c1, c2 = st.columns(2)
+
+            with c1:
+                st.download_button(
+                    "⬇️ Download Schedule",
+                    data=df.to_csv(
+                        index=False
+                    ).encode("utf-8"),
+                    file_name=(
+                        f"{current_farm_id}_"
+                        f"irrigation_schedule.csv"
+                    ),
+                    mime="text/csv",
+                    key=irrigation_key("download")
+                )
+
+            with c2:
+                if st.button(
+                    "🧹 Clear All",
+                    key=irrigation_key("clear_all")
+                ):
+                    st.session_state[schedule_key] = []
+                    st.rerun()
+
+            st.divider()
+
+            st.subheader(
+                "🗑 Manage Scheduled Sessions"
+            )
+
+            for index, item in enumerate(
+                list(items)
+            ):
+                title = (
+                    f"📌 {item.get('Date', '')} "
+                    f"{item.get('Time', '')} — "
+                    f"{item.get('Purpose', '')} @ "
+                    f"{item.get('Farm Plot', 'Not specified')}"
+                )
+
+                with st.expander(title):
+                    st.write(
+                        f"Crop: "
+                        f"{item.get('Crop', 'Not specified')}"
+                    )
+
+                    st.write(
+                        f"Method: "
+                        f"{item.get('Method', 'Not specified')}"
+                    )
+                    st.write(
+                        f"Duration: "
+                        f"{item.get('Duration (min)', 0)} minutes"
+                    )
+
+                    st.write(
+                        f"Status: "
+                        f"{item.get('Status', 'Scheduled')}"
+                    )
+
+                    note = item.get(
+                        "Smart Farm AI Note",
+                        ""
+                    )
+
+                    if note:
+                        st.info(note)
+
+                    if st.button(
+                        "Delete this entry",
+                        key=irrigation_key(
+                            f"delete_{index}"
+                        )
+                    ):
+                        st.session_state[
+                            schedule_key
+                        ].pop(index)
+
+                        st.rerun()
+
+        else:
+            st.info(
+                f"No irrigation sessions have been scheduled "
+                f"for {current_farm_name}."
+            )
+
+    # ==========================================
+    # DEFAULT VIEW
+    # ==========================================
+    else:
+        st.info(
+            "Choose Schedule Irrigation or View Schedule above."
+        )
+
 # ==========================================
 # 📈 DECISION-MAKING MODELS
 # ==========================================
@@ -12104,117 +12543,8 @@ elif menu_v2 == "📈 Decision-Making Models":
     decision_making_models_ui()
 
 
-# IRRIGATION PACK (One file)
-# - Irrigation Scheduler (UI)
-# - Voice-Controlled Drone Irrigation Assistant (UI)
-# ================================
-
-import streamlit as st
-import time, random, re
-import pandas as pd
-from datetime import datetime
-# Optional voice deps (handled gracefully in the assistant)
-try:
-    import speech_recognition as sr
-except Exception:
-    sr = None
-try:
-    import pyttsx3
-except Exception:
-    pyttsx3 = None
-
-
-# ================================
-# 💦 IRRIGATION SCHEDULER (simple)
-# ================================
-def irrigation_scheduler_ui():
-    st.header("💦 Irrigation Scheduler")
-    st.caption("Plan irrigation sessions by date, time, purpose, and plot. Data is stored in session for now.")
-
-    flights_key = kdr("flights")
-    if flights_key not in st.session_state:
-        st.session_state[flights_key] = []  # list of dicts
-
-    # Trigger buttons
-    c1, c2, c3 = st.columns([1.4, 1.4, 0.8])
-    with c1:
-        show_add = st.button("📤 Schedule Irrigation", key=kdr("btn_schedule"))
-    with c2:
-        show_list = st.button("📋 View Schedule", key=kdr("btn_list"))
-    with c3:
-        if st.button("🔄 Reset View", key=kdr("btn_reset")):
-            st.session_state[kdr("view")] = None
-            st.rerun()
-
-    # View state
-    if kdr("view") not in st.session_state:
-        st.session_state[kdr("view")] = None
-    if show_add:
-        st.session_state[kdr("view")] = "add"
-    if show_list:
-        st.session_state[kdr("view")] = "list"
-
-    # Add form
-    if st.session_state[kdr("view")] == "add":
-        st.subheader("📤 Schedule a New Irrigation")
-        with st.form(kdr("form_irrig"), clear_on_submit=True):
-            d = st.date_input("📅 Date", datetime.now().date(), key=kdr("date"))
-            t = st.time_input("⏰ Time", datetime.now().time(), key=kdr("time"))
-            purpose = st.selectbox(
-                "🎯 Purpose",
-                ["General Irrigation", "Spot Watering", "Fertilizer Mix", "Pesticide Mix"],
-                key=kdr("purpose")
-            )
-            plot = st.text_input("📍 Farm Plot / Block", key=kdr("plot"))
-            duration_min = st.number_input("⏱ Duration (minutes)", 1, 240, 30, key=kdr("dur"))
-            submit = st.form_submit_button("Save", use_container_width=True)
-
-        if submit:
-            item = {
-                "Date": d.strftime("%Y-%m-%d"),
-                "Time": t.strftime("%H:%M"),
-                "Purpose": purpose,
-                "Farm Plot": plot,
-                "Duration (min)": int(duration_min),
-            }
-            st.session_state[flights_key].append(item)
-            st.success(f"✅ Irrigation scheduled on {item['Date']} at {item['Time']} ({item['Purpose']}).")
-
-    # List/manage
-    elif st.session_state[kdr("view")] == "list":
-        st.subheader("📋 Scheduled Irrigation")
-        items = st.session_state[flights_key]
-        if items:
-            df = pd.DataFrame(items)
-            st.dataframe(df, use_container_width=True)
-
-            cA, cB, _ = st.columns([1.2, 1.2, 2])
-            with cA:
-                st.download_button(
-                    "⬇️ Download CSV",
-                    df.to_csv(index=False).encode("utf-8"),
-                    file_name="irrigation_schedule.csv",
-                    mime="text/csv",
-                    key=kdr("dl_sched")
-                )
-            with cB:
-                if st.button("🧹 Clear All", key=kdr("clear_all_sched")):
-                    st.session_state[flights_key] = []
-                    st.success("All irrigation entries cleared.")
-                    st.rerun()
-
-            st.divider()
-            st.subheader("🗑 Delete Individual Items")
-            for i, f in enumerate(list(items)):
-                with st.expander(f"📌 {f['Date']} {f['Time']} — {f['Purpose']} @ {f['Farm Plot'] or '—'}"):
-                    if st.button("Delete this entry", key=kdr(f"del_sched_{i}")):
-                        st.session_state[flights_key].pop(i)
-                        st.success("Entry deleted.")
-                        st.rerun()
-        else:
-            st.info("No irrigation items scheduled yet.")
-    else:
-        st.info("Click a button above to get started.")
+elif menu_v2 == "💦 Irrigation Scheduler":
+    irrigation_scheduler_ui()
 
 # ===============================================
 # 🎙️ VOICE-CONTROLLED DRONE IRRIGATION ASSISTANT
