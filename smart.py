@@ -3381,31 +3381,632 @@ def ai_crop_calendar_ui():
                 st.rerun()
 
 
-# put this ABOVE the router
-def drone_irrigation_assistant_ui_impl():
-    import streamlit as st
-    from datetime import datetime
-
+def drone_irrigation_assistant_ui():
     st.header("🚁 Voice-Controlled Drone Irrigation Assistant")
-    if "voice_drone" not in st.session_state:
-        st.session_state.voice_drone = {"armed": False, "in_air": False, "log": []}
-    S = st.session_state.voice_drone
+    st.caption("Smart Farm AI drone irrigation control and field decision support.")
 
-    c1, c2, c3 = st.columns(3)
-    if c1.button("🔐 Arm/Disarm"):
-        S["armed"] = not S["armed"]; S["log"].append(f"{datetime.now():%H:%M:%S} toggled arm")
-    if c2.button("⬆️ Takeoff", disabled=not S["armed"] or S["in_air"]):
-        S["in_air"] = True; S["log"].append(f"{datetime.now():%H:%M:%S} takeoff")
-    if c3.button("⬇️ Land", disabled=not S["in_air"]):
-        S["in_air"] = False; S["log"].append(f"{datetime.now():%H:%M:%S} landed")
+    current_farm = st.session_state.get("current_farm", {})
+    if not isinstance(current_farm, dict):
+        current_farm = {}
 
-    cmd = st.text_input("Type a command (e.g. start zone A for 2 minutes / land / status)")
-    if cmd:
-        S["log"].append(f"{datetime.now():%H:%M:%S} cmd: {cmd}")
+    farm_id = current_farm.get("farm_id", "main_farm")
+    farm_name = current_farm.get("farm_name", "Main Farm")
+    crop = current_farm.get("crop_type", "Not specified")
+    location = current_farm.get("location", "Not specified")
 
-    st.subheader("📜 Log")
-    for line in S["log"][-200:]:
-        st.write("•", line)
+    profile = st.session_state.get("personalized_profile", {})
+    if not isinstance(profile, dict):
+        profile = {}
+
+    country = current_farm.get("country") or profile.get("country") or "Not specified"
+
+    st.info(
+        f"🌿 Current Farm: {farm_name} | "
+        f"Crop: {crop} | "
+        f"Location: {location} | "
+        f"Country: {country}"
+    )
+
+    def dk(name):
+        return f"drone_irrigation_{farm_id}_{name}"
+
+    S = st.session_state
+
+    if dk("armed") not in S:
+        S[dk("armed")] = False
+
+    if dk("in_air") not in S:
+        S[dk("in_air")] = False
+
+    if dk("battery") not in S:
+        S[dk("battery")] = 100.0
+
+    if dk("mission") not in S:
+        S[dk("mission")] = None
+
+    if dk("log") not in S:
+        S[dk("log")] = []
+
+    if dk("last_tick") not in S:
+        S[dk("last_tick")] = time.time()
+
+    now = time.time()
+    dt = max(0.0, now - S[dk("last_tick")])
+    S[dk("last_tick")] = now
+
+    drain = 0.01 * dt
+
+    if S[dk("in_air")]:
+        drain += 0.04 * dt
+
+    mission = S.get(dk("mission"))
+
+    if mission:
+        drain += 0.06 * dt
+
+        mission["remain_s"] = max(
+            0,
+            mission.get("remain_s", 0) - dt
+        )
+
+        if mission["remain_s"] <= 0:
+            zone_done = mission.get("zone", "Unknown")
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                f"✅ Irrigation completed in Zone {zone_done}."
+            )
+
+            S[dk("mission")] = None
+            S[dk("in_air")] = False
+
+    S[dk("battery")] = max(
+        0.0,
+        S[dk("battery")] - drain
+    )
+
+    if S[dk("battery")] <= 20 and S[dk("in_air")]:
+        S[dk("log")].append(
+            f"{datetime.now():%H:%M:%S} "
+            "⚠️ Low battery. Mission aborted and drone returned."
+        )
+
+        S[dk("mission")] = None
+        S[dk("in_air")] = False
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "🔋 Battery",
+        f"{S[dk('battery')]:.0f}%"
+    )
+
+    c2.metric(
+        "🔐 Armed",
+        "Yes" if S[dk("armed")] else "No"
+    )
+
+    c3.metric(
+        "🚁 Flight",
+        "In Air" if S[dk("in_air")] else "Grounded"
+    )
+
+    mission = S.get(dk("mission"))
+
+    if mission:
+        c4.metric(
+            "💦 Mission",
+            f"Zone {mission['zone']}"
+        )
+    else:
+        c4.metric(
+            "💦 Mission",
+            "None"
+        )
+
+    st.divider()
+
+    st.subheader("🗺️ Field Irrigation Intelligence")
+
+    z1, z2, z3 = st.columns(3)
+
+    with z1:
+        zone_a = st.slider(
+            "Zone A Moisture (%)",
+            0,
+            100,
+            42,
+            key=dk("zone_a")
+        )
+
+    with z2:
+        zone_b = st.slider(
+            "Zone B Moisture (%)",
+            0,
+            100,
+            55,
+            key=dk("zone_b")
+        )
+
+    with z3:
+        zone_c = st.slider(
+            "Zone C Moisture (%)",
+            0,
+            100,
+            68,
+            key=dk("zone_c")
+        )
+
+    zones = {
+        "A": zone_a,
+        "B": zone_b,
+        "C": zone_c
+    }
+
+    driest_zone = min(zones, key=zones.get)
+    driest_value = zones[driest_zone]
+
+    temperature = st.slider(
+        "🌡 Temperature (°C)",
+        -10,
+        50,
+        30,
+        key=dk("temperature")
+    )
+
+    rainfall = st.selectbox(
+        "🌧 Rainfall Expected Soon?",
+        ["Unknown", "Yes", "No"],
+        key=dk("rainfall")
+    )
+
+    if driest_value < 30:
+        priority = "High"
+    elif driest_value < 50:
+        priority = "Moderate"
+    else:
+        priority = "Low"
+
+    a1, a2, a3 = st.columns(3)
+
+    a1.metric(
+        "Priority Zone",
+        f"Zone {driest_zone}"
+    )
+
+    a2.metric(
+        "Soil Moisture",
+        f"{driest_value}%"
+    )
+
+    a3.metric(
+        "Irrigation Priority",
+        priority
+    )
+
+    if rainfall == "Yes":
+        st.warning(
+            "🌧 Rainfall is expected. Delay or reduce irrigation "
+            "unless field conditions show urgent water stress."
+        )
+
+    elif driest_value < 30:
+        st.warning(
+            f"💧 Zone {driest_zone} has high water-stress risk."
+        )
+
+    elif driest_value < 50:
+        st.info(
+            f"💧 Zone {driest_zone} has moderate irrigation demand."
+        )
+
+    else:
+        st.success(
+            "🌱 No zone currently shows severe irrigation demand."
+        )
+
+    if temperature >= 35:
+        st.info(
+            "🌡 High temperature detected. Early morning or evening "
+            "irrigation can help reduce evaporation."
+        )
+
+    st.divider()
+
+    st.subheader("🚁 Drone Controls")
+
+    b1, b2, b3 = st.columns(3)
+
+    with b1:
+        if st.button(
+            "🔐 Arm / Disarm",
+            key=dk("arm"),
+            use_container_width=True
+        ):
+            if S[dk("in_air")]:
+                st.warning("Land the drone before disarming.")
+            else:
+                S[dk("armed")] = not S[dk("armed")]
+
+                state = "Armed" if S[dk("armed")] else "Disarmed"
+
+                S[dk("log")].append(
+                    f"{datetime.now():%H:%M:%S} {state}."
+                )
+
+                st.rerun()
+
+    with b2:
+        if st.button(
+            "⬆️ Takeoff",
+            key=dk("takeoff"),
+            use_container_width=True,
+            disabled=(
+                not S[dk("armed")]
+                or S[dk("in_air")]
+                or S[dk("battery")] <= 20
+            )
+        ):
+            S[dk("in_air")] = True
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} Takeoff."
+            )
+
+            st.rerun()
+
+    with b3:
+        if st.button(
+            "⬇️ Land",
+            key=dk("land"),
+            use_container_width=True,
+            disabled=not S[dk("in_air")]
+        ):
+            S[dk("mission")] = None
+            S[dk("in_air")] = False
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} Landed."
+            )
+
+            st.rerun()
+
+    b4, b5, b6 = st.columns(3)
+
+    with b4:
+        if st.button(
+            "🏠 Return Home",
+            key=dk("return"),
+            use_container_width=True,
+            disabled=not S[dk("in_air")]
+        ):
+            S[dk("mission")] = None
+            S[dk("in_air")] = False
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                "Return-to-Home completed."
+            )
+
+            st.rerun()
+
+    with b5:
+        if st.button(
+            "🔋 Swap Battery",
+            key=dk("battery_swap"),
+            use_container_width=True,
+            disabled=S[dk("in_air")]
+        ):
+            S[dk("battery")] = 100.0
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                "Battery replaced."
+            )
+
+            st.rerun()
+
+    with b6:
+        if st.button(
+            "🧹 Clear Log",
+            key=dk("clear_log"),
+            use_container_width=True
+        ):
+            S[dk("log")] = []
+            st.rerun()
+
+    st.divider()
+
+    st.subheader("💦 Irrigation Mission")
+
+    m1, m2, m3 = st.columns(3)
+
+    with m1:
+        target_zone = st.selectbox(
+            "Target Zone",
+            ["A", "B", "C"],
+            index=["A", "B", "C"].index(driest_zone),
+            key=dk("target_zone")
+        )
+
+    with m2:
+        minutes = st.number_input(
+            "Duration (minutes)",
+            min_value=1,
+            max_value=60,
+            value=3,
+            key=dk("minutes")
+        )
+
+    with m3:
+        flow_rate = st.number_input(
+            "Flow Rate (L/min)",
+            min_value=1,
+            max_value=50,
+            value=8,
+            key=dk("flow")
+        )
+
+    selected_moisture = zones[target_zone]
+    estimated_water = float(minutes) * float(flow_rate)
+
+    st.write(
+        f"Estimated Water Application: "
+        f"{estimated_water:.1f} L"
+    )
+
+    start_col, stop_col = st.columns(2)
+
+    with start_col:
+        if st.button(
+            "▶️ Start Mission",
+            key=dk("start"),
+            use_container_width=True,
+            disabled=(
+                not S[dk("armed")]
+                or not S[dk("in_air")]
+                or S.get(dk("mission")) is not None
+                or S[dk("battery")] <= 20
+            )
+        ):
+            if rainfall == "Yes":
+                st.warning(
+                    "Mission blocked because rainfall is expected."
+                )
+
+            elif selected_moisture >= 75:
+                st.warning(
+                    "Mission blocked because soil moisture is already high."
+                )
+
+            else:
+                S[dk("mission")] = {
+                    "zone": target_zone,
+                    "remain_s": int(minutes * 60),
+                    "lpm": int(flow_rate),
+                    "state": "irrigating",
+                    "farm_id": farm_id,
+                    "farm_name": farm_name,
+                    "crop": crop,
+                    "water_l": estimated_water
+                }
+
+                S[dk("log")].append(
+                    f"{datetime.now():%H:%M:%S} "
+                    f"Irrigation started in Zone {target_zone} "
+                    f"for {minutes} minutes at {flow_rate} L/min."
+                )
+
+                st.rerun()
+
+    with stop_col:
+        if st.button(
+            "⏹ Stop Mission",
+            key=dk("stop"),
+            use_container_width=True,
+            disabled=S.get(dk("mission")) is None
+        ):
+            S[dk("mission")] = None
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                "Irrigation mission stopped."
+            )
+
+            st.rerun()
+
+    st.divider()
+
+    st.subheader("🎙️ Voice / Typed Command")
+
+    command = st.text_input(
+        "Command",
+        placeholder="takeoff, start zone A for 2 minutes, stop, land, return home, status",
+        key=dk("command")
+    )
+
+    status_box = st.empty()
+
+    def handle_command(cmd):
+        cmd = (cmd or "").strip().lower()
+
+        if not cmd:
+            return
+
+        S[dk("log")].append(
+            f"{datetime.now():%H:%M:%S} 🎙 {cmd}"
+        )
+
+        match = re.search(
+            r"start.*zone\s*([abc]).*?(\d+)\s*"
+            r"(min|minute|minutes|sec|second|seconds)",
+            cmd
+        )
+
+        if match:
+            zone_name = match.group(1).upper()
+            value = int(match.group(2))
+            unit = match.group(3)
+
+            seconds = value * 60 if "min" in unit else value
+
+            if not S[dk("armed")]:
+                status_box.warning("Arm the drone first.")
+                return
+
+            if not S[dk("in_air")]:
+                status_box.warning("Take off before starting irrigation.")
+                return
+
+            if S.get(dk("mission")):
+                status_box.warning("A mission is already active.")
+                return
+
+            if S[dk("battery")] <= 20:
+                status_box.warning("Battery is too low.")
+                return
+
+            if rainfall == "Yes":
+                status_box.warning(
+                    "Rainfall is expected. Irrigation was not started."
+                )
+                return
+
+            if zones[zone_name] >= 75:
+                status_box.warning(
+                    f"Zone {zone_name} already has high soil moisture."
+                )
+                return
+
+            S[dk("mission")] = {
+                "zone": zone_name,
+                "remain_s": seconds,
+                "lpm": 8,
+                "state": "irrigating",
+                "farm_id": farm_id,
+                "farm_name": farm_name,
+                "crop": crop
+            }
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                f"Voice irrigation started in Zone {zone_name}."
+            )
+
+            status_box.success(
+                f"Irrigation started in Zone {zone_name}."
+            )
+
+            return
+
+        if "takeoff" in cmd or "launch" in cmd:
+            if not S[dk("armed")]:
+                status_box.warning("Arm the drone first.")
+                return
+
+            if S[dk("battery")] <= 20:
+                status_box.warning("Battery is too low for takeoff.")
+                return
+
+            if S[dk("in_air")]:
+                status_box.info("Drone is already in the air.")
+                return
+
+            S[dk("in_air")] = True
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                "Voice takeoff."
+            )
+
+            status_box.success("Takeoff successful.")
+            return
+
+        if "land" in cmd:
+            if not S[dk("in_air")]:
+                status_box.info("Drone is already on the ground.")
+                return
+
+            S[dk("mission")] = None
+            S[dk("in_air")] = False
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                "Voice landing."
+            )
+
+            status_box.success("Drone landed.")
+            return
+
+        if "return" in cmd or "home" in cmd or "rth" in cmd:
+            S[dk("mission")] = None
+            S[dk("in_air")] = False
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                "Voice Return-to-Home."
+            )
+
+            status_box.success("Drone returned home.")
+            return
+
+        if "stop" in cmd or "abort" in cmd or "cancel" in cmd:
+            if S.get(dk("mission")) is None:
+                status_box.info("No active mission.")
+                return
+
+            S[dk("mission")] = None
+
+            S[dk("log")].append(
+                f"{datetime.now():%H:%M:%S} "
+                "Mission stopped by command."
+            )
+
+            status_box.info("Mission stopped.")
+            return
+
+        if "status" in cmd:
+            status = (
+                f"Battery {S[dk('battery')]:.0f}%. "
+                f"Drone is "
+                f"{'in the air' if S[dk('in_air')] else 'on the ground'}."
+            )
+
+            active = S.get(dk("mission"))
+
+            if active:
+                status += (
+                    f" Irrigating Zone {active['zone']} "
+                    f"with {int(active['remain_s'])} seconds remaining."
+                )
+
+            status_box.info(status)
+            return
+
+        status_box.info(
+            "Command not recognized. Try: takeoff, "
+            "start zone A for 2 minutes, stop, land, "
+            "return home, or status."
+        )
+
+    if st.button(
+        "▶️ Run Command",
+        key=dk("run_command"),
+        use_container_width=True
+    ):
+        handle_command(command)
+
+    st.divider()
+
+    st.subheader("📜 Event Log")
+
+    logs = S.get(dk("log"), [])
+
+    if logs:
+        for line in logs[-100:]:
+            st.write(line)
+    else:
+        st.caption("No drone events recorded yet.")
+
 
 
 # ==========================================
@@ -12547,235 +13148,8 @@ elif menu_v2 == "📈 Decision-Making Models":
 elif menu_v2 == "💦 Irrigation Scheduler":
     irrigation_scheduler_ui()
 
-# ===============================================
-# 🎙️ VOICE-CONTROLLED DRONE IRRIGATION ASSISTANT
-# ===============================================
-def drone_irrigation_assistant_ui():
-    st.header("🚁 Voice-Controlled Drone Irrigation Assistant")
-    st.caption("Simulated control of a spray drone for field irrigation/spot-watering.")
-
-    # init state
-    S = st.session_state
-    if kdr("init") not in S:
-        S[kdr("init")] = True
-        S[kdr("armed")] = False
-        S[kdr("in_air")] = False
-        S[kdr("battery")] = 100.0
-        S[kdr("mission")] = None   # {"zone","remain_s","lpm","state"}
-        S[kdr("last_tick")] = time.time()
-        S[kdr("log")] = []
-
-    # tick
-    now = time.time()
-    dt = max(0.0, now - S[kdr("last_tick")])
-    S[kdr("last_tick")] = now
-
-    drain = 0.03 * dt
-    if S[kdr("in_air")]:
-        drain += 0.10 * dt
-    if S[kdr("mission")]:
-        drain += 0.12 * dt
-        S[kdr("mission")]["remain_s"] = max(0, S[kdr("mission")]["remain_s"] - dt)
-        if S[kdr("mission")]["remain_s"] <= 0:
-            S[kdr("log")].append(f"{datetime.now():%H:%M:%S} ✓ Irrigation complete in Zone {S[kdr('mission')]['zone']}. Returning home.")
-            S[kdr("mission")] = None
-            S[kdr("in_air")] = False
-            S[kdr("armed")] = True
-
-    if S[kdr("in_air")] and S[kdr("battery")] <= 20.0 and S[kdr("mission")]:
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} ⚠ Low battery. Aborting mission, returning home.")
-        S[kdr("mission")] = None
-        S[kdr("in_air")] = False
-
-    S[kdr("battery")] = max(0.0, S[kdr("battery")] - drain)
-
-    # metrics
-    colA, colB, colC, colD = st.columns(4)
-    colA.metric("Battery", f"{S[kdr('battery')]:.0f}%")
-    colB.metric("Armed", "Yes" if S[kdr("armed")] else "No")
-    colC.metric("In Air", "Yes" if S[kdr("in_air")] else "No")
-    if S[kdr("mission")]:
-        colD.metric("Active Zone", f"Zone {S[kdr('mission')]['zone']} ({int(S[kdr('mission')]['remain_s']):d}s left)")
-    else:
-        colD.metric("Active Zone", "—")
-
-    st.divider()
-
-    # mock zones
-    st.subheader("🗺️ Field Zones (mock moisture)")
-    z1, z2, z3 = st.columns(3)
-    with z1:
-        st.markdown("**Zone A (North)**")
-        st.progress(min(100, int(40 + 20 * random.random())))
-    with z2:
-        st.markdown("**Zone B (Center)**")
-        st.progress(min(100, int(30 + 30 * random.random())))
-    with z3:
-        st.markdown("**Zone C (South)**")
-        st.progress(min(100, int(50 + 20 * random.random())))
-
-    st.divider()
-
-    # controls
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    if c1.button("🔐 Arm/Disarm", key=kdr("arm")):
-        S[kdr("armed")] = not S[kdr("armed")]
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} {'Armed' if S[kdr('armed')] else 'Disarmed'}.")
-
-    if c2.button("⬆️ Takeoff", disabled=not S[kdr("armed")] or S[kdr("in_air")], key=kdr("takeoff")):
-        S[kdr("in_air")] = True
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Takeoff.")
-
-    if c3.button("⬇️ Land", disabled=not S[kdr("in_air")], key=kdr("land")):
-        S[kdr("in_air")] = False
-        S[kdr("mission")] = None
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Landed.")
-
-    if c4.button("🏠 Return Home", disabled=not S[kdr("in_air")], key=kdr("rth")):
-        S[kdr("mission")] = None
-        S[kdr("in_air")] = False
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Return-to-Home and landed.")
-
-    if c5.button("🧹 Clear Log", key=kdr("clear")):
-        S[kdr("log")] = []
-
-    if c6.button("🔋 Swap Battery", disabled=S[kdr("in_air")], key=kdr("swap")):
-        S[kdr("battery")] = 100.0
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Battery swapped (100%).")
-
-    st.subheader("💦 Start Irrigation")
-    cc1, cc2, cc3 = st.columns([1, 1, 1])
-    zone = cc1.selectbox("Zone", ["A", "B", "C"], key=kdr("zone"))
-    minutes = cc2.number_input("Duration (minutes)", 1, 60, 3, key=kdr("mins"))
-    lpm = cc3.number_input("Flow rate (L/min)", 1, 50, 8, key=kdr("lpm"))
-
-    go1, stop1 = st.columns([1, 1])
-    if go1.button("▶️ Start Mission", key=kdr("start"),
-                  disabled=not S[kdr("armed")] or not S[kdr("in_air")] or S[kdr("mission")] is not None):
-        S[kdr("mission")] = {"zone": zone, "remain_s": int(minutes * 60), "lpm": int(lpm), "state": "irrigating"}
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Irrigation started in Zone {zone} for {minutes} min @ {lpm} L/min.")
-
-    if stop1.button("⏹ Stop Mission", key=kdr("stop"), disabled=S[kdr("mission")] is None):
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Mission aborted.")
-        S[kdr("mission")] = None
-
-    # voice command
-    st.subheader("🎙️ Voice Command (optional)")
-    v1, v2 = st.columns([1, 3])
-    status_box = v2.empty()
-    txt_cmd = st.text_input(
-        "Or type a command (e.g., start zone A for 2 minutes, stop, return home, land, status):",
-        key=kdr("typed_cmd")
-    )
-
-    def _tts(msg: str):
-        if pyttsx3 is None:
-            return
-        try:
-            eng = pyttsx3.init()
-            eng.say(msg)
-            eng.runAndWait()
-        except Exception:
-            pass
-
-    def handle_command(cmd: str):
-        cmd = (cmd or "").strip().lower()
-        if not cmd:
-            return
-        S[kdr("log")].append(f"{datetime.now():%H:%M:%S} 🔈 '{cmd}'")
-
-        m = re.search(r"start.*zone\s*([abc]).*?(\d+)\s*(min|minute|minutes|sec|second|seconds)", cmd)
-        if m:
-            z = m.group(1).upper()
-            val = int(m.group(2))
-            secs = val * (60 if "min" in m.group(3) else 1)
-            if not S[kdr("armed")] or not S[kdr("in_air")]:
-                msg = "Drone must be armed and in the air to start."
-                status_box.warning(msg); _tts(msg); return
-            if S[kdr("mission")]:
-                msg = "A mission is already running."
-                status_box.info(msg); _tts(msg); return
-            S[kdr("mission")] = {"zone": z, "remain_s": secs, "lpm": 8, "state": "irrigating"}
-            msg = f"Starting irrigation in Zone {z} for {int(secs/60)} minutes."
-            status_box.success(msg); _tts(msg); return
-
-        if "takeoff" in cmd or "launch" in cmd:
-            if not S[kdr("armed")]:
-                msg = "Arm first."
-                status_box.warning(msg); _tts(msg); return
-            if not S[kdr("in_air")]:
-                S[kdr("in_air")] = True
-                S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Takeoff (voice).")
-                status_box.success("Takeoff."); _tts("Takeoff.")
-            return
-
-        if "land" in cmd:
-            if S[kdr("in_air")]:
-                S[kdr("in_air")] = False
-                S[kdr("mission")] = None
-                S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Landed (voice).")
-                status_box.success("Landing."); _tts("Landing.")
-            return
-
-        if "return" in cmd or "home" in cmd or "rth" in cmd:
-            if S[kdr("in_air")]:
-                S[kdr("mission")] = None
-                S[kdr("in_air")] = False
-                S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Return-to-Home (voice).")
-                status_box.success("Returning home."); _tts("Returning home.")
-            return
-
-        if "stop" in cmd or "abort" in cmd or "cancel" in cmd:
-            if S[kdr("mission")]:
-                S[kdr("mission")] = None
-                S[kdr("log")].append(f"{datetime.now():%H:%M:%S} Mission stopped (voice).")
-                status_box.info("Mission stopped."); _tts("Mission stopped.")
-            return
-
-        if "status" in cmd:
-            status = f"Battery {S[kdr('battery')]:.0f}%, {'in air' if S[kdr('in_air')] else 'on ground'}."
-            if S[kdr("mission")]:
-                status += f" Irrigating Zone {S[kdr('mission')]['zone']} with {int(S[kdr('mission')]['remain_s'])} seconds left."
-            status_box.info(status); _tts(status)
-            return
-
-        status_box.info("Command not recognized. Try: 'start zone A for 2 minutes', 'stop', 'return home', 'land', 'status'.")
-
-    if sr is not None and v1.button("🎤 Speak", key=kdr("mic_btn")):
-        try:
-            recog = sr.Recognizer()
-            with sr.Microphone() as source:
-                status_box.info("Listening…")
-                try:
-                    recog.adjust_for_ambient_noise(source, duration=0.5)
-                except Exception:
-                    pass
-                audio = recog.listen(source, timeout=4, phrase_time_limit=6)
-            cmd = recog.recognize_google(audio)
-            status_box.success(f"🗣 {cmd}")
-            handle_command(cmd)
-        except sr.WaitTimeoutError:
-            status_box.error("Timed out. Try again.")
-        except sr.UnknownValueError:
-            status_box.error("Didn't catch that.")
-        except sr.RequestError:
-            status_box.error("Speech service unavailable.")
-        except Exception as e:
-            status_box.error(f"Mic error: {e}")
-
-    # typed command
-    if txt_cmd := st.session_state.get(kdr("typed_cmd")):
-        handle_command(txt_cmd)
-        st.rerun()
-
-    st.divider()
-    st.subheader("📜 Event Log")
-    if S[kdr("log")]:
-        for ln in S[kdr("log")][-200:]:
-            st.write(ln)
-    else:
-        st.caption("No events yet.")
-
+elif menu_v2 == "🚁 Voice-Controlled Drone Irrigation Assistant":
+    drone_irrigation_assistant_ui()
 
 # ---------- BACKUP & RECOVERY UI (wrap in a function) ----------
 def data_backup_recovery_ui():
