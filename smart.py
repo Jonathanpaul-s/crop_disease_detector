@@ -13424,101 +13424,351 @@ elif menu_v2 == "📈 Decision-Making Models":
 elif menu_v2 == "💦 Irrigation Scheduler":
     irrigation_scheduler_ui()
 
+elif help_option == "💾 Data Backup & Recovery":
+    data_backup_recovery_ui()
 
-# ---------- BACKUP & RECOVERY UI (wrap in a function) ----------
 def data_backup_recovery_ui():
-    import os, shutil
-    from datetime import datetime
+    import os
+    import shutil
     import streamlit as st
+    from datetime import datetime
+
+    # =========================================================
+    # CURRENT FARM
+    # =========================================================
+    current_farm = st.session_state.get("current_farm", {}) or {}
+
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or "main_farm"
+    )
+
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or "Main Farm"
+    )
+
+    crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or "Not selected"
+    )
+
+    location = current_farm.get("location") or "Not selected"
 
     st.header("💾 Data Backup & Recovery")
-    st.write("Create a backup of your farm data, restore a previous one, or manage backups.")
 
-    # ensure folders
-    data_dir = "farm_data"
-    backup_dir = "backups"
-    os.makedirs(data_dir, exist_ok=True)
-    os.makedirs(backup_dir, exist_ok=True)
+    st.info(
+        f"🌾 Current Farm: {farm_name} | "
+        f"Crop: {crop} | Location: {location}"
+    )
 
-    # track active tool
-    active_key = kbak("active_tool")
+    st.write(
+        "Create a backup of Smart Farm AI farm data, "
+        "restore a previous backup, or manage saved backups."
+    )
+
+    # =========================================================
+    # FARM-SPECIFIC WIDGET KEYS
+    # =========================================================
+    def bk(name):
+        return f"backup_recovery_{farm_id}_{name}"
+
+    active_key = bk("active_tool")
+
     if active_key not in st.session_state:
         st.session_state[active_key] = None
 
-    # triggers
+    # =========================================================
+    # STORAGE DIRECTORIES
+    # =========================================================
+    data_dir = "farm_data"
+    backup_dir = "backups"
+
+    os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(backup_dir, exist_ok=True)
+
+    # =========================================================
+    # ACTIONS
+    # =========================================================
     c1, c2, c3, c4 = st.columns([1.6, 1.6, 1.6, 0.8])
+
     with c1:
-        if st.button("💾 Create Backup", key=kbak("btn_backup")):
+        if st.button(
+            "💾 Create Backup",
+            key=bk("btn_backup")
+        ):
             st.session_state[active_key] = "backup"
+
     with c2:
-        if st.button("♻️ Restore Backup", key=kbak("btn_restore")):
+        if st.button(
+            "♻️ Restore Backup",
+            key=bk("btn_restore")
+        ):
             st.session_state[active_key] = "restore"
+
     with c3:
-        if st.button("🗑 Manage Backups", key=kbak("btn_manage")):
+        if st.button(
+            "🗑 Manage Backups",
+            key=bk("btn_manage")
+        ):
             st.session_state[active_key] = "manage"
+
     with c4:
-        if st.button("🔄 Reset", key=kbak("btn_reset")):
+        if st.button(
+            "🔄 Reset",
+            key=bk("btn_reset")
+        ):
             st.session_state[active_key] = None
             st.rerun()
 
     tool = st.session_state[active_key]
 
-    # Create Backup
+    # =========================================================
+    # CREATE BACKUP
+    # =========================================================
     if tool == "backup":
+
         st.subheader("💾 Create Backup")
-        st.write(f"Source folder: `{data_dir}` → Backups in `{backup_dir}`")
-        if st.button("📂 Backup Now", key=kbak("do_backup")):
+
+        st.caption(
+            "This creates a snapshot of the current Smart Farm AI "
+            "farm-data directory."
+        )
+
+        if st.button(
+            "📂 Backup Now",
+            key=bk("do_backup")
+        ):
             try:
-                backup_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                backup_path = os.path.join(backup_dir, backup_name)
-                shutil.copytree(data_dir, backup_path)
-                st.success(f"✅ Backup created successfully: {backup_name}")
-            except FileExistsError:
-                st.warning("A backup with that name already exists—please try again.")
+                timestamp = datetime.now().strftime(
+                    "%Y%m%d_%H%M%S_%f"
+                )
+
+                safe_farm_id = "".join(
+                    ch if ch.isalnum() or ch in ("-", "_") else "_"
+                    for ch in farm_id
+                )
+
+                backup_name = (
+                    f"backup_{safe_farm_id}_{timestamp}"
+                )
+
+                backup_path = os.path.join(
+                    backup_dir,
+                    backup_name
+                )
+
+                shutil.copytree(
+                    data_dir,
+                    backup_path
+                )
+
+                st.success(
+                    f"✅ Backup created successfully: "
+                    f"{backup_name}"
+                )
+
             except Exception as e:
-                st.error(f"❌ Error creating backup: {e}")
-
-    # Restore Backup
+                st.error(
+                    f"❌ Error creating backup: {e}"
+                )
+                # =========================================================
+    # RESTORE BACKUP
+    # =========================================================
     elif tool == "restore":
+
         st.subheader("♻️ Restore Backup")
-        backups = sorted([d for d in os.listdir(backup_dir) if os.path.isdir(os.path.join(backup_dir, d))])
-        if backups:
-            selected_backup = st.selectbox("Select a backup to restore", backups, key=kbak("sel_restore"))
-            if st.button("🔄 Restore", key=kbak("do_restore")):
-                try:
-                    if os.path.exists(data_dir):
-                        shutil.rmtree(data_dir)
-                    shutil.copytree(os.path.join(backup_dir, selected_backup), data_dir)
-                    st.success(f"✅ Backup '{selected_backup}' restored successfully.")
-                except Exception as e:
-                    st.error(f"❌ Error restoring backup: {e}")
-        else:
-            st.info("ℹ️ No backups found. Create one first.")
 
-    # Manage Backups
-    elif tool == "manage":
-        st.subheader("🗑 Manage Backups")
-        backups = sorted([d for d in os.listdir(backup_dir) if os.path.isdir(os.path.join(backup_dir, d))])
+        backups = sorted(
+            [
+                name
+                for name in os.listdir(backup_dir)
+                if os.path.isdir(
+                    os.path.join(
+                        backup_dir,
+                        name
+                    )
+                )
+            ],
+            reverse=True
+        )
+
         if backups:
-            selected = st.selectbox("Select a backup", backups, key=kbak("sel_manage"))
-            cA, cB = st.columns([1, 1])
-            with cA:
-                if st.button("🗑 Delete Selected", key=kbak("del_sel")):
+
+            selected_backup = st.selectbox(
+                "Select a backup to restore",
+                backups,
+                key=bk("sel_restore")
+            )
+
+            st.warning(
+                "Restoring a backup replaces the current "
+                "farm_data directory."
+            )
+
+            confirm_restore = st.checkbox(
+                "I understand that current farm data will be replaced.",
+                key=bk("confirm_restore")
+            )
+
+            if st.button(
+                "🔄 Restore Selected Backup",
+                key=bk("do_restore")
+            ):
+
+                if not confirm_restore:
+                    st.warning(
+                        "Confirm the restore operation first."
+                    )
+
+                else:
                     try:
-                        shutil.rmtree(os.path.join(backup_dir, selected))
-                        st.success(f"Deleted backup '{selected}'.")
-                        st.rerun()
+                        source = os.path.join(
+                            backup_dir,
+                            selected_backup
+                        )
+
+                        if os.path.exists(data_dir):
+                            shutil.rmtree(data_dir)
+
+                        shutil.copytree(
+                            source,
+                            data_dir
+                        )
+
+                        st.success(
+                            f"✅ Backup '{selected_backup}' "
+                            "restored successfully."
+                        )
+
                     except Exception as e:
-                        st.error(f"❌ Error deleting backup: {e}")
-            with cB:
-                if st.button("📁 Refresh List", key=kbak("refresh")):
-                    st.rerun()
+                        st.error(
+                            f"❌ Error restoring backup: {e}"
+                        )
+
         else:
-            st.info("No backups to manage yet.")
+            st.info(
+                "ℹ️ No backups found. Create one first."
+            )
 
+    # =========================================================
+    # MANAGE BACKUPS
+    # =========================================================
+    elif tool == "manage":
+
+        st.subheader("🗑 Manage Backups")
+
+        backups = sorted(
+            [
+                name
+                for name in os.listdir(backup_dir)
+                if os.path.isdir(
+                    os.path.join(
+                        backup_dir,
+                        name
+                    )
+                )
+            ],
+            reverse=True
+        )
+
+        if backups:
+
+            st.metric(
+                "Available Backups",
+                len(backups)
+            )
+
+            selected = st.selectbox(
+                "Select a backup",
+                backups,
+                key=bk("sel_manage")
+            )
+
+            selected_path = os.path.join(
+                backup_dir,
+                selected
+            )
+
+            try:
+                created_time = datetime.fromtimestamp(
+                    os.path.getmtime(selected_path)
+                )
+
+                st.caption(
+                    "Last modified: "
+                    f"{created_time:%Y-%m-%d %H:%M:%S}"
+                )
+
+            except Exception:
+                pass
+
+            confirm_delete = st.checkbox(
+                "Confirm deletion of selected backup",
+                key=bk("confirm_delete")
+            )
+
+            cA, cB = st.columns(2)
+
+            with cA:
+                if st.button(
+                    "🗑 Delete Selected",
+                    key=bk("del_sel")
+                ):
+
+                    if not confirm_delete:
+                        st.warning(
+                            "Confirm deletion first."
+                        )
+
+                    else:
+                        try:
+                            shutil.rmtree(
+                                selected_path
+                            )
+
+                            st.success(
+                                f"Deleted backup "
+                                f"'{selected}'."
+                            )
+
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error(
+                                f"❌ Error deleting "
+                                f"backup: {e}"
+                            )
+
+            with cB:
+                if st.button(
+                    "📁 Refresh List",
+                    key=bk("refresh")
+                ):
+                    st.rerun()
+
+        else:
+            st.info(
+                "No backups to manage yet."
+            )
+
+    # =========================================================
+    # DEFAULT
+    # =========================================================
     else:
-        st.info("Choose an action above to create, restore, or manage backups.")
+        st.info(
+            "Choose an action above to create, restore, "
+            "or manage backups."
+        )
 
+    st.caption(
+        "🟡 Local backup implementation. Production deployment "
+        "will require persistent/cloud storage, account isolation, "
+        "security and validated recovery procedures."
+    )
 
 # =========================
 # 📦 REQUIRED IMPORTS (top of app.py)
