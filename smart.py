@@ -15218,9 +15218,6 @@ elif menu_v2 == "🤖 AI Crop Calendar":
 
 elif menu_v2 == "🧪 AI Predictions":
     ai_predictions_ui()
- 
-elif menu_v2 == "🧪 Smart Fertilizer & Pesticide":
-    smart_fert_pest_ui()
 
 elif menu_v2 in (
     "📍 Farm Performance Indicators",
