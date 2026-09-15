@@ -2943,62 +2943,1075 @@ def farm_plot_mapping_ui():
 
 
 
+#  smart fert pest ui
 def smart_fert_pest_ui():
     import streamlit as st
-    import datetime
+    import pandas as pd
+    import uuid
+    from datetime import datetime, date
 
-    st.subheader("🌾 Smart Fertilizer & Pesticide Stock Manager")
+    # =========================================================
+    # CURRENT FARM CONTEXT
+    # =========================================================
+    current_farm = st.session_state.get("current_farm", {}) or {}
+    personalized_profile = st.session_state.get(
+        "personalized_profile", {}
+    ) or {}
+    farmer_profile = st.session_state.get(
+        "farmer_profile", {}
+    ) or {}
 
-    # safe load/save wrappers if you have _load/_save helpers
-    def _safe_load(path, default):
-        try:
-            return _load(path, default)
-        except Exception as e:
-            st.warning(f"Could not load {path}: {e}")
-            return default
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or "main_farm"
+    )
 
-    def _safe_save(path, data):
-        try:
-            _save(path, data)
-            return True
-        except Exception as e:
-            st.error(f"Save failed: {e}")
-            return False
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or "Main Farm"
+    )
 
-    inv = _safe_load("chem_inventory.json", [])
+    farm_crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or "Not selected"
+    )
 
-    base = "smart_fert_pest"
-    form_key = f"{base}_form"
-    item_key = f"{base}_item"
-    qty_key = f"{base}_qty"
-    submit_key = f"{base}_submit"
+    location = (
+        current_farm.get("location")
+        or personalized_profile.get("location")
+        or farmer_profile.get("location")
+        or "Not selected"
+    )
 
-    with st.form(form_key):
-        item = st.text_input("Item (Fertilizer/Pesticide)", key=item_key)
-        qty = st.number_input("Quantity", min_value=0, step=1, key=qty_key)
-        # compatibility: some Streamlit versions don't accept key= on form_submit_button
-        try:
-            submitted = st.form_submit_button("Save Stock", key=submit_key)
-        except TypeError:
-            submitted = st.form_submit_button("Save Stock")
+    country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Not selected"
+    )
+
+    st.header("🧪 Smart Fertilizer & Pesticide Stock Manager")
+
+    st.info(
+        f"🌾 Current Farm: {farm_name} | "
+        f"Crop: {farm_crop} | "
+        f"Location: {location} | "
+        f"Country: {country}"
+    )
+
+    # =========================================================
+    # FARM-SPECIFIC SESSION KEYS
+    # =========================================================
+    def sk(name):
+        return f"smart_fert_pest_{farm_id}_{name}"
+
+    items_key = sk("stock_items")
+    logs_key = sk("stock_usage_logs")
+
+    if items_key not in st.session_state:
+        st.session_state[items_key] = []
+
+    if logs_key not in st.session_state:
+        st.session_state[logs_key] = []
+
+    # =========================================================
+    # HELPERS
+    # =========================================================
+    def stock_to_df(items):
+        columns = [
+            "id",
+            "farm_id",
+            "farm_name",
+            "name",
+            "type",
+            "qty",
+            "unit",
+            "min_level",
+            "expiry_date",
+            "usage_notes",
+            "last_updated"
+        ]
+
+        if not items:
+            return pd.DataFrame(columns=columns)
+
+        df = pd.DataFrame(items)
+
+        for column in columns:
+            if column not in df.columns:
+                df[column] = ""
+
+        return df[columns]
+
+    def log_stock_action(
+        item,
+        action,
+        amount,
+        note
+    ):
+        st.session_state[logs_key].append(
+            {
+                "id": item["id"],
+                "farm_id": farm_id,
+                "farm_name": farm_name,
+                "name": item["name"],
+                "type": item["type"],
+                "action": action,
+                "amount": float(amount),
+                "unit": item["unit"],
+                "note": note,
+                "timestamp": datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            }
+        )
+
+    # =========================================================
+    # STOCK SUMMARY
+    # =========================================================
+    items = st.session_state[items_key]
+    stock_df = stock_to_df(items)
+
+    low_count = 0
+    expiring_count = 0
+
+    if not stock_df.empty:
+        qty_values = pd.to_numeric(
+            stock_df["qty"],
+            errors="coerce"
+        ).fillna(0)
+
+        min_values = pd.to_numeric(
+            stock_df["min_level"],
+            errors="coerce"
+        ).fillna(0)
+
+        low_count = int(
+            (qty_values <= min_values).sum()
+        )
+
+        expiry_values = pd.to_datetime(
+            stock_df["expiry_date"],
+            errors="coerce"
+        )
+
+        today_ts = pd.Timestamp.today().normalize()
+        soonexpiring_count = int(
+            expiry_values.between(
+                today_ts,
+                soon_ts,
+                inclusive="both"
+            ).sum()
+        )
+
+    m1, m2, m3 = st.columns(3)
+
+    m1.metric(
+        "Stock Items",
+        len(items)
+    )
+
+    m2.metric(
+        "Low Stock",
+        low_count
+    )
+
+    m3.metric(
+        "Expiring ≤30 Days",
+        expiring_count
+    )
+
+    # =========================================================
+    # ADD NEW ITEM
+    # =========================================================
+    st.subheader("➕ Add New Item to Stock")
+
+    with st.form(
+        sk("form_add_item"),
+        clear_on_submit=True
+    ):
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            item_name = st.text_input(
+                "Item Name",
+                key=sk("add_name")
+            )
+
+            item_type = st.selectbox(
+                "Type",
+                [
+                    "Fertilizer",
+                    "Pesticide"
+                ],
+                key=sk("add_type")
+            )
+
+            unit = st.text_input(
+                "Unit",
+                value="kg",
+                key=sk("add_unit")
+            )
+
+        with c2:
+            quantity = st.number_input(
+                "Quantity",
+                min_value=0.0,
+                value=0.0,
+                step=0.1,
+                key=sk("add_qty")
+            )
+
+            min_level = st.number_input(
+                "Reorder Level",
+                min_value=0.0,
+                value=5.0,
+                step=0.1,
+                key=sk("add_min")
+            )
+
+            expiry_date = st.date_input(
+                "Expiry Date",
+                value=date.today(),
+                key=sk("add_exp")
+            )
+
+        with c3:
+            usage_notes = st.text_area(
+                "Usage Notes",
+                key=sk("add_notes")
+            )
+
+        submitted = st.form_submit_button(
+            "➕ Add Item",
+            use_container_width=True
+        )
 
     if submitted:
-        if not (item or "").strip():
-            st.warning("Enter an item name before saving.")
-        else:
-            inv.append({"item": item.strip(), "qty": int(qty), "date": str(datetime.date.today())})
-            _safe_save("chem_inventory.json", inv)
-            st.success(f"✅ {qty} units of {item} saved.")
+        clean_name = item_name.strip()
 
-    if inv:
-        st.markdown("### 📦 Current Stock")
-        for it in inv:
-            i = it.get("item") if isinstance(it, dict) else str(it)
-            q = it.get("qty") if isinstance(it, dict) else ""
-            d = it.get("date") if isinstance(it, dict) else ""
-            st.write(f"- {i}: {q} (as of {d})")
+        if not clean_name:
+            st.warning(
+                "Please provide an item name."
+            )
+
+        else:
+            duplicate = any(
+                str(
+                    item.get("name", "")
+                ).strip().lower()
+                == clean_name.lower()
+                for item in st.session_state[
+                    items_key
+                ]
+            )
+
+            if duplicate:
+                st.warning(
+                    "An item with this name already "
+                    "exists for the current farm."
+                )
+
+            else:
+                new_item = {
+                    "id": str(uuid.uuid4()),
+                    "farm_id": farm_id,
+                    "farm_name": farm_name,
+                    "name": clean_name,
+                    "type": item_type,
+                    "qty": float(quantity),
+                    "unit": unit.strip() or "kg",
+                    "min_level": float(min_level),
+                    "expiry_date": (
+                        expiry_date.strftime(
+                            "%Y-%m-%d"
+                        )
+                    ),
+                    "usage_notes": (
+                        usage_notes.strip()
+                    ),
+                    "last_updated": (
+                        datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                    )
+                }
+
+                st.session_state[
+                    items_key
+                ].append(new_item)
+
+                log_stock_action(
+                    new_item,
+                    "initial_stock",
+                    quantity,
+                    "Item added to inventory"
+                )
+
+                st.success(
+                    f"✅ Added '{clean_name}' "
+                    "to stock."
+                )
+
+                st.rerun()
+                # =========================================================
+    # FILTER & SEARCH
+    # =========================================================
+    st.subheader("🔎 Filter & Search")
+
+    f1, f2, f3, f4 = st.columns(
+        [2, 2, 2, 2]
+    )
+
+    with f1:
+        q = st.text_input(
+            "Search by name",
+            key=sk("filter_q")
+        )
+
+    with f2:
+        selected_types = st.multiselect(
+            "Type Filter",
+            [
+                "Fertilizer",
+                "Pesticide"
+            ],
+            key=sk("filter_type")
+        )
+
+    with f3:
+        low_stock_only = st.checkbox(
+            "Low Stock Only",
+            key=sk("filter_low")
+        )
+
+    with f4:
+        expiring_only = st.checkbox(
+            "Expiring Within 30 Days",
+            key=sk("filter_exp")
+        )
+
+    df = stock_to_df(
+        st.session_state[items_key]
+    )
+
+    if not df.empty:
+        df["qty"] = pd.to_numeric(
+            df["qty"],
+            errors="coerce"
+        ).fillna(0)
+
+        df["min_level"] = pd.to_numeric(
+            df["min_level"],
+            errors="coerce"
+        ).fillna(0)
+
+        df["expiry_date_dt"] = pd.to_datetime(
+            df["expiry_date"],
+            errors="coerce"
+        )
+
+        mask = pd.Series(
+            True,
+            index=df.index
+        )
+
+        if q:
+            mask &= (
+                df["name"]
+                .fillna("")
+                .astype(str)
+                .str.contains(
+                    q.strip(),
+                    case=False,
+                    regex=False
+                )
+            )
+
+        if selected_types:
+            mask &= df["type"].isin(
+                selected_types
+            )
+
+        if low_stock_only:
+            mask &= (
+                df["qty"]
+                <= df["min_level"]
+            )
+
+        if expiring_only:
+            today_ts = (
+                pd.Timestamp.today()
+                .normalize()
+            )
+
+            soon_ts = (
+                today_ts
+                + pd.Timedelta(days=30)
+            )
+
+            mask &= (
+                df["expiry_date_dt"]
+                .between(
+                    today_ts,
+                    soon_ts,
+                    inclusive="both"
+                )
+            )
+
+        df_view = df[mask].copy()
+
     else:
-        st.info("No fertilizer/pesticide stock records yet.")
+        df_view = df
+
+    # =========================================================
+    # STOCK ALERTS
+    # =========================================================
+    if not df.empty:
+        low_df = df[
+            df["qty"]
+            <= df["min_level"]
+        ]
+
+        if not low_df.empty:
+            st.error(
+                "⚠️ Low stock items detected:"
+            )
+
+            for _, row in low_df.iterrows():
+                st.write(
+                    f"• {row['name']} "
+                    f"({row['type']}): "
+                    f"{row['qty']} "
+                    f"{row['unit']} ≤ "
+                    f"reorder level "
+                    f"{row['min_level']} "
+                    f"{row['unit']}"
+                )
+
+        today_ts = (
+            pd.Timestamp.today()
+            .normalize()
+        )
+
+        soon_ts = (
+            today_ts
+            + pd.Timedelta(days=30)
+        )
+
+        exp_alert = df[
+            df["expiry_date_dt"]
+            .between(
+                today_ts,
+                soon_ts,
+                inclusive="both"
+            )
+        ]
+
+        if not exp_alert.empty:
+            st.warning(
+                "⏳ Items nearing expiry "
+                "(within 30 days):"
+            )
+
+            for _, row in exp_alert.iterrows():
+                expiry = row[
+                    "expiry_date_dt"
+                ]
+
+                if pd.notna(expiry):
+                    days_left = (
+                        expiry.date()
+                        - date.today()
+                        ).days
+
+                    st.write(
+                        f"• {row['name']} "
+                        f"expires in "
+                        f"{days_left} day(s) "
+                        f"on {row['expiry_date']}"
+                    )
+
+        expired_df = df[
+            df["expiry_date_dt"]
+            < today_ts
+        ]
+
+        if not expired_df.empty:
+            st.error(
+                "🚫 Expired stock detected. "
+                "Do not treat expired products "
+                "as available for field application."
+            )
+
+    # =========================================================
+    # CURRENT STOCK TABLE
+    # =========================================================
+    st.subheader("📋 Current Stock")
+
+    display_df = df_view.drop(
+        columns=["expiry_date_dt"],
+        errors="ignore"
+    )
+
+    st.dataframe(
+        display_df,
+        use_container_width=True
+    )
+
+    # =========================================================
+    # MANAGE ITEMS
+    # =========================================================
+    st.subheader("🛠 Manage Items")
+
+    if not df_view.empty:
+        for _, row in df_view.iterrows():
+            row_id = str(row["id"])
+
+            with st.expander(
+                f"✏️ {row['name']} • "
+                f"{row['type']} • "
+                f"{row['qty']} "
+                f"{row['unit']}"
+            ):
+                c1, c2, c3 = st.columns(3)
+
+                # ---------------------------------------------
+                # USE STOCK
+                # ---------------------------------------------
+                with c1:
+                    use_amount = st.number_input(
+                        f"Use Amount ({row['unit']})",
+                        min_value=0.0,
+                        step=0.1,
+                        key=sk(
+                            f"use_amt_{row_id}"
+                        )
+                    )
+
+                    use_note = st.text_input(
+                        "Application Note",
+                        value=(
+                            "Used in field application"
+                        ),
+                        key=sk(
+                            f"use_note_{row_id}"
+                        )
+                    )
+
+                    if st.button(
+                        "➖ Use",
+                        key=sk(
+                            f"use_btn_{row_id}"
+                        ),
+                        use_container_width=True
+                    ):
+                        if use_amount <= 0:
+                            st.warning(
+                                "Enter a valid amount."
+                            )
+
+                        elif use_amount > float(
+                            row["qty"]
+                        ):
+                            st.warning(
+                                "Not enough stock available."
+                            )
+
+                        else:
+                            for item in st.session_state[
+                                items_key
+                            ]:
+                                if str(
+                                    item["id"]
+                                ) == row_id:
+                                    item["qty"] = round(
+                                        float(
+                                            item["qty"]
+                                        )
+                                        - float(
+                                            use_amount
+                                        ),
+                                        3
+                                    )
+
+                                    item[
+                                        "last_updated"
+                                    ] = (
+                                        datetime.now()
+                                        .strftime(
+                                            "%Y-%m-%d "
+                                            "%H:%M:%S"
+                                        )
+                                        )
+
+                                    log_stock_action(
+                                        item,
+                                        "use",
+                                        use_amount,
+                                        use_note.strip()
+                                    )
+
+                                    break
+
+                            st.success(
+                                f"Used {use_amount} "
+                                f"{row['unit']} from "
+                                f"{row['name']}."
+                            )
+
+                            st.rerun()
+
+                # ---------------------------------------------
+                # RESTOCK
+                # ---------------------------------------------
+                with c2:
+                    restock_amount = (
+                        st.number_input(
+                            f"Restock Amount "
+                            f"({row['unit']})",
+                            min_value=0.0,
+                            step=0.1,
+                            key=sk(
+                                f"restock_amt_"
+                                f"{row_id}"
+                            )
+                        )
+                    )
+
+                    if st.button(
+                        "➕ Restock",
+                        key=sk(
+                            f"restock_btn_{row_id}"
+                        ),
+                        use_container_width=True
+                    ):
+                        if restock_amount <= 0:
+                            st.warning(
+                                "Enter a valid "
+                                "restock amount."
+                            )
+
+                        else:
+                            for item in st.session_state[
+                                items_key
+                            ]:
+                                if str(
+                                    item["id"]
+                                ) == row_id:
+                                    item["qty"] = round(
+                                        float(
+                                            item["qty"]
+                                        )
+                                        + float(
+                                            restock_amount
+                                        ),
+                                        3
+                                    )
+
+                                    item[
+                                        "last_updated"
+                                    ] = (
+                                        datetime.now()
+                                        .strftime(
+                                            "%Y-%m-%d "
+                                            "%H:%M:%S"
+                                        )
+                                    )
+
+                                    log_stock_action(
+                                        item,
+                                        "restock",
+                                        restock_amount,
+                                        "Supplier delivery"
+                                    )
+
+                                    break
+
+                            st.success(
+                                f"Restocked "
+                                f"{restock_amount} "
+                                f"{row['unit']} to "
+                                f"{row['name']}."
+                            )
+
+                            st.rerun()
+
+                # ---------------------------------------------
+                # UPDATE SETTINGS
+                # ---------------------------------------------
+                with c3:
+                    new_min = st.number_input(
+                        "Update Reorder Level",
+                        min_value=0.0,
+                        step=0.1,
+                        value=float(
+                            row["min_level"]
+                        ),
+                        key=sk(
+                            f"upd_min_{row_id}"
+                        )
+                    )
+
+                    parsed_expiry = pd.to_datetime(
+                        row["expiry_date"],
+                        errors="coerce"
+                    )
+
+                    if pd.notna(
+                        parsed_expiry
+                    ):
+                        current_expiry = (
+                            parsed_expiry.date()
+                        )
+                    else:
+                        current_expiry = (
+                            date.today()
+                        )
+
+                    new_exp = st.date_input(
+                        "Update Expiry Date",
+                        value=current_expiry,
+                        key=sk(
+                            f"upd_exp_{row_id}"
+                        )
+                    )
+
+                    if st.button(
+                        "💾 Save Updates",
+                        key=sk(
+                            f"save_upd_{row_id}"
+                        ),
+                        use_container_width=True
+                    ):
+                        for item in st.session_state[
+                            items_key
+                        ]:
+                            if str(
+                                item["id"]
+                            ) == row_id:
+                                item[
+                                    "min_level"
+                                ] = float(
+                                    new_min
+                                )
+
+                                item[
+                                    "expiry_date"
+                                ] = (
+                                    new_exp.strftime(
+                                        "%Y-%m-%d"
+                                    )
+                                )
+
+                                item[
+                                    "last_updated"
+                                ] = (
+                                    datetime.now()
+                                    .strftime(
+                                        "%Y-%m-%d "
+                                        "%H:%M:%S"
+                                    )
+                                )
+
+                                break
+
+                        st.success(
+                            "Item settings updated."
+                        )
+
+                        st.rerun()
+
+                # ---------------------------------------------
+                # DELETE
+                # ---------------------------------------------
+                st.divider()
+
+                if st.button(
+                    "🗑 Delete Item",
+                    key=sk(
+                        f"del_{row_id}"
+                    )
+                ):
+                    st.session_state[
+                        items_key
+                    ] = [
+                        item
+                        for item
+                        in st.session_state[
+                            items_key
+                        ]
+                        if str(
+                            item["id"]
+                        ) != row_id
+                    ]
+
+                    st.success(
+                        f"Deleted "
+                        f"{row['name']} "
+                        "from stock."
+                    )
+
+                    st.rerun()
+
+    else:
+        st.info(
+            "No stock items match "
+            "the current filters."
+        )
+
+    # =========================================================
+    # USAGE / RESTOCK LOGS
+    # =========================================================
+    st.subheader("🧾 Usage & Restock Logs")
+
+    logs = st.session_state[
+        logs_key
+    ]
+
+    if logs:
+        logs_df = pd.DataFrame(
+            logs
+        )
+
+        st.dataframe(
+            logs_df,
+            use_container_width=True
+        )
+
+        st.download_button(
+            "⬇️ Download Logs CSV",
+            data=logs_df.to_csv(
+                index=False
+            ).encode("utf-8"),
+            file_name=(
+                f"{farm_id}_stock_usage_logs.csv"
+            ),
+            mime="text/csv",
+            key=sk("dl_logs")
+        )
+
+    else:
+        st.info(
+            "No usage or restock logs yet."
+        )
+
+    # =========================================================
+    # EXPORT / IMPORT
+    # =========================================================
+    st.subheader("📤 Export / 📥 Import")
+
+    export_df = stock_to_df(
+        st.session_state[items_key]
+    )
+
+    st.download_button(
+        "⬇️ Download Stock CSV",
+        data=export_df.to_csv(
+            index=False
+        ).encode("utf-8"),
+        file_name=(
+            f"{farm_id}_stock_items.csv"
+        ),
+        mime="text/csv",
+        key=sk("dl_stock")
+    )
+
+    uploaded = st.file_uploader(
+        "Import Stock CSV",
+        type=["csv"],
+        key=sk("upl_stock")
+    )
+
+    if uploaded is not None:
+        try:
+            imported_df = pd.read_csv(
+                uploaded
+            )
+
+            required = {
+                "name",
+                "type",
+                "qty",
+                "unit",
+                "min_level",
+                "expiry_date",
+                "usage_notes"
+            }
+
+            if not required.issubset(
+                imported_df.columns
+            ):
+                st.warning(
+                    "CSV must include columns: "
+                    + ", ".join(
+                        sorted(required)
+                    )
+                )
+
+            else:
+                st.dataframe(
+                    imported_df,
+                    use_container_width=True
+                )
+
+                if st.button(
+                    "📥 Confirm Import",
+                    key=sk(
+                        "confirm_import"
+                    ),
+                    use_container_width=True
+                ):
+                    imported_count = 0
+                    skipped_count = 0
+
+                    existing_names = {
+                        str(
+                            item.get(
+                                "name",
+                                ""
+                            )
+                        ).strip().lower()
+                        for item
+                        in st.session_state[
+                            items_key
+                        ]
+                    }
+
+                    for _, row in (
+                        imported_df.iterrows()
+                    ):
+                        item_name = str(
+                            row.get(
+                                "name",
+                                ""
+                            )
+                        ).strip()
+
+                        item_type = str(
+                            row.get(
+                                "type",
+                                ""
+                            )
+                        ).strip()
+
+                        try:
+                            item_qty = float(
+                                row.get(
+                                    "qty",
+                                    0
+                                )
+                            )
+
+                            item_min = float(
+                                row.get(
+                                    "min_level",
+                                    0
+                                )
+                            )
+
+                        except (
+                            TypeError,
+                            ValueError
+                        ):
+                            skipped_count += 1
+                            continue
+
+                        if (
+                            not item_name
+                            or item_type not in
+                            {
+                                "Fertilizer",
+                                "Pesticide"
+                            }
+                            or item_qty < 0
+                            or item_min < 0
+                            or item_name.lower()
+                            in existing_names
+                        ):
+                            skipped_count += 1
+                            continue
+
+                        new_item = {
+                            "id": str(
+                                uuid.uuid4()
+                            ),
+                            "farm_id": farm_id,
+                            "farm_name": farm_name,
+                            "name": item_name,
+                            "type": item_type,
+                            "qty": item_qty,
+                            "unit": str(
+                                row.get(
+                                    "unit",
+                                    "kg"
+                                )
+                            ).strip() or "kg",
+                            "min_level": item_min,
+                            "expiry_date": str(
+                                row.get(
+                                    "expiry_date",
+                                    ""
+                                )
+                            ),
+                            "usage_notes": str(
+                                row.get(
+                                    "usage_notes",
+                                    ""
+                                )
+                            ),
+                            "last_updated": (
+                                datetime.now()
+                                .strftime(
+                                    "%Y-%m-%d "
+                                    "%H:%M:%S"
+                                )
+                            )
+                        }
+
+                        st.session_state[
+                            items_key
+                        ].append(
+                            new_item
+                        )
+
+                        existing_names.add(
+                            item_name.lower()
+                        )
+
+                        imported_count += 1
+
+                    st.success(
+                        f"✅ Imported "
+                        f"{imported_count} item(s)."
+                    )
+
+                    if skipped_count:
+                        st.info(
+                            f"{skipped_count} "
+                            "invalid or duplicate "
+                            "item(s) were skipped."
+                        )
+
+                    st.rerun()
+
+        except Exception as e:
+            st.error(
+                f"❌ Import failed: {e}"
+            )
+
+    # =========================================================
+    # STATUS
+    # =========================================================
+    st.caption(
+        "🟡 Stock management is connected to Current Farm. "
+        "Final integration can connect stock usage with farm lots, "
+        "PA/CSA recommendations, treatment records and Smart Farm Alerts."
+    )
+
 
 
 def smart_tutor_voice():
@@ -11563,6 +12576,7 @@ menu_v2 = st.sidebar.selectbox(
         "📡 Live Sensor Dashboard",
         "💦 Irrigation Scheduler",
         "🎙️ Voice Command Interface",
+        "💧Smart Fertilizer & Pesticide",
         "🚨 Smart Farm Alerts",
         "🚁 Voice-Controlled Drone Irrigation Assistant",
         "🚁 Drone Flight Scheduler",
@@ -14206,6 +15220,8 @@ elif menu_v2 == "🤖 AI Crop Calendar":
 elif menu_v2 == "🧪 AI Predictions":
     ai_predictions_ui()
  
+elif menu_v2 == "🧪 Smart Fertilizer & Pesticide":
+    smart_fert_pest_ui()
 
 elif menu_v2 in (
     "📍 Farm Performance Indicators",
@@ -14579,300 +15595,112 @@ def data_backup_recovery_ui():
 # =========================
 # 📦 REQUIRED IMPORTS (top of app.py)
 # =========================
-import streamlit as st
-import pandas as pd
-import random
-from datetime import datetime, date
-import uuid
-
-# =========================
-# 🧰 SESSION-STATE HELPERS
-# =========================
 def _init_state():
     if "stock_items" not in st.session_state:
-        # id, name, type, qty, unit, min_level, expiry_date, usage_notes, last_updated
         st.session_state.stock_items = []
+
     if "stock_usage_logs" not in st.session_state:
-        # list of dicts: {id, name, type, action, amount, unit, note, timestamp}
         st.session_state.stock_usage_logs = []
+
     if "indicator_history" not in st.session_state:
         st.session_state.indicator_history = pd.DataFrame(
-            columns=["timestamp", "soil_moisture", "temperature", "humidity",
-                     "crop_health_index", "pest_risk", "water_level", "ph", "ec"]
+            columns=[
+                "timestamp",
+                "soil_moisture",
+                "temperature",
+                "humidity",
+                "crop_health_index",
+                "pest_risk",
+                "water_level",
+                "ph",
+                "ec"
+            ]
         )
 
 _init_state()
 
 
-
-# =========================
-# 🧪 SMART FERTILIZER & PESTICIDE STOCK MANAGER (drop-in)
-# =======================
-
-# -- initialize session state containers once
-def _init_stock_state():
-    if "stock_items" not in st.session_state:
-        st.session_state.stock_items = []  # list of dicts
-    if "stock_usage_logs" not in st.session_state:
-        st.session_state.stock_usage_logs = []  # list of dicts
-
-_init_stock_state()
+# ============================================================
+# 🧪 SMART FERTILIZER & PESTICIDE STOCK MANAGER
+# ============================================================
 
 import streamlit as st
 import pandas as pd
 import uuid
 from datetime import datetime, date
 
+
+# ============================================================
+# STOCK STATE INITIALIZATION
+# ============================================================
 def _init_stock_state():
     if "stock_items" not in st.session_state:
-        st.session_state.stock_items = []  # list of dicts
-    if "stock_usage_logs" not in st.session_state:
-        st.session_state.stock_usage_logs = []  # list of dicts
+        st.session_state.stock_items = []
 
+    if "stock_usage_logs" not in st.session_state:
+        st.session_state.stock_usage_logs = []
+
+
+_init_stock_state()
+
+
+# ============================================================
+# STREAMLIT RERUN HELPER
+# ============================================================
 def _rerun():
-    # works on both new/old Streamlit
     try:
         st.rerun()
     except Exception:
         st.experimental_rerun()
 
-_init_stock_state()
 
-# ---------- data helpers ----------
+# ============================================================
+# STOCK DATAFRAME HELPER
+# ============================================================
 def _stock_to_df(items):
+    columns = [
+        "id",
+        "name",
+        "type",
+        "qty",
+        "unit",
+        "min_level",
+        "expiry_date",
+        "usage_notes",
+        "last_updated"
+    ]
+
     if not items:
-        cols = ["id","name","type","qty","unit","min_level","expiry_date","usage_notes","last_updated"]
-        return pd.DataFrame(columns=cols)
+        return pd.DataFrame(
+            columns=columns
+        )
+
     return pd.DataFrame(items)
 
-def _log_stock_action(item, action, amount, note):
-    st.session_state.stock_usage_logs.append({
-        "id": item["id"],
-        "name": item["name"],
-        "type": item["type"],
-        "action": action,   # "use" | "restock"
-        "amount": amount,
-        "unit": item["unit"],
-        "note": note,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
 
-# ---------- UI ----------
-def smart_fert_pest_ui():
-    st.header("🧪 Smart Fertilizer & Pesticide Stock Manager")
-
-    # ---- Add New Item ----
-    st.subheader("➕ Add New Item to Stock")
-    with st.form(sfp("form_add_item")):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            item_name = st.text_input("Item Name", key=sfp("add_name"))
-            item_type = st.selectbox("Type", ["Fertilizer", "Pesticide"], key=sfp("add_type"))
-            unit = st.text_input("Unit", value="kg", key=sfp("add_unit"))
-        with c2:
-            quantity  = st.number_input("Quantity", min_value=0.0, value=0.0, step=0.1, key=sfp("add_qty"))
-            min_level = st.number_input("Reorder Level", min_value=0.0, value=5.0, step=0.1, key=sfp("add_min"))
-            expiry_date = st.date_input("Expiry Date", value=date.today(), key=sfp("add_exp"))
-        with c3:
-            usage_notes = st.text_area("Usage Notes", key=sfp("add_notes"))
-        submitted = st.form_submit_button("Add Item")
-    if submitted:
-        if not item_name.strip():
-            st.warning("Please provide an item name.")
-        else:
-            new_item = {
-                "id": str(uuid.uuid4()),
-                "name": item_name.strip(),
-                "type": item_type,
-                "qty": float(quantity),
-                "unit": unit.strip() or "kg",
-                "min_level": float(min_level),
-                "expiry_date": expiry_date.strftime("%Y-%m-%d"),
-                "usage_notes": usage_notes.strip(),
-                "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            }
-            st.session_state.stock_items.append(new_item)
-            st.success(f"Added '{new_item['name']}' to stock.")
-            _rerun()
-
-    # ---- Filters ----
-    st.subheader("🔎 Filter & Search")
-    f1, f2, f3, f4 = st.columns([2,2,2,2])
-    with f1:
-        q = st.text_input("Search by name", key=sfp("filter_q"))
-    with f2:
-        t = st.multiselect("Type filter", ["Fertilizer", "Pesticide"], key=sfp("filter_type"))
-    with f3:
-        low_stock_only = st.checkbox("Low stock only", key=sfp("filter_low"))
-    with f4:
-        expiring_only = st.checkbox("Expiring within 30 days", key=sfp("filter_exp"))
-
-    df = _stock_to_df(st.session_state.stock_items)
-
-    if not df.empty:
-        mask = pd.Series(True, index=df.index)
-        if q:
-            mask &= df["name"].str.contains(q, case=False, na=False)
-        if t:
-            mask &= df["type"].isin(t)
-        if low_stock_only:
-            mask &= (df["qty"] <= df["min_level"])
-        if expiring_only:
-            today = pd.Timestamp.today().normalize()
-            soon = today + pd.Timedelta(days=30)
-            df_dates = pd.to_datetime(df["expiry_date"], errors="coerce")
-            mask &= df_dates.between(today, soon, inclusive="both")
-        df_view = df[mask].copy()
-    else:
-        df_view = df
-
-    # ---- Alerts ----
-    if not df.empty:
-        low_df = df[df["qty"] <= df["min_level"]]
-        if not low_df.empty:
-            st.error("⚠️ Low stock items detected:")
-            for _, r in low_df.iterrows():
-                st.write(f"- **{r['name']}** ({r['type']}): {r['qty']} {r['unit']} ≤ reorder level {r['min_level']} {r['unit']}")
-
-        df["expiry_date_dt"] = pd.to_datetime(df["expiry_date"], errors="coerce")
-        exp_alert = df[df["expiry_date_dt"] <= (pd.Timestamp.today().normalize() + pd.Timedelta(days=30))]
-        if not exp_alert.empty:
-            st.warning("⏳ Items nearing expiry (≤ 30 days):")
-            for _, r in exp_alert.iterrows():
-                days_left = (r["expiry_date_dt"].date() - date.today()).days
-                st.write(f"- **{r['name']}** expires in {days_left} day(s) on {r['expiry_date']}")
-
-    # ---- Table ----
-    st.subheader("📋 Current Stock")
-    st.dataframe(df_view.drop(columns=[c for c in ["expiry_date_dt"] if c in df_view.columns]),
-                 use_container_width=True)
-
-    # ---- Row Actions ----
-    st.subheader("🛠 Manage Items")
-    if not df_view.empty:
-        for _, row in df_view.reset_index(drop=True).iterrows():
-            with st.expander(f"✏️ {row['name']} • {row['type']} • {row['qty']} {row['unit']}"):
-                c1, c2, c3 = st.columns(3)
-
-                # Use
-                with c1:
-                    use_amount = st.number_input(
-                        f"Use amount ({row['unit']})", min_value=0.0, step=0.1, key=sfp(f"use_amt_{row['id']}")
-                    )
-                    if st.button("➖ Use", key=sfp(f"use_btn_{row['id']}")):
-                        if use_amount <= 0:
-                            st.warning("Enter a valid amount to use.")
-                        elif use_amount > row["qty"]:
-                            st.warning("Not enough in stock.")
-                        else:
-                            for it in st.session_state.stock_items:
-                                if it["id"] == row["id"]:
-                                    it["qty"] = round(it["qty"] - float(use_amount), 3)
-                                    it["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    _log_stock_action(it, "use", float(use_amount), "Used in field application")
-                                    st.success(f"Used {use_amount} {it['unit']} from {it['name']}.")
-                                    break
-                            _rerun()
-
-                # Restock
-                with c2:
-                    restock_amount = st.number_input(
-                        f"Restock amount ({row['unit']})", min_value=0.0, step=0.1, key=sfp(f"restock_amt_{row['id']}")
-                    )
-                    if st.button("➕ Restock", key=sfp(f"restock_btn_{row['id']}")):
-                        if restock_amount <= 0:
-                            st.warning("Enter a valid amount to restock.")
-                        else:
-                            for it in st.session_state.stock_items:
-                                if it["id"] == row["id"]:
-                                    it["qty"] = round(it["qty"] + float(restock_amount), 3)
-                                    it["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    _log_stock_action(it, "restock", float(restock_amount), "Supplier delivery")
-                                    st.success(f"Restocked {restock_amount} {it['unit']} to {it['name']}.")
-                                    break
-                            _rerun()
-
-                # Update settings
-                with c3:
-                    new_min = st.number_input(
-                        "Update reorder level", min_value=0.0, step=0.1, value=float(row["min_level"]),
-                        key=sfp(f"upd_min_{row['id']}")
-                    )
-                    new_exp = st.date_input(
-                        "Update expiry date",
-                        value=pd.to_datetime(row["expiry_date"], errors="coerce").date()
-                              if pd.notna(pd.to_datetime(row["expiry_date"], errors="coerce")) else date.today(),
-                        key=sfp(f"upd_exp_{row['id']}")
-                    )
-                    if st.button("💾 Save updates", key=sfp(f"save_upd_{row['id']}")):
-                        for it in st.session_state.stock_items:
-                            if it["id"] == row["id"]:
-                                it["min_level"] = float(new_min)
-                                it["expiry_date"] = new_exp.strftime("%Y-%m-%d")
-                                it["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                st.success("Item settings updated.")
-                                break
-                        _rerun()
-
-                # Delete
-                del_col1, _ = st.columns([1,5])
-                with del_col1:
-                    if st.button("🗑 Delete item", type="secondary", key=sfp(f"del_{row['id']}")):
-                        st.session_state.stock_items = [it for it in st.session_state.stock_items if it["id"] != row["id"]]
-                        st.success(f"Deleted {row['name']} from stock.")
-                        _rerun()
-
-    # ---- Logs & IO ----
-    st.subheader("🧾 Usage & Restock Logs")
-    if st.session_state.stock_usage_logs:
-        logs_df = pd.DataFrame(st.session_state.stock_usage_logs)
-        st.dataframe(logs_df, use_container_width=True)
-        st.download_button(
-            "Download logs CSV",
-            logs_df.to_csv(index=False).encode("utf-8"),
-            file_name="stock_usage_logs.csv",
-            mime="text/csv",
-            key=sfp("dl_logs")
-        )
-    else:
-        st.info("No usage or restock logs yet.")
-
-    st.subheader("📤 Export / 📥 Import")
-    exp_df = _stock_to_df(st.session_state.stock_items)
-    st.download_button(
-        "Download stock CSV",
-        exp_df.to_csv(index=False).encode("utf-8"),
-        file_name="stock_items.csv",
-        mime="text/csv",
-        key=sfp("dl_stock")
+# ============================================================
+# STOCK ACTION LOGGER
+# ============================================================
+def _log_stock_action(
+    item,
+    action,
+    amount,
+    note
+):
+    st.session_state.stock_usage_logs.append(
+        {
+            "id": item["id"],
+            "name": item["name"],
+            "type": item["type"],
+            "action": action,
+            "amount": amount,
+            "unit": item["unit"],
+            "note": note,
+            "timestamp": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        }
     )
-
-    uploaded = st.file_uploader("Import stock CSV (id will be regenerated)", type=["csv"], key=sfp("upl_stock"))
-    if uploaded is not None:
-        try:
-            imp = pd.read_csv(uploaded)
-            required = {"name","type","qty","unit","min_level","expiry_date","usage_notes"}
-            if not required.issubset(set(imp.columns)):
-                st.warning(f"CSV must include columns: {', '.join(sorted(required))}")
-            else:
-                imported = []
-                for _, r in imp.iterrows():
-                    imported.append({
-                        "id": str(uuid.uuid4()),
-                        "name": str(r["name"]),
-                        "type": str(r["type"]),
-                        "qty": float(r["qty"]),
-                        "unit": str(r["unit"]),
-                        "min_level": float(r["min_level"]),
-                        "expiry_date": str(r["expiry_date"]),
-                        "usage_notes": str(r.get("usage_notes","")),
-                        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    })
-                st.session_state.stock_items.extend(imported)
-                st.success(f"Imported {len(imported)} items.")
-                _rerun()
-        except Exception as e:
-            st.error(f"Import failed:{e}")
 
 
 
