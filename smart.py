@@ -5563,30 +5563,7 @@ def data_backup_recovery_ui():
 
 
 
-def drone_irrigation_assistant_ui():
-    # Keep it self-contained so it never NameErrors
-    import streamlit as st
 
-    # Try to find your real implementation if it lives elsewhere
-    candidates = [
-        "drone_irrigation_assistant_ui_impl",
-        "irrigation_voice_assistant_ui",
-        "voice_irrigation_assistant_ui",
-        "drone_irrigation_assistant",   # common alt name
-        "_drone_irrigation_assistant_ui",
-    ]
-    for name in candidates:
-        impl = globals().get(name)
-        if callable(impl):
-            return impl()  # delegate to your actual function
-
-    # Fallback if nothing found (prevents NameError and explains what to do)
-    st.subheader("🚁 Voice-Controlled Drone Irrigation Assistant")
-    st.info(
-        "The voice irrigation assistant implementation isn’t loaded in this file. "
-        "Define one of these functions anywhere before runtime and I’ll call it automatically:\n\n"
-        f"- {', '.join(candidates)}"
-    )
 
 
 
