@@ -15695,10 +15695,6 @@ elif menu_v2 == "📈 Decision-Making Models":
 elif menu_v2 == "💦 Irrigation Scheduler":
     irrigation_scheduler_ui()
 
-elif help_option == "💾 Data Backup & Recovery":
-    data_backup_recovery_ui()
-
-
 
 # ===============================
 # 🚨 Smart Farm Alerts
