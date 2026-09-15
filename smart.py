@@ -9880,6 +9880,7 @@ menu_v2 = st.sidebar.selectbox(
         "📈 Market & Economic Tools",
         "🧪 Smart Fertilizer & Pesticide",
         "📡 Live Sensor Dashboard",
+        "💦 Irrigation Scheduler",
         "🎙️ Voice Command Interface",
         "🚨 Smart Farm Alerts",
         "🚁 Voice-Controlled Drone Irrigation Assistant",
