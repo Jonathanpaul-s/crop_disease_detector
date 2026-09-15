@@ -13424,8 +13424,6 @@ elif menu_v2 == "📈 Decision-Making Models":
 elif menu_v2 == "💦 Irrigation Scheduler":
     irrigation_scheduler_ui()
 
-elif menu_v2 == "🚁 Voice-Controlled Drone Irrigation Assistant":
-    drone_irrigation_assistant_ui()
 
 # ---------- BACKUP & RECOVERY UI (wrap in a function) ----------
 def data_backup_recovery_ui():
