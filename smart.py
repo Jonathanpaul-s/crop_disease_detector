@@ -12576,7 +12576,6 @@ menu_v2 = st.sidebar.selectbox(
         "📡 Live Sensor Dashboard",
         "💦 Irrigation Scheduler",
         "🎙️ Voice Command Interface",
-        "💧Smart Fertilizer & Pesticide",
         "🚨 Smart Farm Alerts",
         "🚁 Voice-Controlled Drone Irrigation Assistant",
         "🚁 Drone Flight Scheduler",
