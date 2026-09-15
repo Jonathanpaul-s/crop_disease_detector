@@ -8826,6 +8826,459 @@ def farm_lot_management_ui():
     )
 
 
+def data_backup_recovery_ui():
+    import os
+    import shutil
+    import streamlit as st
+    from datetime import datetime
+
+    # =========================================================
+    # CURRENT FARM
+    # =========================================================
+    current_farm = st.session_state.get("current_farm", {}) or {}
+
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or "main_farm"
+    )
+
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or "Main Farm"
+    )
+
+    crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or "Not selected"
+    )
+
+    location = current_farm.get("location") or "Not selected"
+
+    st.header("💾 Data Backup & Recovery")
+
+    st.info(
+        f"🌾 Current Farm: {farm_name} | "
+        f"Crop: {crop} | Location: {location}"
+    )
+
+    st.write(
+        "Create a backup of Smart Farm AI farm data, "
+        "restore a previous backup, or manage saved backups."
+    )
+
+    # =========================================================
+    # FARM-SPECIFIC WIDGET KEYS
+    # =========================================================
+    def bk(name):
+        return f"backup_recovery_{farm_id}_{name}"
+
+    active_key = bk("active_tool")
+
+    if active_key not in st.session_state:
+        st.session_state[active_key] = None
+
+    # =========================================================
+    # STORAGE DIRECTORIES
+    # =========================================================
+    data_dir = "farm_data"
+    backup_dir = "backups"
+
+    os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(backup_dir, exist_ok=True)
+
+    # =========================================================
+    # ACTIONS
+    # =========================================================
+    c1, c2, c3, c4 = st.columns([1.6, 1.6, 1.6, 0.8])
+
+    with c1:
+        if st.button(
+            "💾 Create Backup",
+            key=bk("btn_backup")
+        ):
+            st.session_state[active_key] = "backup"
+
+    with c2:
+        if st.button(
+            "♻️ Restore Backup",
+            key=bk("btn_restore")
+        ):
+            st.session_state[active_key] = "restore"
+
+    with c3:
+        if st.button(
+            "🗑 Manage Backups",
+            key=bk("btn_manage")
+        ):
+            st.session_state[active_key] = "manage"
+
+    with c4:
+        if st.button(
+            "🔄 Reset",
+            key=bk("btn_reset")
+        ):
+            st.session_state[active_key] = None
+            st.rerun()
+
+    tool = st.session_state[active_key]
+
+    # =========================================================
+    # CREATE BACKUP
+    # =========================================================
+    if tool == "backup":
+
+        st.subheader("💾 Create Backup")
+
+        st.caption(
+            "This creates a snapshot of the current Smart Farm AI "
+            "farm-data directory."
+        )
+
+        if st.button(
+            "📂 Backup Now",
+            key=bk("do_backup")
+        ):
+            try:
+                timestamp = datetime.now().strftime(
+                    "%Y%m%d_%H%M%S_%f"
+                )
+
+                safe_farm_id = "".join(
+                    ch if ch.isalnum() or ch in ("-", "_") else "_"
+                    for ch in farm_id
+                )
+
+                backup_name = (
+                    f"backup_{safe_farm_id}_{timestamp}"
+                )
+
+                backup_path = os.path.join(
+                    backup_dir,
+                    backup_name
+                )
+
+                shutil.copytree(
+                    data_dir,
+                    backup_path
+                )
+
+                st.success(
+                    f"✅ Backup created successfully: "
+                    f"{backup_name}"
+                )
+
+            except Exception as e:
+                st.error(
+                    f"❌ Error creating backup: {e}"
+                )
+                # =========================================================
+    # RESTORE BACKUP
+    # =========================================================
+    elif tool == "restore":
+
+        st.subheader("♻️ Restore Backup")
+
+        backups = sorted(
+            [
+                name
+                for name in os.listdir(backup_dir)
+                if os.path.isdir(
+                    os.path.join(
+                        backup_dir,
+                        name
+                    )
+                )
+            ],
+            reverse=True
+        )
+
+        if backups:
+
+            selected_backup = st.selectbox(
+                "Select a backup to restore",
+                backups,
+                key=bk("sel_restore")
+            )
+
+            st.warning(
+                "Restoring a backup replaces the current "
+                "farm_data directory."
+            )
+
+            confirm_restore = st.checkbox(
+                "I understand that current farm data will be replaced.",
+                key=bk("confirm_restore")
+            )
+
+            if st.button(
+                "🔄 Restore Selected Backup",
+                key=bk("do_restore")
+            ):
+
+                if not confirm_restore:
+                    st.warning(
+                        "Confirm the restore operation first."
+                    )
+
+                else:
+                    try:
+                        source = os.path.join(
+                            backup_dir,
+                            selected_backup
+                        )
+
+                        if os.path.exists(data_dir):
+                            shutil.rmtree(data_dir)
+
+                        shutil.copytree(
+                            source,
+                            data_dir
+                        )
+
+                        st.success(
+                            f"✅ Backup '{selected_backup}' "
+                            "restored successfully."
+                        )
+
+                    except Exception as e:
+                        st.error(
+                            f"❌ Error restoring backup: {e}"
+                        )
+
+        else:
+            st.info(
+                "ℹ️ No backups found. Create one first."
+            )
+
+    # =========================================================
+    # MANAGE BACKUPS
+    # =========================================================
+    elif tool == "manage":
+
+        st.subheader("🗑 Manage Backups")
+
+        backups = sorted(
+            [
+                name
+                for name in os.listdir(backup_dir)
+                if os.path.isdir(
+                    os.path.join(
+                        backup_dir,
+                        name
+                    )
+                )
+            ],
+            reverse=True
+        )
+
+        if backups:
+
+            st.metric(
+                "Available Backups",
+                len(backups)
+            )
+
+            selected = st.selectbox(
+                "Select a backup",
+                backups,
+                key=bk("sel_manage")
+            )
+
+            selected_path = os.path.join(
+                backup_dir,
+                selected
+            )
+
+            try:
+                created_time = datetime.fromtimestamp(
+                    os.path.getmtime(selected_path)
+                )
+
+                st.caption(
+                    "Last modified: "
+                    f"{created_time:%Y-%m-%d %H:%M:%S}"
+                )
+
+            except Exception:
+                pass
+
+            confirm_delete = st.checkbox(
+                "Confirm deletion of selected backup",
+                key=bk("confirm_delete")
+            )
+
+            cA, cB = st.columns(2)
+
+            with cA:
+                if st.button(
+                    "🗑 Delete Selected",
+                    key=bk("del_sel")
+                ):
+
+                    if not confirm_delete:
+                        st.warning(
+                            "Confirm deletion first."
+                        )
+
+                    else:
+                        try:
+                            shutil.rmtree(
+                                selected_path
+                            )
+
+                            st.success(
+                                f"Deleted backup "
+                                f"'{selected}'."
+                            )
+
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error(
+                                f"❌ Error deleting "
+                                f"backup: {e}"
+                            )
+
+            with cB:
+                if st.button(
+                    "📁 Refresh List",
+                    key=bk("refresh")
+                ):
+                    st.rerun()
+
+        else:
+            st.info(
+                "No backups to manage yet."
+            )
+
+    # =========================================================
+    # DEFAULT
+    # =========================================================
+    else:
+        st.info(
+            "Choose an action above to create, restore, "
+            "or manage backups."
+        )
+
+    st.caption(
+        "🟡 Local backup implementation. Production deployment "
+        "will require persistent/cloud storage, account isolation, "
+        "security and validated recovery procedures."
+    )
+
+# =========================
+# 📦 REQUIRED IMPORTS (top of app.py)
+# =========================
+def _init_state():
+    if "stock_items" not in st.session_state:
+        st.session_state.stock_items = []
+
+    if "stock_usage_logs" not in st.session_state:
+        st.session_state.stock_usage_logs = []
+
+    if "indicator_history" not in st.session_state:
+        st.session_state.indicator_history = pd.DataFrame(
+            columns=[
+                "timestamp",
+                "soil_moisture",
+                "temperature",
+                "humidity",
+                "crop_health_index",
+                "pest_risk",
+                "water_level",
+                "ph",
+                "ec"
+            ]
+        )
+
+_init_state()
+
+
+# ============================================================
+# 🧪 SMART FERTILIZER & PESTICIDE STOCK MANAGER
+# ============================================================
+
+import streamlit as st
+import pandas as pd
+import uuid
+from datetime import datetime, date
+
+
+# ============================================================
+# STOCK STATE INITIALIZATION
+# ============================================================
+def _init_stock_state():
+    if "stock_items" not in st.session_state:
+        st.session_state.stock_items = []
+
+    if "stock_usage_logs" not in st.session_state:
+        st.session_state.stock_usage_logs = []
+
+
+_init_stock_state()
+
+
+# ============================================================
+# STREAMLIT RERUN HELPER
+# ============================================================
+def _rerun():
+    try:
+        st.rerun()
+    except Exception:
+        st.experimental_rerun()
+
+
+# ============================================================
+# STOCK DATAFRAME HELPER
+# ============================================================
+def _stock_to_df(items):
+    columns = [
+        "id",
+        "name",
+        "type",
+        "qty",
+        "unit",
+        "min_level",
+        "expiry_date",
+        "usage_notes",
+        "last_updated"
+    ]
+
+    if not items:
+        return pd.DataFrame(
+            columns=columns
+        )
+
+    return pd.DataFrame(items)
+
+
+# ============================================================
+# STOCK ACTION LOGGER
+# ============================================================
+def _log_stock_action(
+    item,
+    action,
+    amount,
+    note
+):
+    st.session_state.stock_usage_logs.append(
+        {
+            "id": item["id"],
+            "name": item["name"],
+            "type": item["type"],
+            "action": action,
+            "amount": amount,
+            "unit": item["unit"],
+            "note": note,
+            "timestamp": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        }
+    )
+
 # ================================
 # 📚 AI Farm Tips
 # ================================
@@ -15244,459 +15697,6 @@ elif menu_v2 == "💦 Irrigation Scheduler":
 
 elif help_option == "💾 Data Backup & Recovery":
     data_backup_recovery_ui()
-
-def data_backup_recovery_ui():
-    import os
-    import shutil
-    import streamlit as st
-    from datetime import datetime
-
-    # =========================================================
-    # CURRENT FARM
-    # =========================================================
-    current_farm = st.session_state.get("current_farm", {}) or {}
-
-    farm_id = str(
-        st.session_state.get("current_farm_id")
-        or current_farm.get("farm_id")
-        or "main_farm"
-    )
-
-    farm_name = (
-        current_farm.get("farm_name")
-        or current_farm.get("name")
-        or "Main Farm"
-    )
-
-    crop = (
-        current_farm.get("crop_type")
-        or current_farm.get("crop")
-        or "Not selected"
-    )
-
-    location = current_farm.get("location") or "Not selected"
-
-    st.header("💾 Data Backup & Recovery")
-
-    st.info(
-        f"🌾 Current Farm: {farm_name} | "
-        f"Crop: {crop} | Location: {location}"
-    )
-
-    st.write(
-        "Create a backup of Smart Farm AI farm data, "
-        "restore a previous backup, or manage saved backups."
-    )
-
-    # =========================================================
-    # FARM-SPECIFIC WIDGET KEYS
-    # =========================================================
-    def bk(name):
-        return f"backup_recovery_{farm_id}_{name}"
-
-    active_key = bk("active_tool")
-
-    if active_key not in st.session_state:
-        st.session_state[active_key] = None
-
-    # =========================================================
-    # STORAGE DIRECTORIES
-    # =========================================================
-    data_dir = "farm_data"
-    backup_dir = "backups"
-
-    os.makedirs(data_dir, exist_ok=True)
-    os.makedirs(backup_dir, exist_ok=True)
-
-    # =========================================================
-    # ACTIONS
-    # =========================================================
-    c1, c2, c3, c4 = st.columns([1.6, 1.6, 1.6, 0.8])
-
-    with c1:
-        if st.button(
-            "💾 Create Backup",
-            key=bk("btn_backup")
-        ):
-            st.session_state[active_key] = "backup"
-
-    with c2:
-        if st.button(
-            "♻️ Restore Backup",
-            key=bk("btn_restore")
-        ):
-            st.session_state[active_key] = "restore"
-
-    with c3:
-        if st.button(
-            "🗑 Manage Backups",
-            key=bk("btn_manage")
-        ):
-            st.session_state[active_key] = "manage"
-
-    with c4:
-        if st.button(
-            "🔄 Reset",
-            key=bk("btn_reset")
-        ):
-            st.session_state[active_key] = None
-            st.rerun()
-
-    tool = st.session_state[active_key]
-
-    # =========================================================
-    # CREATE BACKUP
-    # =========================================================
-    if tool == "backup":
-
-        st.subheader("💾 Create Backup")
-
-        st.caption(
-            "This creates a snapshot of the current Smart Farm AI "
-            "farm-data directory."
-        )
-
-        if st.button(
-            "📂 Backup Now",
-            key=bk("do_backup")
-        ):
-            try:
-                timestamp = datetime.now().strftime(
-                    "%Y%m%d_%H%M%S_%f"
-                )
-
-                safe_farm_id = "".join(
-                    ch if ch.isalnum() or ch in ("-", "_") else "_"
-                    for ch in farm_id
-                )
-
-                backup_name = (
-                    f"backup_{safe_farm_id}_{timestamp}"
-                )
-
-                backup_path = os.path.join(
-                    backup_dir,
-                    backup_name
-                )
-
-                shutil.copytree(
-                    data_dir,
-                    backup_path
-                )
-
-                st.success(
-                    f"✅ Backup created successfully: "
-                    f"{backup_name}"
-                )
-
-            except Exception as e:
-                st.error(
-                    f"❌ Error creating backup: {e}"
-                )
-                # =========================================================
-    # RESTORE BACKUP
-    # =========================================================
-    elif tool == "restore":
-
-        st.subheader("♻️ Restore Backup")
-
-        backups = sorted(
-            [
-                name
-                for name in os.listdir(backup_dir)
-                if os.path.isdir(
-                    os.path.join(
-                        backup_dir,
-                        name
-                    )
-                )
-            ],
-            reverse=True
-        )
-
-        if backups:
-
-            selected_backup = st.selectbox(
-                "Select a backup to restore",
-                backups,
-                key=bk("sel_restore")
-            )
-
-            st.warning(
-                "Restoring a backup replaces the current "
-                "farm_data directory."
-            )
-
-            confirm_restore = st.checkbox(
-                "I understand that current farm data will be replaced.",
-                key=bk("confirm_restore")
-            )
-
-            if st.button(
-                "🔄 Restore Selected Backup",
-                key=bk("do_restore")
-            ):
-
-                if not confirm_restore:
-                    st.warning(
-                        "Confirm the restore operation first."
-                    )
-
-                else:
-                    try:
-                        source = os.path.join(
-                            backup_dir,
-                            selected_backup
-                        )
-
-                        if os.path.exists(data_dir):
-                            shutil.rmtree(data_dir)
-
-                        shutil.copytree(
-                            source,
-                            data_dir
-                        )
-
-                        st.success(
-                            f"✅ Backup '{selected_backup}' "
-                            "restored successfully."
-                        )
-
-                    except Exception as e:
-                        st.error(
-                            f"❌ Error restoring backup: {e}"
-                        )
-
-        else:
-            st.info(
-                "ℹ️ No backups found. Create one first."
-            )
-
-    # =========================================================
-    # MANAGE BACKUPS
-    # =========================================================
-    elif tool == "manage":
-
-        st.subheader("🗑 Manage Backups")
-
-        backups = sorted(
-            [
-                name
-                for name in os.listdir(backup_dir)
-                if os.path.isdir(
-                    os.path.join(
-                        backup_dir,
-                        name
-                    )
-                )
-            ],
-            reverse=True
-        )
-
-        if backups:
-
-            st.metric(
-                "Available Backups",
-                len(backups)
-            )
-
-            selected = st.selectbox(
-                "Select a backup",
-                backups,
-                key=bk("sel_manage")
-            )
-
-            selected_path = os.path.join(
-                backup_dir,
-                selected
-            )
-
-            try:
-                created_time = datetime.fromtimestamp(
-                    os.path.getmtime(selected_path)
-                )
-
-                st.caption(
-                    "Last modified: "
-                    f"{created_time:%Y-%m-%d %H:%M:%S}"
-                )
-
-            except Exception:
-                pass
-
-            confirm_delete = st.checkbox(
-                "Confirm deletion of selected backup",
-                key=bk("confirm_delete")
-            )
-
-            cA, cB = st.columns(2)
-
-            with cA:
-                if st.button(
-                    "🗑 Delete Selected",
-                    key=bk("del_sel")
-                ):
-
-                    if not confirm_delete:
-                        st.warning(
-                            "Confirm deletion first."
-                        )
-
-                    else:
-                        try:
-                            shutil.rmtree(
-                                selected_path
-                            )
-
-                            st.success(
-                                f"Deleted backup "
-                                f"'{selected}'."
-                            )
-
-                            st.rerun()
-
-                        except Exception as e:
-                            st.error(
-                                f"❌ Error deleting "
-                                f"backup: {e}"
-                            )
-
-            with cB:
-                if st.button(
-                    "📁 Refresh List",
-                    key=bk("refresh")
-                ):
-                    st.rerun()
-
-        else:
-            st.info(
-                "No backups to manage yet."
-            )
-
-    # =========================================================
-    # DEFAULT
-    # =========================================================
-    else:
-        st.info(
-            "Choose an action above to create, restore, "
-            "or manage backups."
-        )
-
-    st.caption(
-        "🟡 Local backup implementation. Production deployment "
-        "will require persistent/cloud storage, account isolation, "
-        "security and validated recovery procedures."
-    )
-
-# =========================
-# 📦 REQUIRED IMPORTS (top of app.py)
-# =========================
-def _init_state():
-    if "stock_items" not in st.session_state:
-        st.session_state.stock_items = []
-
-    if "stock_usage_logs" not in st.session_state:
-        st.session_state.stock_usage_logs = []
-
-    if "indicator_history" not in st.session_state:
-        st.session_state.indicator_history = pd.DataFrame(
-            columns=[
-                "timestamp",
-                "soil_moisture",
-                "temperature",
-                "humidity",
-                "crop_health_index",
-                "pest_risk",
-                "water_level",
-                "ph",
-                "ec"
-            ]
-        )
-
-_init_state()
-
-
-# ============================================================
-# 🧪 SMART FERTILIZER & PESTICIDE STOCK MANAGER
-# ============================================================
-
-import streamlit as st
-import pandas as pd
-import uuid
-from datetime import datetime, date
-
-
-# ============================================================
-# STOCK STATE INITIALIZATION
-# ============================================================
-def _init_stock_state():
-    if "stock_items" not in st.session_state:
-        st.session_state.stock_items = []
-
-    if "stock_usage_logs" not in st.session_state:
-        st.session_state.stock_usage_logs = []
-
-
-_init_stock_state()
-
-
-# ============================================================
-# STREAMLIT RERUN HELPER
-# ============================================================
-def _rerun():
-    try:
-        st.rerun()
-    except Exception:
-        st.experimental_rerun()
-
-
-# ============================================================
-# STOCK DATAFRAME HELPER
-# ============================================================
-def _stock_to_df(items):
-    columns = [
-        "id",
-        "name",
-        "type",
-        "qty",
-        "unit",
-        "min_level",
-        "expiry_date",
-        "usage_notes",
-        "last_updated"
-    ]
-
-    if not items:
-        return pd.DataFrame(
-            columns=columns
-        )
-
-    return pd.DataFrame(items)
-
-
-# ============================================================
-# STOCK ACTION LOGGER
-# ============================================================
-def _log_stock_action(
-    item,
-    action,
-    amount,
-    note
-):
-    st.session_state.stock_usage_logs.append(
-        {
-            "id": item["id"],
-            "name": item["name"],
-            "type": item["type"],
-            "action": action,
-            "amount": amount,
-            "unit": item["unit"],
-            "note": note,
-            "timestamp": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-        }
-    )
 
 
 
