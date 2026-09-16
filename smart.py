@@ -7250,183 +7250,573 @@ def drone_flight_scheduler_ui():
 
 
 
-def voice_command_ui():
-    import streamlit as st
-    import re
+# ============================================================
+# 🎙️ VOICE COMMAND INTERFACE
+# ============================================================
 
-    # Optional voice deps — UI still works without them
+def voice_command_ui():
+    import re
+    import streamlit as st
+
+    # =========================================================
+    # OPTIONAL VOICE DEPENDENCY
+    # =========================================================
     try:
         import speech_recognition as sr
     except Exception:
         sr = None
 
-    st.subheader("🎙 Voice Command Interface")
-    st.caption("Say or type a command to jump to a page (e.g., “open live sensor dashboard”, “go to predictions”).")
+    # =========================================================
+    # CURRENT FARM CONTEXT
+    # =========================================================
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    ) or {}
 
-    # --- helpers -------------------------------------------------------------
-    def _v2_key():
-        # Use your existing k2() helper if present; otherwise fallback to a safe string
-        try:
-            return k2("main_menu_option")
-        except Exception:
-            return "v2_main_menu_option"
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or "main_farm"
+    )
 
-    def _try_rerun():
-        """Call Streamlit rerun with compatibility across versions."""
-        try:
-            if hasattr(st, "rerun"):
-                st.rerun()
-            elif hasattr(st, "experimental_rerun"):
-                st.experimental_rerun()
-        except Exception:
-            # If rerun fails just continue — UI will update on next interaction
-            pass
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or "Main Farm"
+    )
 
-    def _go(label: str):
-        """Attempt to navigate by setting the v2 menu key."""
-        # This assignment is safe when done from callbacks (on_change) or
-        # before the menu widget is created. We use it from the typed-command
-        # callback which runs in a safe update context.
-        st.session_state[_v2_key()] = label
+    farm_crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or "Not selected"
+    )
 
-    def _route(cmd: str) -> bool:
-        """Map free-text commands to pages. Return True if a route was matched."""
-        c = (cmd or "").strip().lower()
+    # =========================================================
+    # V2 MAIN MENU KEY
+    # =========================================================
+    try:
+        main_v2_key = k2(
+            "main_menu_option"
+        )
+    except Exception:
+        main_v2_key = (
+            "v2_main_menu_option"
+        )
+
+    # =========================================================
+    # LOCAL KEYS
+    # =========================================================
+    def vk(name):
+        return (
+            f"voice_command_"
+            f"{farm_id}_{name}"
+        )
+
+    text_key = vk("text")
+    status_key = vk("status")
+    transcript_key = vk("transcript")
+    destination_key = vk("destination")
+
+    if status_key not in st.session_state:
+        st.session_state[
+            status_key
+        ] = ""
+
+    if transcript_key not in st.session_state:
+        st.session_state[
+            transcript_key
+        ] = ""
+
+    if destination_key not in st.session_state:
+        st.session_state[
+            destination_key
+        ] = ""
+
+    # =========================================================
+    # COMMAND NORMALIZATION
+    # =========================================================
+    def normalize_command(command):
+        command = (
+            command or ""
+        ).strip().lower()
+
+        command = re.sub(
+            r"\s+",
+            " ",
+            command
+        )
+
+        return command
+
+    # =========================================================
+    # ROUTE RESOLVER
+    # =========================================================
+    def resolve_route(command):
+        c = normalize_command(
+            command
+        )
+
         if not c:
-            return False
+            return None
 
-        # normalize common words
-        c = c.replace("open ", "").replace("go to ", "").replace("goto ", "")
-
-        # high-confidence matches first
-        if re.search(r"\blive\b.*\bsensor\b|\bsensor\b.*\bdashboard\b", c):
-            _go("📡 Live Sensor Dashboard"); return True
-        if "drone" in c and ("schedule" in c or "scheduler" in c or "flight" in c):
-            _go("🚁 Drone Flight Scheduler"); return True
-        if ("voice" in c and ("irrig" in c or "drone" in c)) or "voice assistant" in c:
-            _go("🚁 Voice-Controlled Drone Irrigation Assistant"); return True
-        if "prediction" in c:
-            _go("🧪 AI Predictions"); return True
-        if "tip" in c or "tips" in c:
-            _go("📚 AI Farm Tips"); return True
-        if "profit" in c or "loss" in c or "statement" in c:
-            _go("📊 Farm Profit & Loss Statement"); return True
-        if "plot" in c or "mapping" in c or "map" in c:
-            _go("🌍 Farm Plot Mapping"); return True
-        if "irrigation" in c and "soil" in c:
-            _go("💧 Irrigation & Soil"); return True
-        if "expanded" in c and "calendar" in c:
-            _go("📅 Expanded AI Crop Calendar"); return True
-        if "crop calendar" in c:
-            _go("🤖 AI Crop Calendar"); return True
-        if "performance" in c and "indicator" in c:
-            _go("📍 Farm Performance Indicators"); return True
-        if "market" in c or "economic" in c or "price" in c:
-            _go("📈 Market & Economic Tools"); return True
-        if "backup" in c or "restore" in c or "recovery" in c:
-            _go("💾 Data Backup & Recovery"); return True
-        if "home" in c:
-            _go("🏡 Home"); return True
-
-        # fallback: try fuzzy contains for any top-level label keywords
-        for label in [
-            "🏡 Home",
-            "🌿 Farm Management",
-            "📊 Productivity & Records",
-            "💧 Irrigation & Soil",
-            "📅 Calendar & Seasons",
-            "🧪 AI Predictions",
-            "📈 Market & Economic Tools",
-            "📚 AI Farm Tips",
-            "📊 Farm Profit & Loss Statement",
-            "🌍 Farm Plot Mapping",
-            "🌐 Farmer Community Forum",
-            "📡 Live Sensor Dashboard",
-            "🚨 Smart Farm Alerts",
-            "🎙️ Voice Command Interface",
-            "🚁 Drone Flight Scheduler",
-            "🧑‍🏫 Smart Tutor (Voice)",
-            "💾 Data Backup & Recovery",
-            "📍 Farm Lot Management",
-            "📅 Expanded AI Crop Calendar",
-            "🤖 AI Crop Calendar",
-            "📈 Decision-Making Models",
-            "📍 Farm Performance Indicators",
-            "🔒 User Account Management",
+        # Remove common navigation words.
+        for prefix in [
+            "open ",
+            "go to ",
+            "goto ",
+            "show me ",
+            "take me to ",
+            "navigate to ",
+            "launch "
         ]:
-            words = re.findall(r"\w+", label.lower())
-            if any(w in c for w in words if len(w) > 2):
-                _go(label)
-                return True
+            if c.startswith(prefix):
+                c = c[len(prefix):].strip()
+
+        # -----------------------------------------------------
+        # LIVE SENSOR DASHBOARD
+        # -----------------------------------------------------
+        if (
+            "live sensor" in c
+            or "sensor dashboard" in c
+            or "sensor monitor" in c
+        ):
+            return (
+                "📡 Live Sensor Dashboard"
+            )
+
+        # -----------------------------------------------------
+        # VOICE-CONTROLLED DRONE IRRIGATION
+        # Must come before generic drone/irrigation routes.
+        # -----------------------------------------------------
+        if (
+            (
+                "drone" in c
+                and "irrig" in c
+            )
+            or "voice irrigation" in c
+            or "irrigation assistant" in c
+        ):
+            return (
+                "🚁 Voice-Controlled "
+                "Drone Irrigation Assistant"
+            )
+
+        # -----------------------------------------------------
+        # EXPANDED AI CROP CALENDAR
+        # -----------------------------------------------------
+        if (
+            "expanded" in c
+            and "calendar" in c
+        ):
+            return (
+                "📅 Expanded AI Crop Calendar"
+            )
+
+        # -----------------------------------------------------
+        # AI CROP CALENDAR
+        # -----------------------------------------------------
+        if (
+            "ai crop calendar" in c
+            or "crop calendar" in c
+        ):
+            return (
+                "🤖 AI Crop Calendar"
+            )
+
+        # -----------------------------------------------------
+        # CALENDAR & SEASONS
+        # -----------------------------------------------------
+        if (
+            "calendar" in c
+            or "season" in c
+            or "planting calendar" in c
+            or "harvest estimator" in c
+        ):
+            return (
+                "📅 Calendar & Seasons"
+            )
+
+        # -----------------------------------------------------
+        # DECISION-MAKING MODELS
+        # -----------------------------------------------------
+        if (
+            "decision model" in c
+            or "decision making" in c
+            or "fertilizer optimization" in c
+            or "crop rotation" in c
+        ):
+            return (
+                "📈 Decision-Making Models"
+            )
+
+        # -----------------------------------------------------
+        # FARM PERFORMANCE INDICATORS
+        # -----------------------------------------------------
+        if (
+            "performance indicator" in c
+            or "farm performance" in c
+            or "performance metrics" in c
+        ):
+            return (
+                "📍 Farm Performance Indicators"
+            )
+
+        # -----------------------------------------------------
+        # SMART FERTILIZER & PESTICIDE
+        # -----------------------------------------------------
+        if (
+            "fertilizer stock" in c
+            or "pesticide stock" in c
+            or "chemical stock" in c
+            or "fertilizer manager" in c
+            or "pesticide manager" in c
+        ):
+            return (
+                "🧪 Smart Fertilizer & Pesticide"
+            )
+
+        # -----------------------------------------------------
+        # SMART FARM ALERTS
+        # -----------------------------------------------------
+        if (
+            "farm alert" in c
+            or "smart alert" in c
+            or "alerts" == c
+            or "show alerts" in c
+        ):
+            return (
+                "🚨 Smart Farm Alerts"
+            )
+
+        # -----------------------------------------------------
+        # MARKET & ECONOMIC TOOLS
+        # -----------------------------------------------------
+        if (
+            "economic tool" in c
+            or "market tool" in c
+            or "market price" in c
+            or "price trend" in c
+            or "break even" in c
+            or "roi" in c
+        ):
+            return (
+                "📈 Market & Economic Tools"
+            )
+
+        # -----------------------------------------------------
+        # FARM MANAGEMENT
+        # -----------------------------------------------------
+        if (
+            "farm management" in c
+            or "manage farm" in c
+            or "switch farm" in c
+            or "add farm" in c
+        ):
+            return (
+                "🌿 Farm Management"
+            )
+
+        # -----------------------------------------------------
+        # USER ACCOUNT
+        # -----------------------------------------------------
+        if (
+            "user account" in c
+            or "my account" in c
+            or "account management" in c
+        ):
+            return (
+                "🔒 User Account Management"
+            )
+
+        # -----------------------------------------------------
+        # HOME
+        # -----------------------------------------------------
+        if (
+            c == "home"
+            or "dashboard home" in c
+            or "go home" in c
+        ):
+            return (
+                "🏡 Home"
+            )
+            return None
+
+    # =========================================================
+    # APPLY NAVIGATION
+    # =========================================================
+    def apply_route(command):
+        destination = resolve_route(
+            command
+        )
+
+        if destination:
+            st.session_state[
+                destination_key
+            ] = destination
+
+            st.session_state[
+                status_key
+            ] = (
+                f"✅ Opening {destination}"
+            )
+
+            st.session_state[
+                "voice_pending_navigation"
+            ] = destination
+
+            return True
+
+        st.session_state[
+            status_key
+        ] = (
+            "⚠️ I couldn't match that command "
+            "to a Smart Farm AI page."
+        )
 
         return False
 
-    # --- typed-command callback (safe) --------------------------------------
-    def _apply_typed_command():
-        """This runs as the text_input on_change callback — safe to mutate widget-backed keys."""
-        cmd = st.session_state.get("vc_text", "").strip()
-        if not cmd:
+    # =========================================================
+    # TYPED COMMAND CALLBACK
+    # =========================================================
+    def apply_typed_command():
+        command = (
+            st.session_state.get(
+                text_key,
+                ""
+            )
+            or ""
+        ).strip()
+
+        if not command:
             return
-        matched = False
+
+        st.session_state[
+            transcript_key
+        ] = command
+
+        apply_route(
+            command
+        )
+
+        st.session_state[
+            text_key
+        ] = ""
+
+    # =========================================================
+    # MICROPHONE CALLBACK
+    # =========================================================
+    def listen_for_command():
+        if sr is None:
+            st.session_state[
+                status_key
+            ] = (
+                "⚠️ Voice recognition is not "
+                "available on this deployment. "
+                "Type your command instead."
+            )
+
+            return
+
         try:
-            matched = _route(cmd)
-        except Exception as e:
-            # If setting the menu key fails for any reason, show an info message
-            st.warning(f"Could not apply navigation: {e}")
-            matched = False
+            recognizer = sr.Recognizer()
 
-        # clear command input after applying (so user sees it reset)
-        st.session_state["vc_text"] = ""
-        if matched:
-            _try_rerun()
-        else:
-            st.info("No route matched. Try keywords: sensor, predictions, calendar, drone, backup, home.")
-
-    # --- UI ------------------------------------------------------------------
-    col_mic, col_cmd = st.columns([1, 3])
-
-    # 1) Voice (only if SpeechRecognition is available)
-    if sr is not None:
-        if col_mic.button("🎤 Speak"):
-            try:
-                recog = sr.Recognizer()
-                with sr.Microphone() as source:
-                    st.info("Listening…")
-                    try:
-                        recog.adjust_for_ambient_noise(source, duration=0.6)
-                    except Exception:
-                        pass
-                    audio = recog.listen(source, timeout=4, phrase_time_limit=6)
-                cmd = recog.recognize_google(audio)
-                st.success(f"🗣 {cmd}")
-                # voice path: route immediately (mic path has historically run before menu widget is created,
-                # which is why it likely worked for you already)
+            with sr.Microphone() as source:
                 try:
-                    if _route(cmd):
-                        _try_rerun()
-                    else:
-                        st.info("No route matched. Try: live sensor, predictions, calendar, drone scheduler, backup.")
-                except Exception as e:
-                    st.error(f"Navigation error: {e}")
-            except sr.WaitTimeoutError:
-                st.error("Timed out. Try again.")
-            except sr.UnknownValueError:
-                st.error("I couldn't understand that. Try again.")
-            except sr.RequestError:
-                st.error("Speech service unavailable. Type your command instead.")
-            except Exception as e:
-                st.error(f"Mic error: {e}")
-    else:
-        col_mic.caption("Install voice deps to enable mic: `pip install SpeechRecognition pyaudio`")
+                    recognizer.adjust_for_ambient_noise(
+                        source,
+                        duration=0.6
+                    )
+                except Exception:
+                    pass
 
-    # 2) Typed command (always available) — uses on_change callback to safely mutate menu key
-    cmd_text = col_cmd.text_input(
-        "Type a command",
-        placeholder="e.g., open live sensor dashboard, go to predictions, open backup",
-        key="vc_text",
-        on_change=_apply_typed_command,
+                audio = recognizer.listen(
+                    source,
+                    timeout=5,
+                    phrase_time_limit=8
+                )
+
+            transcript = None
+
+            # Online speech recognition first.
+            try:
+                transcript = (
+                    recognizer
+                    .recognize_google(
+                        audio
+                    )
+                )
+
+            except sr.RequestError:
+                # Offline fallback if PocketSphinx exists.
+                try:
+                    transcript = (
+                        recognizer
+                        .recognize_sphinx(
+                            audio
+                        )
+                    )
+                except Exception:
+                    st.session_state[
+                        status_key
+                    ] = (
+                        "⚠️ Speech service is unavailable. "
+                        "Please type your command."
+                    )
+
+                    return
+
+            except sr.UnknownValueError:
+                try:
+                    transcript = (
+                        recognizer
+                        .recognize_sphinx(
+                            audio
+                        )
+                    )
+                except Exception:
+                    st.session_state[
+                        status_key
+                    ] = (
+                        "⚠️ I couldn't understand the command. "
+                        "Please try again."
+                    )
+
+                    return
+
+            if transcript:
+                st.session_state[
+                    transcript_key
+                ] = transcript
+
+                apply_route(
+                    transcript
+                )
+
+        except sr.WaitTimeoutError:
+            st.session_state[
+                status_key
+            ] = (
+                "⚠️ Listening timed out. "
+                "Try again and speak sooner."
+            )
+
+        except OSError:
+            st.session_state[
+                status_key
+            ] = (
+                "⚠️ No usable microphone was detected. "
+                "Type your command instead."
+            )
+
+        except Exception as e:
+            st.session_state[
+                status_key
+            ] = (
+                f"⚠️ Voice command error: {e}"
+            )
+
+    # =========================================================
+    # UI
+    # =========================================================
+    st.header(
+        "🎙️ Voice Command Interface"
     )
-    # Note: we've removed the separate "Go" button handler to avoid mutation-after-widget errors.
+
+    st.info(
+        f"🌾 Current Farm: {farm_name} | "
+        f"Crop: {farm_crop}"
+    )
+
+    st.write(
+        "Speak or type where you want to go. "
+        "Smart Farm AI will open the appropriate tool."
+    )
+
+    # ---------------------------------------------------------
+    # INPUT
+    # ---------------------------------------------------------
+    c1, c2 = st.columns(
+        [1, 3]
+    )
+
+    with c1:
+        st.button(
+            "🎤 Speak",
+            key=vk("speak"),
+            on_click=listen_for_command,
+            use_container_width=True
+        )
+
+    with c2:
+        st.text_input(
+            "Type a command",
+            placeholder=(
+                "Example: open live sensor dashboard"
+            ),
+            key=text_key,
+            on_change=apply_typed_command
+        )
+
+    # =========================================================
+    # RESULT / STATUS
+    # =========================================================
+    transcript = st.session_state.get(
+        transcript_key,
+        ""
+    )
+
+    if transcript:
+        st.caption(
+            f"🗣️ Last command: {transcript}"
+        )
+
+    status = st.session_state.get(
+        status_key,
+        ""
+    )
+
+    if status:
+        if status.startswith("✅"):
+            st.success(
+                status
+            )
+        else:
+            st.warning(
+                status
+            )
+
+    # =========================================================
+    # EXAMPLE COMMANDS
+    # =========================================================
+    with st.expander(
+        "💡 Example Commands"
+    ):
+        st.write(
+            "• Open live sensor dashboard\n"
+            "• Open AI predictions\n"
+            "• Show farm alerts\n"
+            "• Open irrigation scheduler\n"
+            "• Open drone flight scheduler\n"
+            "• Open drone irrigation assistant\n"
+            "• Show farm performance indicators\n"
+            "• Open crop calendar\n"
+            "• Open expanded crop calendar\n"
+            "• Open market price tools\n"
+            "• Open fertilizer stock\n"
+            "• Open profit and loss\n"
+            "• Open productivity records\n"
+            "• Open farm lot management\n"
+            "• Open farm management\n"
+            "• Go home"
+        )
+
+    st.caption(
+        "🟡 Voice Command controls Smart Farm AI navigation. "
+        "The upcoming intelligence phase can extend the same command "
+        "system from navigation into real farm actions such as recording "
+        "sales, calculating profit and managing irrigation."
+    )
 
 
 # farm performance indicators
@@ -13515,171 +13905,7 @@ def klsd(suffix: str) -> str:
     return f"lsd_{suffix}"
 
 
-# 🎙 Voice Command (v2) — triggers real buttons/pages
-def voice_command_ui_v2():
-    import streamlit as st
-    import threading
 
-    # ----- Optional deps (kept optional so UI still loads without them)
-    try:
-        import speech_recognition as sr
-    except Exception:
-        sr = None
-
-    try:
-        import pyttsx3
-    except Exception:
-        pyttsx3 = None
-
-    # ----- Resolve your v2 main menu session key
-    try:
-        main_v2_key = k2("main_menu_option")  # your existing helper
-    except Exception:
-        main_v2_key = "v2_main_menu_option"   # safe fallback
-
-    # ===== Helpers =====
-    def _say_async(text: str):
-        """Speak text on a background thread if TTS is available."""
-        if pyttsx3 is None:
-            return
-        def _worker():
-            try:
-                engine = pyttsx3.init()
-                engine.say(text)
-                engine.runAndWait()
-            except Exception:
-                pass
-        threading.Thread(target=_worker, daemon=True).start()
-
-    def _go(page_label: str):
-        """Navigate to a v2 page label exactly as in your v2 menu."""
-        st.session_state[main_v2_key] = page_label
-
-    def _open_predictions(subtool: str | None = None):
-        """Open v2 AI Predictions page and optionally pick a subtool."""
-        _go("🧪 AI Predictions")
-        if subtool:
-            # v2 page reads this and maps to internal tool keys
-            st.session_state["ai_prediction_tool"] = subtool
-        st.rerun()
-
-    def _open_tips(mode: str):
-        """Open AI Farm Tips and set its internal active tool."""
-        _go("📚 AI Farm Tips")
-        # ktips("active_tool") returns "tips_active_tool" in your setup
-        st.session_state["tips_active_tool"] = mode  # "ask" or "daily"
-        st.rerun()
-
-    def _open_live_sensor():
-        _go("📡 Live Sensor Dashboard")
-        st.rerun()
-
-    def _open_perf_indicators():
-        _go("📍 Farm Performance Indicators")
-        st.rerun()
-
-    def _open_calendar():
-        _go("📅 Calendar & Seasons")
-        st.rerun()
-
-    def _route_command(c: str) -> bool:
-        """Return True if a route matched and navigated."""
-        c = c.strip().lower()
-
-        # --- high-confidence intents ---
-        if "live sensor" in c or ("sensor" in c and "dashboard" in c):
-            _open_live_sensor();  return True
-        if "performance" in c and "indicator" in c:
-            _open_perf_indicators();  return True
-        if "calendar" in c or "season" in c:
-            _open_calendar();  return True
-
-        # --- AI Predictions subtools
-        if ("disease" in c) or ("diagnose" in c) or ("leaf" in c) or ("blight" in c):
-            _open_predictions("Crop Disease Detection");  return True
-        if "yield" in c:
-            _open_predictions("Yield Prediction");  return True
-        if "soil" in c or "ph" in c:
-            _open_predictions("Soil Health Check");  return True
-        if "prediction" in c or "predictions" in c:
-            _open_predictions(None);  return True
-
-        # --- AI Farm Tips
-        if "daily tip" in c or ("tip" in c and "daily" in c):
-            _open_tips("daily");  return True
-        if "ask tip" in c or ("tip" in c and "ask" in c) or ("ai tip" in c):
-            _open_tips("ask");  return True
-
-        return False
-
-    # ===== UI =====
-    st.header("🎙️ Voice Command (v2)")
-
-    if sr is None:
-        st.warning(
-            "Speech engine not installed. Install with:\n\n"
-            "`pip install SpeechRecognition pyaudio`  "
-            "or use an alternative microphone backend."
-        )
-        return
-
-    # Unique keys to avoid collisions across v2
-    btn_key = f"{main_v2_key}_vc2_mic_btn"
-    status_key = f"{main_v2_key}_vc2_status"
-
-    # Button to record one utterance
-    if st.button("🎤 Speak now", key=btn_key):
-        recognizer = sr.Recognizer()
-
-        try:
-            with sr.Microphone() as source:
-                st.info("Listening... please speak clearly.")
-                # Reduce background noise impact
-                try:
-                    recognizer.adjust_for_ambient_noise(source, duration=0.6)
-                except Exception:
-                    pass
-                # Listen for a short phrase
-                audio = recognizer.listen(source, timeout=4, phrase_time_limit=6)
-
-            transcript = None
-            error_msg = None
-
-            # Try Google first (requires internet), fall back to Sphinx if available
-            try:
-                transcript = recognizer.recognize_google(audio)
-            except sr.UnknownValueError:
-                # Try offline pocketsphinx if installed
-                try:
-                    transcript = recognizer.recognize_sphinx(audio)
-                except Exception:
-                    error_msg = "I couldn't understand that. Please try again."
-            except sr.RequestError:
-                # Network issue, try offline if possible
-                try:
-                    transcript = recognizer.recognize_sphinx(audio)
-                except Exception:
-                    error_msg = "Network unavailable for speech. Install pocketsphinx for offline use."
-
-            # Handle results
-            if transcript:
-                st.success(f"You said: “{transcript}”")
-                _say_async(f"You said {transcript}")
-                if not _route_command(transcript):
-                    st.info(
-                        "No v2 route matched. Try saying: "
-                        "live sensor, performance indicators, calendar, "
-                        "disease, yield, soil, predictions, daily tip, ask tip."
-                    )
-            else:
-                st.error(error_msg or "Sorry, I didn't catch that. Please try again.")
-
-        except sr.WaitTimeoutError:
-            st.error("Listening timed out. Try again and speak sooner.")
-        except OSError as e:
-            st.error(f"Microphone error: {e}")
-        except Exception as e:
-            st.error(f"Voice command error: {e}")
 
 def expanded_crop_calendar_ui():
     import streamlit as st
@@ -14097,6 +14323,18 @@ def kdr(name: str) -> str:   return f"dr_{name}"
 def kbak(name: str) -> str:  return f"bk_{name}"
 def klot(name: str) -> str:  return f"lot_{name}"
 def sfp(name: str) -> str:   return f"sfp_{name}"
+
+# 1. Apply pending navigation
+pending_destination = st.session_state.pop(
+    "voice_pending_navigation",
+    None
+)
+
+if pending_destination:
+    st.session_state[
+        k2("main_menu_option")
+    ] = pending_destination
+
 
 # =========================
 # UPGRADE MENU (second router with unique keys)
