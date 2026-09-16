@@ -4013,95 +4013,729 @@ def smart_fert_pest_ui():
     )
 
 
-
 def smart_tutor_voice():
-    import streamlit as st
     import os
+    import io
+    import streamlit as st
     from datetime import datetime
 
-    # Optional deps (gracefully handled)
+    # =========================================================
+    # CURRENT FARM CONTEXT
+    # =========================================================
+    current_farm = st.session_state.get(
+        "current_farm", {}
+    ) or {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile", {}
+    ) or {}
+
+    farmer_profile = st.session_state.get(
+        "farmer_profile", {}
+    ) or {}
+
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or "main_farm"
+    )
+
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or "Main Farm"
+    )
+
+    crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or "Not selected"
+    )
+
+    location = (
+        current_farm.get("location")
+        or personalized_profile.get("location")
+        or farmer_profile.get("location")
+        or "Not selected"
+    )
+
+    country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Not selected"
+    )
+
+    experience = (
+        personalized_profile.get("experience")
+        or farmer_profile.get("experience")
+        or "Not specified"
+    )
+
+    # =========================================================
+    # FARM-SPECIFIC KEYS
+    # =========================================================
+    def tk(name):
+        return f"smart_tutor_{farm_id}_{name}"
+
+    messages_key = tk("messages")
+
+    if messages_key not in st.session_state:
+        st.session_state[messages_key] = []
+
+    # =========================================================
+    # OPTIONAL DEPENDENCIES
+    # =========================================================
     try:
         import speech_recognition as sr
     except Exception:
         sr = None
-    try:
-        import pyttsx3
-    except Exception:
-        pyttsx3 = None
+
     try:
         from gtts import gTTS
     except Exception:
         gTTS = None
 
-    st.subheader("🧑‍🏫 Smart Tutor Multilanguage")
-    st.info("🌍 Learn agriculture tips in multiple African languages (via text or voice).")
+    # ---------------------------------------------------------
+    # TRANSLATOR
+    # ---------------------------------------------------------
+    translator_type = None
+    google_translator = None
 
-    # Available languages
-    languages = [
-        "English", "Yoruba", "Igbo", "Hausa", "Urhobo",
-        "Ijaw", "Efik", "Ibibio", "Tiv", "Kanuri"
-    ]
-    lang_choice = st.selectbox("Select a language", languages, key="tutor_lang")
+    try:
+        from googletrans import Translator
 
-    # --- Input options ---
-    st.markdown("**🎤 Speak or ✍️ Type your agriculture question**")
+        google_translator = Translator()
+        translator_type = "googletrans"
 
-    # 1. Voice input
-    voice_question = None
-    if sr and st.button("🎙 Record Question", key="tutor_record"):
-        recognizer = sr.Recognizer()
-        with sr.Microphone() as source:
-            st.info("Listening... please speak now.")
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+    except Exception:
         try:
-            voice_question = recognizer.recognize_google(audio)
-            st.success(f"✅ You said: {voice_question}")
+            from deep_translator import GoogleTranslator
+            translator_type = "deep"
+
+        except Exception:
+            translator_type = None
+
+    # ---------------------------------------------------------
+    # OPTIONAL OPENAI CLIENT
+    # ---------------------------------------------------------
+    client = None
+
+    try:
+        from openai import OpenAI
+
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        if api_key:
+            client = OpenAI(
+                api_key=api_key
+            )
+
+    except Exception:
+        client = None
+
+    # =========================================================
+    # UI
+    # =========================================================
+    st.header(
+        "🧑‍🏫 Smart Tutor Multilanguage"
+    )
+
+    st.write(
+        "Ask farming questions in text or voice and receive "
+        "step-by-step agricultural guidance."
+    )
+
+    st.info(
+        f"🌾 Current Farm: {farm_name} | "
+        f"Crop: {crop} | "
+        f"Location: {location} | "
+        f"Country: {country}"
+    )
+
+    # =========================================================
+    # LANGUAGES
+    # =========================================================
+    languages = [
+        "English",
+        "Urhobo",
+        "Yoruba",
+        "Hausa",
+        "Igbo",
+        "Ijaw",
+        "Efik",
+        "Ibibio",
+        "Tiv",
+        "Kanuri",
+        "Nupe",
+        "Fulfulde",
+        "Itsekiri",
+        "Gbagyi",
+        "Idoma",
+        "Ebira",
+        "Jukun",
+        "Igala",
+        "Berom",
+        "Esan",
+        "Isoko",
+        "Okun",
+        "Ika"
+    ]
+
+    tones = [
+        "Simple",
+        "Friendly",
+        "Professional",
+        "Step-by-step"
+    ]
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        language = st.selectbox(
+            "🌍 Response Language",
+            languages,
+            key=tk("language")
+        )
+
+    with c2:
+        tone = st.selectbox(
+            "Teaching Style",
+            tones,
+            index=3,
+            key=tk("tone")
+        )
+
+    # =========================================================
+    # LANGUAGE CODES
+    # =========================================================
+    language_codes = {
+        "English": "en",
+        "Yoruba": "yo",
+        "Hausa": "ha",
+        "Igbo": "ig"
+    }
+
+    target_code = language_codes.get(
+        language
+    )
+
+    # =========================================================
+    # TRANSLATION
+    # =========================================================
+    def translate_text(
+        text,
+        code
+    ):
+        if (
+            not text
+            or not code
+            or code == "en"
+        ):
+            return text
+
+        if not translator_type:
+            return text
+
+        try:
+            if translator_type == "googletrans":
+                return (
+                    google_translator
+                    .translate(
+                        text,
+                        dest=code
+                    )
+                    .text
+                )
+
+            from deep_translator import (
+                GoogleTranslator
+            )
+
+            return GoogleTranslator(
+                source="auto",
+                target=code
+            ).translate(text)
+
+        except Exception:
+            return text
+
+    # =========================================================
+    # TEXT-TO-SPEECH
+    # =========================================================
+    def speak_text(
+        text,
+        code="en"
+    ):
+        if not text:
+            return
+
+        if gTTS is None:
+            st.info(
+                "Voice playback is not available "
+                "on this deployment."
+            )
+            return
+
+        supported_codes = {
+            "en",
+            "ha",
+            "yo",
+            "ig"
+        }
+
+        voice_code = (
+            code
+            if code in supported_codes
+            else "en"
+        )
+
+        try:
+            audio_buffer = io.BytesIO()
+
+            tts = gTTS(
+                text=text,
+                lang=voice_code
+            )
+
+            tts.write_to_fp(
+                audio_buffer
+            )
+
+            audio_buffer.seek(0)
+
+            st.audio(
+                audio_buffer.getvalue(),
+                format="audio/mp3"
+            )
+
         except Exception as e:
-            st.error(f"Voice recognition failed: {e}")
+            st.warning(
+                f"Voice playback unavailable: {e}"
+            )
 
-    # 2. Text input
-    text_question = st.text_input("Or type your question here:", key="tutor_text")
+    # =========================================================
+    # AI SYSTEM PROMPT
+    # =========================================================
+    def build_system_prompt():
+        return f"""
+You are Smart Farm AI's agricultural tutor.
 
-    # Use whichever question is available
-    final_question = voice_question if voice_question else text_question
+Your job is to educate farmers and explain agricultural
+decisions clearly and practically.
 
-    # --- Answer button ---
-    if st.button("Get Answer", key="tutor_btn"):
-        if final_question and final_question.strip():
-            # Simulated agricultural responses (you can expand this later with AI)
-            if "fertilizer" in final_question.lower():
-                answer = "Use organic compost or NPK fertilizer depending on soil needs."
-            elif "water" in final_question.lower() or "irrigation" in final_question.lower():
-                answer = "Irrigate crops early in the morning or late evening to reduce evaporation."
-            else:
-                answer = "Practice crop rotation, weed control, and proper spacing for better yields."
+Current farm context:
+Farm: {farm_name}
+Crop: {crop}
+Location: {location}
+Country: {country}
+Farmer experience: {experience}
 
-            # Add a language flavor
-            if lang_choice == "Yoruba":
-                answer = "Agbẹ́! " + answer
-            elif lang_choice == "Igbo":
-                answer = "Ndi ugbo! " + answer
-            elif lang_choice == "Hausa":
-                answer = "Manomi! " + answer
+Respond in: {language}
+Teaching style: {tone}
 
-            st.success(f"({lang_choice}) {answer}")
+Rules:
+- Focus on practical agriculture.
+- Give step-by-step guidance when appropriate.
+- Explain why a recommendation matters.
+- Adapt advice to the farm context when relevant.
+- Do not invent live weather, sensor, market or soil readings.
+- If real measurements are required but unavailable, say what
+  measurement the farmer should check.
+- Do not recommend pesticide or fertilizer quantities without
+  enough crop, product, soil and application information.
+- Keep advice understandable to farmers.
+- When safety matters, mention the appropriate precaution.
+""".strip()
 
-            # Voice playback if possible
-            if pyttsx3:
-                engine = pyttsx3.init()
-                engine.say(answer)
-                engine.runAndWait()
-            elif gTTS:
-                try:
-                    tts = gTTS(answer)
-                    filename = "tutor_voice.mp3"
-                    tts.save(filename)
-                    audio_file = open(filename, "rb")
-                    st.audio(audio_file.read(), format="audio/mp3")
-                except Exception as e:
-                    st.warning(f"Text-to-speech failed: {e}")
+    # =========================================================
+    # LOCAL FALLBACK
+    # =========================================================
+    def fallback_answer(question):
+        q = question.lower()
+
+        if (
+            "irrigat" in q
+            or "water" in q
+        ):
+            answer = (
+                f"For {crop}, first check the soil moisture "
+                "before irrigating. Water demand depends on crop "
+                "stage, soil type, weather and recent rainfall.\n\n"
+                "Suggested steps:\n"
+                "1. Check soil moisture.\n"
+                "2. Check whether rain is expected.\n"
+                "3. Inspect the crop for water stress.\n"
+                "4. Irrigate only when the field actually needs it.\n"
+                "5. Record the irrigation activity."
+            )
+
+        elif (
+            "fertilizer" in q
+            or "fertiliser" in q
+        ):
+            answer = (
+                "Fertilizer selection should depend on the crop, "
+                "growth stage and soil nutrient status.\n\n"
+                "Suggested steps:\n"
+                "1. Review the crop stage.\n"
+                "2. Check available soil-test information.\n"
+                "3. Identify nutrient deficiencies.\n"
+                "4. Select the appropriate fertilizer.\n"
+                "5. Follow the product label and local agricultural guidance."
+            )
+
+        elif (
+            "pest" in q
+            or "insect" in q
+        ):
+            answer = (
+                "Inspect the crop carefully before treatment.\n\n"
+                "Suggested steps:\n"
+                "1. Identify the pest correctly.\n"
+                "2. Estimate how widespread the damage is.\n"
+                "3. Consider non-chemical control first where practical.\n"
+                "4. If pesticide is necessary, use a registered product "
+                "for that crop and pest.\n"
+                "5. Follow label instructions and safety precautions."
+            )
+
+        elif (
+            "disease" in q
+            or "leaf" in q
+        ):
+            answer = (
+                "Crop disease diagnosis should use visible symptoms "
+                "together with farm conditions.\n\n"
+                "Take clear photos of affected leaves, stems or fruit "
+                "and compare symptoms with recent weather, irrigation "
+                "and field history before treatment."
+            )
+
+        elif (
+            "profit" in q
+            or "money" in q
+        ):
+            answer = (
+                "Farm profit is calculated from total farm revenue "
+                "minus total farm expenses.\n\n"
+                "Use the Smart Farm AI Productivity & Records and "
+                "Profit & Loss tools for the actual Current Farm figures."
+            )
+
         else:
-            st.warning("❌ Please ask a question by typing or speaking.")
+            answer = (
+                f"For your {crop} farm, start by identifying the "
+                "specific problem, checking the current field conditions "
+                "and reviewing your recent farm records.\n\n"
+                "Give me more details about what you see and I can "
+                "guide you step by step."
+            )
+
+        return answer
+
+    # =========================================================
+    # MODEL ANSWER
+    # =========================================================
+    def model_answer(question):
+        if client is not None:
+            try:
+                response = (
+                    client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    build_system_prompt()
+                                )
+                            },
+                            {
+                                "role": "user",
+                                "content": question
+                            }
+                        ],
+                        temperature=0.4,
+                        max_tokens=550
+                    )
+                )
+
+                result = (
+                    response
+                    .choices[0]
+                    .message
+                    .content
+                    or ""
+                ).strip()
+
+                if result:
+                    return result
+
+            except Exception:
+                pass
+
+        answer = fallback_answer(
+            question
+        )
+
+        # Only translate local fallback for languages
+        # currently supported by the translation layer.
+        if target_code:
+            answer = translate_text(
+                answer,
+                target_code
+            )
+
+        return answer
+
+    # =========================================================
+    # VOICE / TEXT INPUT
+    # =========================================================
+    st.subheader(
+        "🎙️ Ask Smart Tutor"
+    )
+
+    input_mode = st.radio(
+        "Input Method",
+        [
+            "⌨️ Type",
+            "🎙️ Voice"
+        ],
+        horizontal=True,
+        key=tk("input_mode")
+    )
+
+    voice_question = ""
+
+    if input_mode == "🎙️ Voice":
+        audio_input = None
+
+        # Newer Streamlit versions
+        if hasattr(
+            st,
+            "audio_input"
+        ):
+            audio_input = st.audio_input(
+                "Record your question",
+                key=tk("audio_input")
+            )
+
+        else:
+            audio_input = st.file_uploader(
+                "Upload a WAV or FLAC recording",
+                type=[
+                    "wav",
+                    "flac"
+                ],
+                key=tk("audio_upload")
+            )
+
+        if audio_input is not None:
+            if sr is None:
+                st.warning(
+                    "Voice transcription is not "
+                    "available on this deployment."
+                )
+
+            else:
+                try:
+                    recognizer = (
+                        sr.Recognizer()
+                    )
+
+                    with sr.AudioFile(
+                        audio_input
+                    ) as source:
+                        audio = (
+                            recognizer.record(
+                                source
+                            )
+                        )
+
+                    speech_code = {
+                        "English": "en-NG",
+                        "Yoruba": "yo-NG",
+                        "Hausa": "ha-NG",
+                        "Igbo": "ig-NG"
+                    }.get(
+                        language,
+                        "en-NG"
+                    )
+
+                    voice_question = (
+                        recognizer
+                        .recognize_google(
+                            audio,
+                            language=speech_code
+                        )
+                    )
+
+                    st.success(
+                        f"🗣️ Recognized: "
+                        f"{voice_question}"
+                    )
+
+                except Exception:
+                    st.warning(
+                        "I couldn't transcribe that recording. "
+                        "You can type the question instead."
+                    )
+
+    question = st.text_area(
+        "Your farming question",
+        value=voice_question,
+        placeholder=(
+            "Example: Why are the leaves on my "
+            "tomato plants turning yellow?"
+        ),
+        height=120,
+        key=tk("question")
+    )
+
+    auto_speak = st.checkbox(
+        "🔊 Read response aloud",
+        value=False,
+        key=tk("auto_speak")
+    )
+
+    # =========================================================
+    # GENERATE RESPONSE
+    # =========================================================
+    if st.button(
+        "🧠 Ask Smart Tutor",
+        type="primary",
+        key=tk("ask"),
+        use_container_width=True
+    ):
+        clean_question = (
+            question or ""
+        ).strip()
+
+        if not clean_question:
+            st.warning(
+                "Please ask a farming question."
+            )
+
+        else:
+            with st.spinner(
+                "Smart Tutor is thinking..."
+            ):
+                answer = model_answer(
+                    clean_question
+                )
+
+            st.session_state[
+                messages_key
+            ].append(
+                {
+                    "role": "user",
+                    "text": clean_question,
+                    "time": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                }
+            )
+
+            st.session_state[
+                messages_key
+            ].append(
+                {
+                    "role": "assistant",
+                    "text": answer,
+                    "time": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                }
+            )
+
+            st.success(
+                "✅ Smart Tutor Response"
+            )
+
+            st.write(
+                answer
+            )
+
+            if auto_speak:
+                speak_text(
+                    answer,
+                    target_code or "en"
+                )
+
+    # =========================================================
+    # CONVERSATION HISTORY
+    # =========================================================
+    messages = st.session_state.get(
+        messages_key,
+        []
+    )
+
+    if messages:
+        st.divider()
+
+        st.subheader(
+            "💬 Tutor Conversation"
+        )
+
+        for index, message in enumerate(
+            messages
+        ):
+            role = message.get(
+                "role"
+            )
+
+            text = message.get(
+                "text",
+                ""
+            )
+
+            if role == "user":
+                with st.chat_message(
+                    "user",
+                    avatar="🧑"
+                ):
+                    st.write(
+                        text
+                    )
+
+            else:
+                with st.chat_message(
+                    "assistant",
+                    avatar="🧠"
+                ):
+                    st.write(
+                        text
+                    )
+
+                    if st.button(
+                        "🔊 Speak",
+                        key=tk(
+                            f"speak_{index}"
+                        )
+                    ):
+                        speak_text(
+                            text,
+                            target_code or "en"
+                        )
+
+        if st.button(
+            "🗑 Clear Conversation",
+            key=tk("clear")
+        ):
+            st.session_state[
+                messages_key
+            ] = []
+
+            st.rerun()
+
+    # =========================================================
+    # STATUS
+    # =========================================================
+    st.caption(
+        "🟡 Smart Tutor is connected to Current Farm. "
+        "Language quality, voice support and agricultural knowledge "
+        "will continue improving during the intelligence phase."
+    )
 
 #Ai crop calendar
 def ai_crop_calendar_ui():
@@ -13985,9 +14619,7 @@ if menu_v2 == "🏡 Home":
             "preparing for your current farm."
         )
 
-elif menu_v2 == "🧑‍🏫 Smart Tutor Multilanguage":
 
-    smart_tutor_voice()
 
 elif menu_v2 == "📅 Expanded AI Crop Calendar":
     expanded_crop_calendar_ui()
@@ -16156,317 +16788,5 @@ elif menu_v2 == "🚨 Smart Farm Alerts":
     smart_farm_alerts_ui()
 
 
-#smart_tutor_voice
-def smart_tutor_voice():
-    import os
-    from datetime import datetime
-    import streamlit as st
-
-    # --- optional deps (gracefully handled)
-    try:
-        import speech_recognition as sr  # mic / audio-to-text
-    except Exception:
-        sr = None
-    try:
-        import pyttsx3  # offline TTS
-    except Exception:
-        pyttsx3 = None
-    try:
-        from gtts import gTTS  # online TTS fallback
-    except Exception:
-        gTTS = None
-
-    # translators (optional)
-    translator = None
-    _gt = None
-    try:
-        from googletrans import Translator  # pip install googletrans==4.0.0rc1
-        translator = "googletrans"
-        _gt = Translator()
-    except Exception:
-        try:
-            from deep_translator import GoogleTranslator  # pip install deep-translator
-            translator = "deep"
-        except Exception:
-            translator = None
-
-    # OpenAI (optional)
-    client = None
-    try:
-        from openai import OpenAI  # pip install openai
-        if os.getenv("OPENAI_API_KEY"):
-            client = OpenAI()
-    except Exception:
-        client = None
-
-    # --- UI
-    st.header("🧑‍🏫 Smart Tutor (Multi-Language) + 🎙️ Voice")
-    st.caption("Speak or type your question. I’ll answer and can read the reply aloud.")
-
-    LANGS = [
-        "Urhobo","Yorùbá","Hausa","Ịjọ (Ijaw)","Efik (Calabar)","Ịgbò (Igbo)","Edo (Bini)","Tiv",
-        "Ibibio","Kanuri","Nupe","Fulfulde (Fula)","Itsekiri","Gbagyi","Idoma","Ebira","Jukun",
-        "Igala","Berom (Birom)","Esan","Isoko","Okun (Yoruba dialect)","Ika","English (for reference)"
-    ]
-    DOMAINS = [
-        "General chat","Farming & Agriculture","Business & Finance",
-        "Health & Safety (non-medical advice)","Education & Study Help",
-    ]
-    TONES = ["Neutral","Friendly","Professional","Encouraging","Brief"]
-
-    c1, c2, c3 = st.columns([1.2, 1, 1])
-    lang   = c1.selectbox("Language", LANGS, index=0, key="st_lang")
-    domain = c2.selectbox("Domain", DOMAINS, index=1, key="st_domain")
-    tone   = c3.selectbox("Tone", TONES, index=1, key="st_tone")
-
-    vc1, vc2, vc3 = st.columns([1.1, 1.1, 1])
-    input_mode    = vc1.radio("Input Mode", ["🎙️ Voice", "⌨️ Typing"], horizontal=True, key="st_input_mode")
-    auto_speak    = vc2.toggle("🔁 Auto-speak reply", value=True, key="st_auto_speak")
-    tts_lang_hint = vc3.selectbox(
-        "TTS language (for playback)",
-        ["auto (best effort)","en","ha","yo","ig"],
-        index=0,
-        key="st_tts_code"
-    )
-
-    # --- helpers
-    def _system_prompt(lang_, domain_, tone_):
-        return f"""You are a helpful AI that replies entirely in {lang_}.
-Tone: {tone_}. Domain focus: {domain_}.
-Use clear, culturally appropriate expressions. Avoid slang unless asked.
-If a term has no direct {lang_} word, explain briefly in {lang_}.
-Keep paragraphs short. Use bullet points for steps/lists.
-Do NOT switch to English unless the user asks.""".strip()
-
-    def _translate_to(text, target_code):
-        if not translator or not (text or "").strip():
-            return text
-        try:
-            if translator == "googletrans":
-                return _gt.translate(text, dest=target_code or "en").text
-            else:
-                from deep_translator import GoogleTranslator
-                return GoogleTranslator(source="auto", target=target_code or "en").translate(text)
-        except Exception:
-            return text
-
-    def _speak_text(text, lang_code="en"):
-        # offline first
-        if pyttsx3 is not None:
-            try:
-                engine = pyttsx3.init()
-                try:
-                    rate = engine.getProperty("rate")
-                    if isinstance(rate, int):
-                        engine.setProperty("rate", max(120, min(185, rate)))
-                except Exception:
-                    pass
-                engine.say(text)
-                engine.runAndWait()
-                st.caption("🔉 Played using offline TTS (pyttsx3).")
-                return
-            except Exception:
-                pass
-        # gTTS fallback
-        if gTTS is not None:
-            try:
-                use_code = lang_code if lang_code in {"en","ha","yo","ig"} else "en"
-                tts = gTTS(text=text, lang=use_code)
-                import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                    tts.save(tmp.name)
-                    st.audio(tmp.name, format="audio/mp3")
-                    st.caption("🔉 Played using gTTS.")
-                return
-            except Exception as e:
-                st.warning(f"TTS failed: {e}")
-        st.info("🔇 Could not play audio (no TTS engine available).")
-
-    def _model_answer(user_text: str) -> str:
-        sys_prompt = _system_prompt(lang, domain, tone)
-        if client is not None:
-            try:
-                resp = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role":"system","content":sys_prompt},{"role":"user","content":user_text}],
-                    temperature=0.6,
-                    max_tokens=380,
-                )
-                return (resp.choices[0].message.content or "").strip()
-            except Exception:
-                pass
-        # local fallback
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-        header = f"[{lang}] — {domain} • {tone}"
-        body_map = {
-            "Farming & Agriculture":"• Farm advice (summary):",
-            "Business & Finance":"• Business guidance (summary):",
-            "Health & Safety (non-medical advice)":"• Safety tips (general):",
-            "Education & Study Help":"• Study help (outline):",
-            "General chat":"• Response (general):",
-        }
-        return (
-            f"{header}\n"
-            f"{body_map.get(domain,'• Response:')}\n"
-            f"- 1) Identify main need. 2) Give short, clear guidance. 3) Suggest next step.\n"
-            f"- Your request: “{(user_text or '').strip()}”\n"
-            f"- Tip: Keep records and review weekly.\n"
-            f"— {ts}"
-        )
-
-    # --- state
-    if "st_msgs" not in st.session_state:
-        st.session_state.st_msgs = []
-
-    recognized_box = st.empty()
-    query_text = ""
-
-    # --- input (voice or typing)
-    if input_mode == "🎙️ Voice":
-        c_mic, c_up = st.columns([1, 1])
-        mic_clicked = c_mic.button("🎤 Tap to Record", key="st_mic_btn")
-        audio_file  = c_up.file_uploader("…or upload WAV/MP3", type=["wav","mp3","m4a"], key="st_audio_upload")
-
-        if mic_clicked:
-            if sr is None:
-                st.error("SpeechRecognition not installed. Try: `pip install SpeechRecognition pyaudio`")
-            else:
-                try:
-                    recog = sr.Recognizer()
-                    with sr.Microphone() as source:
-                        st.info("🎤 Listening…")
-                        try:
-                            recog.adjust_for_ambient_noise(source, duration=0.6)
-                        except Exception:
-                            pass
-                        audio = recog.listen(source, timeout=4, phrase_time_limit=8)
-                    st.caption("⏳ Transcribing…")
-                    hint_code = {"Yorùbá":"yo","Hausa":"ha","Ịgbò (Igbo)":"ig"}.get(lang, "en")
-                    query_text = recog.recognize_google(audio, language=hint_code)
-                    recognized_box.success(f"🗣️ Recognized: {query_text}")
-                except sr.WaitTimeoutError:
-                    st.error("Listening timed out. Try again and speak sooner.")
-                except sr.UnknownValueError:
-                    st.error("I couldn't understand that. Please try again.")
-                except sr.RequestError:
-                    st.error("Speech service unavailable. Check internet connection.")
-                except Exception as e:
-                    st.error(f"Mic/recognition error: {e}")
-
-        if audio_file is not None and sr is not None:
-            try:
-                recog = sr.Recognizer()
-                with sr.AudioFile(audio_file) as source:
-                    audio = recog.record(source)
-                st.caption("⏳ Transcribing uploaded audio…")
-                hint_code = {"Yorùbá":"yo","Hausa":"ha","Ịgbò (Igbo)":"ig"}.get(lang, "en")
-                query_text = recog.recognize_google(audio, language=hint_code)
-                recognized_box.success(f"🗣️ Recognized: {query_text}")
-            except Exception as e:
-                st.error(f"Audio transcription failed: {e}")
-
-        default_text = query_text or st.session_state.get("st_last_text", "")
-        user_text = st.text_area(
-            "Type your question / prompt",
-            value=default_text,
-            placeholder="e.g., Explain in Yorùbá how to prevent tomato leaf blight this week.",
-            height=140,
-            key="st_query",
-        )
-        st.session_state["st_last_text"] = user_text
-
-    else:
-        default_text = st.session_state.get("st_last_text", "")
-        user_text = st.text_area(
-            "Type your question / prompt",
-            value=default_text,
-            placeholder="e.g., Explain in Yorùbá how to prevent tomato leaf blight this week.",
-            height=140,
-            key="st_query",
-        )
-        st.session_state["st_last_text"] = user_text
-
-    st.divider()
-
-    # --- generate
-    go = st.button("Generate", type="primary", key="st_go")
-    if go:
-        if not (user_text or "").strip():
-            st.warning("Please enter a question or prompt.")
-        else:
-            with st.spinner("Generating..."):
-                base_reply = _model_answer(user_text)
-                lang_to_code = {
-                    "English (for reference)": "en",
-                    "Yorùbá": "yo",
-                    "Hausa": "ha",
-                    "Ịgbò (Igbo)": "ig",
-                }
-                target_code = lang_to_code.get(lang, "en")
-                translated = _translate_to(base_reply, target_code) if target_code else base_reply
-
-            st.session_state.st_msgs.append(("user", user_text))
-            st.session_state.st_msgs.append(("assistant", translated))
-
-            st.markdown("### ✅ Tutor Response")
-            st.write(translated)
-
-            if auto_speak and (translated or "").strip():
-                tts_code = None if tts_lang_hint.startswith("auto") else tts_lang_hint
-                _speak_text(translated, lang_code=tts_code or target_code or "en")
-
-    # --- history
-    if st.session_state.get("st_msgs"):
-        st.subheader("💬 Conversation")
-        for role, text in st.session_state.st_msgs:
-            if role == "user":
-                with st.chat_message("user", avatar="🧑"):
-                    st.write(text)
-            else:
-                with st.chat_message("assistant", avatar="🧠"):
-                    st.write(text)
-                if st.button("🔊 Speak this reply", key=f"st_say_{abs(hash(text))%10**8}"):
-                        tts_code = None if tts_lang_hint.startswith("auto") else tts_lang_hint
-                        lang_to_code = {
-                            "English (for reference)": "en",
-                            "Yorùbá": "yo",
-                            "Hausa": "ha",
-                            "Ịgbò (Igbo)": "ig",
-                        }
-                        inferred = lang_to_code.get(lang, "en")
-                        _speak_text(text, lang_code=(tts_code or inferred or "en"))
-
-    # Only developers who intentionally enable this will see the notes.
-if st.session_state.get("_dev_show_tutor_notes", False):
-
-    with st.expander("ℹ️ Notes / Setup"):
-
-        st.markdown("""
-
-        - Voice input: `pip install SpeechRecognition pyaudio` (microphone support)  
-
-        - Offline TTS: `pyttsx3`  
-
-        - Online TTS: `gTTS`  
-
-        - Translation: `googletrans==4.0.0rc1` or `deep-translator` (optional)  
-
-        - Not all listed languages have stable TTS/STT codes; the app will fallback to English playback.  
-
-        - If you set `OPENAI_API_KEY` in the environment, real AI responses will be used; otherwise the app uses a local fallback template.  
-
-
-
-        **Developer tips**  
-
-        - To enable these notes temporarily in a session:  
-
-          `st.session_state["_dev_show_tutor_notes"] = True`  
-
-        - Keep this disabled in production to avoid exposing internal setup details.  
-
-        - If speech or TTS features fail, check microphone permissions and re-run the install commands above.  
-
-        """)
 
 
