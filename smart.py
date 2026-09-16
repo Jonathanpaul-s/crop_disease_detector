@@ -2045,28 +2045,7 @@ if st.session_state.get("logged_in", False):
         )
      
 
-# ============================================================
-# ⭐ RECOMMENDED FEATURES
-# ============================================================
 
-if st.session_state.get("logged_in", False):
-
-    st.subheader("⭐ Recommended for You")
-
-    for feature in recommended_features:
-
-        if isinstance(feature, dict):
-
-            feature_name = feature.get(
-                "name",
-                feature.get("Name", "Feature")
-            )
-
-        else:
-
-            feature_name = str(feature)
-
-        st.write(f"⭐ {feature_name}")
 
 
 
