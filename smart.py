@@ -14380,10 +14380,6 @@ def farmer_command_centre_ui():
     # ========================================================
     # CURRENT FARM / USER CONTEXT
     # ========================================================
-    current_farm = st.session_state.get(
-        "current_farm",
-        {}
-    ) or {}
 
     farmer_profile = st.session_state.get(
         "farmer_profile",
@@ -14395,399 +14391,234 @@ def farmer_command_centre_ui():
         {}
     ) or {}
 
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    ) or {}
+
+    current_farm_id = st.session_state.get(
+        "current_farm_id"
+    )
+
+    # ========================================================
+    # RECOVER CURRENT FARM IF SESSION OBJECT IS EMPTY
+    # ========================================================
+
+    farms = farmer_profile.get(
+        "farms",
+        []
+    )
+
+    if not isinstance(
+        farms,
+        list
+    ):
+        farms = []
+
+    if not current_farm and current_farm_id:
+
+        for farm in farms:
+
+            farm_id_check = str(
+                farm.get(
+                    "farm_id",
+                    farm.get(
+                        "id",
+                        ""
+                    )
+                )
+            )
+
+            if farm_id_check == str(
+                current_farm_id
+            ):
+                current_farm = farm
+
+                st.session_state[
+                    "current_farm"
+                ] = farm
+
+                break
+
+    # ========================================================
+    # FARM ID
+    # ========================================================
+
     farm_id = str(
-        st.session_state.get("current_farm_id")
-        or current_farm.get("farm_id")
+        current_farm_id
+        or current_farm.get(
+            "farm_id"
+        )
+        or personalized_profile.get(
+            "current_farm_id"
+        )
         or "main_farm"
     )
 
+    # ========================================================
+    # FARM DETAILS
+    # ========================================================
+
     farm_name = (
-        current_farm.get("farm_name")
-        or current_farm.get("name")
+        current_farm.get(
+            "farm_name"
+        )
+        or current_farm.get(
+            "name"
+        )
+        or personalized_profile.get(
+            "current_farm_name"
+        )
         or "Main Farm"
     )
 
     crop_name = (
-        current_farm.get("crop_type")
-        or current_farm.get("crop")
-        or personalized_profile.get("crop_type")
+        current_farm.get(
+            "crop_type"
+        )
+        or current_farm.get(
+            "crop"
+        )
+        or personalized_profile.get(
+            "current_crop"
+        )
+        or personalized_profile.get(
+            "crop_type"
+        )
         or "Not specified"
     )
 
     farm_location = (
-        current_farm.get("location")
-        or personalized_profile.get("location")
-        or farmer_profile.get("location")
+        current_farm.get(
+            "location"
+        )
+        or personalized_profile.get(
+            "current_location"
+        )
+        or personalized_profile.get(
+            "location"
+        )
+        or farmer_profile.get(
+            "location"
+        )
         or "Not specified"
     )
 
     country = (
-        current_farm.get("country")
-        or personalized_profile.get("country")
-        or farmer_profile.get("country")
-        or "Not specified"
+        current_farm.get(
+            "country"
+        )
+        or personalized_profile.get(
+            "country"
+        )
+        or farmer_profile.get(
+            "country"
+        )
+        or ""
     )
 
     farm_type = (
-        current_farm.get("farm_type")
-        or personalized_profile.get("farm_type")
+        current_farm.get(
+            "farm_type"
+        )
+        or personalized_profile.get(
+            "current_farm_type"
+        )
+        or personalized_profile.get(
+            "farm_type"
+        )
         or "Not specified"
     )
 
     farm_size = (
-        current_farm.get("farm_size")
-        or current_farm.get("size")
-        or personalized_profile.get("farm_size")
+        current_farm.get(
+            "farm_size"
+        )
+        or current_farm.get(
+            "size"
+        )
+        or personalized_profile.get(
+            "current_farm_size"
+        )
+        or personalized_profile.get(
+            "farm_size"
+        )
         or "Not specified"
     )
 
+    # ========================================================
+    # FARMER NAME
+    # ========================================================
+
     farmer_name = (
-        farmer_profile.get("name")
-        or farmer_profile.get("farmer_name")
-        or st.session_state.get("username")
+        farmer_profile.get(
+            "name"
+        )
+        or farmer_profile.get(
+            "farmer_name"
+        )
+        or farmer_profile.get(
+            "full_name"
+        )
+        or personalized_profile.get(
+            "name"
+        )
+        or st.session_state.get(
+            "username"
+        )
         or "Farmer"
     )
 
     # ========================================================
-    # LOCAL KEYS
+    # SAFE HTML
     # ========================================================
-    def ck(name):
-        return (
-            f"command_centre_{farm_id}_{name}"
-        )
 
-    # ========================================================
-    # SAFE DISPLAY HELPERS
-    # ========================================================
+    import html
+
     def safe(value):
         return html.escape(
-            str(value)
-        )
-
-    def display_number(value):
-        if value in (
-            None,
-            "",
-            "None"
-        ):
-            return "Pending"
-
-        try:
-            number = float(value)
-
-            if number.is_integer():
-                return str(int(number))
-
-            return f"{number:,.2f}"
-
-        except Exception:
-            return str(value)
-
-    def format_farm_size(value):
-        if value in (
-            None,
-            "",
-            "Not specified"
-        ):
-            return "Not specified"
-
-        text = str(value)
-
-        if "ha" in text.lower():
-            return text
-
-        try:
-            return (
-                f"{float(value):,.2f} ha"
+            str(
+                value
+                if value is not None
+                else ""
             )
-
-        except Exception:
-            return text
-
-    # ========================================================
-    # ANALYSIS ENGINES
-    # ========================================================
-    pa_analysis = st.session_state.get(
-        "pa_analysis",
-        {}
-    ) or {}
-
-    cig_analysis = st.session_state.get(
-        "cig_analysis",
-        {}
-    ) or {}
-
-    csa_analysis = st.session_state.get(
-        "csa_analysis",
-        {}
-    ) or {}
-
-    # ========================================================
-    # PERSONALIZED RECOMMENDATIONS
-    # ========================================================
-    recommended_features = (
-        st.session_state.get(
-            "recommended_features"
         )
-        or globals().get(
-            "recommended_features",
-            []
-        )
-        or []
-    )
+
     # ========================================================
-    # FARM ALERT HISTORY
+    # WELCOME HERO
     # ========================================================
-    alert_log_key = (
-        f"smart_alerts_{farm_id}_alert_log"
+
+    location_line = safe(
+        farm_location
     )
 
-    alert_log = st.session_state.get(
-        alert_log_key,
-        []
-    ) or []
+    if country:
+        location_line += (
+            ", "
+            + safe(country)
+        )
 
-    recent_alerts = (
-        alert_log[-10:][::-1]
-        if alert_log
-        else []
+    hero_html = (
+        '<div class="sf-hero">'
+        '<h2 style="margin:0;color:white;">'
+        f'Welcome back, {safe(farmer_name)} 🌱'
+        '</h2>'
+        '<p style="margin:8px 0 0 0;">'
+        "Here's what's happening on "
+        f'<b>{safe(farm_name)}</b> today.'
+        '</p>'
+        '<p style="margin:8px 0 0 0;">'
+        f'📍 {location_line}'
+        ' &nbsp; • &nbsp; '
+        f'🌾 {safe(crop_name)}'
+        ' &nbsp; • &nbsp; '
+        f'🚜 {safe(farm_type)}'
+        '</p>'
+        '</div>'
     )
 
-    # ========================================================
-    # FERTILIZER / PESTICIDE STOCK
-    # ========================================================
-    stock_key = (
-        f"smart_fert_pest_{farm_id}_stock_items"
-    )
-
-    stock_items = st.session_state.get(
-        stock_key,
-        []
-    ) or []
-
-    low_stock_items = []
-
-    for item in stock_items:
-        try:
-            qty = float(
-                item.get(
-                    "qty",
-                    0
-                )
-            )
-
-            minimum = float(
-                item.get(
-                    "min_level",
-                    0
-                )
-            )
-
-            if qty <= minimum:
-                low_stock_items.append(
-                    item
-                )
-
-        except Exception:
-            pass
-
-    # ========================================================
-    # METRIC DATA
-    # ========================================================
-    estimated_yield = (
-        current_farm.get(
-            "estimated_yield"
-        )
-        or pa_analysis.get(
-            "estimated_yield"
-        )
-    )
-
-    farm_health = (
-        current_farm.get(
-            "farm_health"
-        )
-        or current_farm.get(
-            "health_status"
-        )
-        or cig_analysis.get(
-            "status"
-        )
-        or "Pending"
-    )
-
-    net_profit = (
-        current_farm.get(
-            "net_profit"
-        )
-        or current_farm.get(
-            "profit"
-        )
-    )
-
-    # ========================================================
-    # WEATHER / CLIMATE DATA
-    # ========================================================
-    weather_data = (
-        st.session_state.get(
-            "weather_data"
-        )
-        or st.session_state.get(
-            "current_weather"
-        )
-        or {}
-    )
-
-    temperature = (
-        weather_data.get(
-            "temperature"
-        )
-        if isinstance(
-            weather_data,
-            dict
-        )
-        else None
-    )
-
-    humidity = (
-        weather_data.get(
-            "humidity"
-        )
-        if isinstance(
-            weather_data,
-            dict
-        )
-        else None
-    )
-
-    rainfall = (
-        weather_data.get(
-            "rainfall"
-        )
-        if isinstance(
-            weather_data,
-            dict
-        )
-        else None
-    )
-
-    # ========================================================
-    # CURRENT FARM SELECTOR
-    # ========================================================
-    farms = farmer_profile.get(
-        "farms",
-        []
-    ) or []
-
-    active_farms = [
-        farm
-        for farm in farms
-        if str(
-            farm.get(
-                "status",
-                "active"
-            )
-        ).lower()
-        != "archived"
-    ]
-
-    # ========================================================
-    # DASHBOARD STYLING
-    # ========================================================
     st.markdown(
-        """
-        <style>
-
-        .sf-hero {
-            padding: 24px 26px;
-            border-radius: 18px;
-            background:
-                linear-gradient(
-                    110deg,
-                    rgba(4, 96, 58, 0.97),
-                    rgba(16, 145, 85, 0.90)
-                );
-            color: white;
-            margin-bottom: 18px;
-        }
-
-        .sf-hero h2 {
-            margin: 0;
-            padding: 0;
-            color: white;
-        }
-
-        .sf-hero p {
-            margin-top: 7px;
-            margin-bottom: 0;
-            opacity: 0.95;
-        }
-
-        .sf-mini-card {
-            padding: 15px;
-            border-radius: 14px;
-            border: 1px solid rgba(0,0,0,0.08);
-            background: rgba(255,255,255,0.98);
-            min-height: 110px;
-        }
-
-        .sf-label {
-            font-size: 0.82rem;
-            opacity: 0.72;
-            margin-bottom: 5px;
-        }
-
-        .sf-value {
-            font-size: 1.35rem;
-            font-weight: 700;
-        }
-
-        .sf-sub {
-            font-size: 0.8rem;
-            opacity: 0.72;
-            margin-top: 5px;
-        }
-
-        .sf-priority {
-            padding: 12px 14px;
-            border-radius: 12px;
-            border-left: 5px solid #149457;
-            background: rgba(20,148,87,0.07);
-            margin-bottom: 9px;
-        }
-
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # ========================================================
-    # HERO / WELCOME
-    # ========================================================
-    st.markdown(
-        f"""
-        <div class="sf-hero">
-
-            <h2>
-                Welcome back, {safe(farmer_name)} 🌱
-            </h2>
-
-            <p>
-                Here's what's happening on
-                <b>{safe(farm_name)}</b> today.
-            </p>
-
-            <p>
-                📍 {safe(farm_location)},
-                {safe(country)}
-                &nbsp; • &nbsp;
-                🌾 {safe(crop_name)}
-                &nbsp; • &nbsp;
-                🚜 {safe(farm_type)}
-            </p>
-
-        </div>
-        """,
+        hero_html,
         unsafe_allow_html=True
     )
 
