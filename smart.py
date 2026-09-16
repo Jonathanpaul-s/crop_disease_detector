@@ -9945,6 +9945,463 @@ def irrigation_ui():
             )
 
 
+# ===============================
+# 🚨 Smart Farm Alerts
+# ===============================
+def smart_farm_alerts_ui():
+    import streamlit as st
+    from datetime import datetime
+
+    # =========================================================
+    # CURRENT FARM CONTEXT
+    # =========================================================
+    current_farm = st.session_state.get("current_farm", {}) or {}
+    personalized_profile = st.session_state.get(
+        "personalized_profile", {}
+    ) or {}
+    farmer_profile = st.session_state.get(
+        "farmer_profile", {}
+    ) or {}
+
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or "main_farm"
+    )
+
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or "Main Farm"
+    )
+
+    farm_crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or "Not selected"
+    )
+
+    location = (
+        current_farm.get("location")
+        or personalized_profile.get("location")
+        or farmer_profile.get("location")
+        or "Not selected"
+    )
+
+    country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Not selected"
+    )
+
+    st.header("🚨 Smart Farm Alerts")
+
+    st.info(
+        f"🌾 Current Farm: {farm_name} | "
+        f"Crop: {farm_crop} | "
+        f"Location: {location} | "
+        f"Country: {country}"
+    )
+
+    st.write(
+        "Monitor important weather, pest, soil, market "
+        "and emergency conditions affecting the current farm."
+    )
+
+    # =========================================================
+    # FARM-SPECIFIC KEYS
+    # =========================================================
+    def ak(name):
+        return f"smart_alerts_{farm_id}_{name}"
+
+    active_key = ak("active_alert")
+    log_key = ak("alert_log")
+
+    if active_key not in st.session_state:
+        st.session_state[active_key] = None
+
+    if log_key not in st.session_state:
+        st.session_state[log_key] = []
+
+    # =========================================================
+    # ALERT CONFIGURATION
+    # =========================================================
+    alerts = {
+        "weather": {
+            "title": "🌦 Weather Alert",
+            "level": "info",
+            "message": (
+                "Heavy rainfall scenario detected. "
+                "Check drainage, protect vulnerable seedlings "
+                "and review irrigation plans."
+            ),
+            "voice": (
+                "Weather alert. Heavy rainfall may affect the farm. "
+                "Check drainage, protect seedlings and review irrigation."
+            )
+        },
+
+        "pest": {
+            "title": "🐛 Pest Alert",
+            "level": "warning",
+            "message": (
+                "Possible pest-risk condition detected. "
+                "Inspect the crop before applying any treatment."
+            ),
+            "voice": (
+                "Pest alert. Inspect the crop for pest activity "
+                "before applying treatment."
+            )
+        },
+
+        "soil": {
+            "title": "🌱 Soil Alert",
+            "level": "warning",
+            "message": (
+                "Low-soil-moisture scenario detected. "
+                "Check field moisture and irrigation requirements."
+            ),
+            "voice": (
+                "Soil alert. Soil moisture may be low. "
+                "Check the field before irrigation."
+            )
+        },
+
+        "market": {
+            "title": "📈 Market Alert",
+            "level": "info",
+            "message": (
+                "A market-price movement has been detected. "
+                "Review current prices and expected harvest quantity "
+                "before making a selling decision."
+            ),
+            "voice": (
+                "Market alert. Review current prices before "
+                "making a selling decision."
+            )
+        },
+
+        "emergency": {
+            "title": "🚨 Emergency Alert",
+            "level": "error",
+            "message": (
+                "Emergency test alert for the current farm. "
+                "Verify the affected area and contact the appropriate "
+                "farm team if a real incident is confirmed."
+            ),
+            "voice": (
+                "Emergency alert. Verify the affected area immediately "
+                "and contact the appropriate farm team."
+            )
+        }
+    }
+
+    # =========================================================
+    # HELPERS
+    # =========================================================
+    def render_alert(level, message):
+        if level == "success":
+            st.success(message)
+
+        elif level == "warning":
+            st.warning(message)
+
+        elif level == "error":
+            st.error(message)
+
+        else:
+            st.info(message)
+
+    def speak_alert(text):
+        # Temporary visual voice feedback.
+        # Real browser/device TTS can be connected later.
+        st.toast("🔊 " + text)
+        st.write("🔊", text)
+
+    def log_alert(alert_name):
+        cfg = alerts.get(alert_name)
+
+        if not cfg:
+            return
+
+        st.session_state[log_key].append(
+            {
+                "time": datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "farm_id": farm_id,
+                "farm_name": farm_name,
+                "crop": farm_crop,
+                "location": location,
+                "alert": alert_name,
+                "title": cfg["title"],
+                "level": cfg["level"],
+                "message": cfg["message"]
+            }
+        )
+
+        # Prevent unlimited session growth.
+        st.session_state[log_key] = (
+            st.session_state[log_key][-100:]
+        )
+
+    def activate_alert(alert_name):
+        st.session_state[active_key] = alert_name
+        log_alert(alert_name)
+
+    # =========================================================
+    # SUMMARY
+    # =========================================================
+    alert_log = st.session_state[log_key]
+
+    warning_count = sum(
+        1
+        for row in alert_log
+        if row.get("level") == "warning"
+    )
+
+    emergency_count = sum(
+        1
+        for row in alert_log
+        if row.get("level") == "error"
+    )
+
+    m1, m2, m3 = st.columns(3)
+
+    m1.metric(
+        "Recent Alerts",
+        len(alert_log)
+    )
+
+    m2.metric(
+        "Warnings",
+        warning_count
+    )
+
+    m3.metric(
+        "Emergency",
+        emergency_count
+    )
+
+    # =========================================================
+    # ALERT TRIGGERS
+    # =========================================================
+    st.subheader("🔔 Alert Categories")
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+
+    with c1:
+        if st.button(
+            "🌦 Weather",
+            key=ak("btn_weather"),
+            use_container_width=True
+        ):
+            activate_alert("weather")
+
+    with c2:
+        if st.button(
+            "🐛 Pest",
+            key=ak("btn_pest"),
+            use_container_width=True
+        ):
+            activate_alert("pest")
+
+    with c3:
+        if st.button(
+            "🌱 Soil",
+            key=ak("btn_soil"),
+            use_container_width=True
+        ):
+            activate_alert("soil")
+
+    with c4:
+        if st.button(
+            "📈 Market",
+            key=ak("btn_market"),
+            use_container_width=True
+        ):
+            activate_alert("market")
+
+    with c5:
+        if st.button(
+            "🚨 Emergency",
+            key=ak("btn_emergency"),
+            use_container_width=True
+        ):
+            activate_alert("emergency")
+
+    st.divider()
+
+    # =========================================================
+    # ACTIVE ALERT
+    # =========================================================
+    active_alert = st.session_state.get(
+        active_key
+    )
+
+    if active_alert in alerts:
+        cfg = alerts[active_alert]
+
+        st.subheader(
+            cfg["title"]
+        )
+
+        render_alert(
+            cfg["level"],
+            cfg["message"]
+        )
+        r1, r2 = st.columns([1, 1])
+
+        with r1:
+            if st.button(
+                "🔊 Read Alert",
+                key=ak("read_alert"),
+                use_container_width=True
+            ):
+                speak_alert(
+                    cfg["voice"]
+                )
+
+        with r2:
+            if st.button(
+                "✅ Acknowledge",
+                key=ak("ack_alert"),
+                use_container_width=True
+            ):
+                st.session_state[
+                    active_key
+                ] = None
+
+                st.success(
+                    "Alert acknowledged."
+                )
+
+                st.rerun()
+
+    else:
+        st.info(
+            "No active alert. Select an alert category above."
+        )
+
+    # =========================================================
+    # ALERT TESTER
+    # =========================================================
+    with st.expander(
+        "🧪 Test Smart Farm Alerts"
+    ):
+        st.caption(
+            "This tester is for development and demonstration. "
+            "Production alerts will later come automatically from "
+            "weather, sensors, PA/CSA, crop-health and market data."
+        )
+
+        alert_labels = {
+            "🌦 Weather": "weather",
+            "🐛 Pest": "pest",
+            "🌱 Soil": "soil",
+            "📈 Market": "market",
+            "🚨 Emergency": "emergency"
+        }
+
+        selected_label = st.selectbox(
+            "Choose Test Alert",
+            [""] + list(
+                alert_labels.keys()
+            ),
+            key=ak("tester_choice")
+        )
+
+        if selected_label:
+            selected_alert = (
+                alert_labels[
+                    selected_label
+                ]
+            )
+
+            preview = alerts[
+                selected_alert
+            ]
+
+            render_alert(
+                preview["level"],
+                preview["message"]
+            )
+
+            if st.button(
+                "🔔 Trigger Test Alert",
+                key=ak("trigger_test"),
+                use_container_width=True
+            ):
+                activate_alert(
+                    selected_alert
+                )
+
+                st.success(
+                    "Test alert triggered."
+                )
+
+                st.rerun()
+
+    # =========================================================
+    # RECENT ALERT HISTORY
+    # =========================================================
+    st.subheader("🕘 Recent Alerts")
+
+    alert_log = st.session_state.get(
+        log_key,
+        []
+    )
+
+    if alert_log:
+        for row in alert_log[-10:][::-1]:
+            level_icon = {
+                "info": "ℹ️",
+                "warning": "⚠️",
+                "success": "✅",
+                "error": "🚨"
+            }.get(
+                row.get("level"),
+                "🔔"
+            )
+
+            st.write(
+                f"{level_icon} "
+                f"{row.get('time', '')} • "
+                f"{row.get('title', 'Alert')} • "
+                f"{row.get('message', '')}"
+            )
+
+        if st.button(
+            "🗑 Clear Alert History",
+            key=ak("clear_history")
+        ):
+            st.session_state[
+                log_key
+            ] = []
+
+            st.session_state[
+                active_key
+            ] = None
+
+            st.rerun()
+
+    else:
+        st.caption(
+            "No alert history for this farm yet."
+        )
+
+    # =========================================================
+    # STATUS
+    # =========================================================
+    st.caption(
+        "🟡 Smart Farm Alerts is connected to Current Farm. "
+        "The present alert triggers are development scenarios. "
+        "Final integration should generate alerts automatically "
+        "from real weather, sensor, PA, CSA, crop-health, inventory "
+        "and market data."
+    )
+
 
 # =========================
 
@@ -15695,201 +16152,8 @@ elif menu_v2 == "📈 Decision-Making Models":
 elif menu_v2 == "💦 Irrigation Scheduler":
     irrigation_scheduler_ui()
 
-
-# ===============================
-# 🚨 Smart Farm Alerts
-# ===============================
-
-st.header("🚨 Smart Farm Alerts")
-st.write("Click a button below to view farm alerts instantly.")
-
-# ---- Ensure session key exists ----
-st.session_state.setdefault("active_alert", None)
-
-# ---- Optional: simple speaker (no external deps) ----
-def _speak_alert(text: str) -> None:
-    # Replace with pyttsx3/gTTS if you want real audio. This is a UI toast/log for now.
-    st.toast("🔊 " + text)
-    st.write("🔊", text)
-
-# ---- Alert config: key -> (title, render_fn, message, voice_line) ----
-_ALERTS = {
-    "weather": (
-        "🌦 Weather Alert",
-        st.info,
-        "Heavy rainfall expected tomorrow. Prepare drainage and cover seedlings.",
-        "Weather alert: heavy rainfall expected tomorrow. Prepare drainage and cover seedlings."
-    ),
-    "pest": (
-        "🐛 Pest Alert",
-        st.warning,
-        "Armyworm outbreak detected nearby. Apply the recommended pesticide early.",
-        "Pest alert: armyworm outbreak detected nearby. Apply the recommended pesticide early."
-    ),
-    "soil": (
-        "🌱 Soil Alert",
-        st.success,
-        "Soil moisture is low — consider irrigating this evening.",
-        "Soil alert: moisture is low. Consider irrigating this evening."
-    ),
-    "market": (
-        "📈 Market Alert",
-        st.info,
-        "Maize prices are up 12% this week — it may be a good time to sell.",
-        "Market alert: maize prices are up twelve percent this week. It may be a good time to sell."
-    ),
-    "emergency": (
-        "🚨 Emergency Alert",
-        st.error,
-        "Security breach detected near Gate 2. Notify the team and verify the perimeter now.",
-        "Emergency alert: security breach detected near Gate two. Notify the team and verify the perimeter now."
-    ),
-}
-
-# ---- Trigger buttons row ----
-c1, c2, c3, c4, c5 = st.columns(5)
-with c1:
-    if st.button("🌦 Weather", key="btn_weather"):
-        st.session_state.active_alert = "weather"
-with c2:
-    if st.button("🐛 Pest", key="btn_pest"):
-        st.session_state.active_alert = "pest"
-with c3:
-    if st.button("🌱 Soil", key="btn_soil"):
-        st.session_state.active_alert = "soil"
-with c4:
-    if st.button("📈 Market", key="btn_market"):
-        st.session_state.active_alert = "market"
-with c5:
-    if st.button("🚨 Emergency", key="btn_emergency"):
-        st.session_state.active_alert = "emergency"
-
-st.divider()
-
-
-# ---------------------------
-# Safe defaults (only if missing)
-# ---------------------------
-if "_speak_alert" not in globals():
-    def _speak_alert(text: str) -> None:
-        # Replace with real TTS if you want (pyttsx3 / gTTS). For now: toast + print.
-        st.toast("🔊 " + text)
-        st.write("🔊", text)
-
-# Simple wrappers (optional; you can pass st.info etc. directly)
-def _render_info(msg: str):    st.info(msg)
-def _render_warn(msg: str):    st.warning(msg)
-def _render_ok(msg: str):      st.success(msg)
-def _render_err(msg: str):     st.error(msg)
-
-# Declarative alert config: key -> (title, renderer, message, voice_line)
-if "_ALERTS" not in globals():
-    _ALERTS = {
-        "weather": (
-            "🌦 Weather Alert",
-            _render_info,
-            "Heavy rainfall expected tomorrow. Prepare drainage and cover seedlings.",
-            "Weather alert: heavy rainfall expected tomorrow. Prepare drainage and cover seedlings."
-        ),
-        "pest": (
-            "🐛 Pest Alert",
-            _render_warn,
-            "Armyworm outbreak detected nearby. Apply recommended pesticide early.",
-            "Pest alert: armyworm outbreak detected nearby. Apply the recommended pesticide early."
-        ),
-        "soil": (
-            "🌱 Soil Alert",
-            _render_ok,
-            "Soil moisture is low — consider irrigation this evening.",
-            "Soil alert: moisture is low. Consider irrigating this evening."
-        ),
-        "market": (
-            "📈 Market Alert",
-            _render_info,
-            "Maize prices have increased by 12% this week — good time to sell.",
-            "Market alert: maize prices are up twelve percent this week. It may be a good time to sell."
-        ),
-        "emergency": (
-            "🚨 Emergency Alert",
-            _render_err,
-            "Security breach detected near Gate 2. Notify the team and verify the perimeter now.",
-            "Emergency alert: security breach near Gate 2. Notify the team and verify the perimeter now."
-        ),
-    }
-
-# Ensure session key exists
-st.session_state.setdefault("active_alert", None)
-
-# ---------------------------
-# Display active alert
-# ---------------------------
-active_key = st.session_state.get("active_alert")
-cfg = _ALERTS.get(active_key)
-
-if cfg:
-    title, render_fn, message, voice_line = cfg
-    st.subheader(title)
-    render_fn(message)
-    if st.button("🔊 Read it out", key="alert_readout"):
-        _speak_alert(voice_line)
-else:
-    st.caption("No alert selected yet. Use the tester below to trigger one.")
-
-# ---------------------------
-# Tester UI to trigger alerts
-# ---------------------------
-with st.expander("🔔 Test Smart Farm Alerts"):
-    from datetime import datetime
-
-    # Use your global _ALERTS dict if it exists; otherwise show a hint.
-    ALERTS = globals().get("_ALERTS", {})
-    if not ALERTS:
-        st.info(
-            "No alerts configured yet. Define `_ALERTS` above, e.g.:\n\n"
-            "_ALERTS = {\n"
-            "  'Low moisture': {'level':'warning','message':'Soil moisture < 30% — irrigate soon.'},\n"
-            "  'High temp': {'level':'error','message':'Temp > 35°C — heat stress risk.'},\n"
-            "  'Saved': {'level':'success','message':'Settings saved successfully.'}\n"
-            "}"
-        )
-    else:
-        choice = st.selectbox("Choose alert", ["", *list(ALERTS.keys())], key="alert_choice")
-
-        if choice:
-            data = ALERTS[choice]
-            # Supports either dict entries or plain strings in _ALERTS
-            if isinstance(data, dict):
-                level = (data.get("level") or "info").lower()
-                message = data.get("message") or choice
-            else:
-                level = "info"
-                message = str(data)
-
-            # Show the selected alert
-            if level == "success":
-                st.success(message)
-            elif level == "warning":
-                st.warning(message)
-            elif level == "error":
-                st.error(message)
-            else:
-                st.info(message)
-
-            # Log it (optional)
-            st.session_state.setdefault("alert_log", []).append(
-                {
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "name": choice,
-                    "level": level,
-                    "message": message,
-                }
-            )
-
-        # Show recent alerts (optional)
-        if st.session_state.get("alert_log"):
-            st.markdown("**Recent alerts**")
-            for row in st.session_state["alert_log"][-10:][::-1]:
-                st.write(f"{row['time']} • {row['level'].upper()} • {row['name']}: {row['message']}")
+elif menu_v2 == "🚨 Smart Farm Alerts":
+    smart_farm_alerts_ui()
 
 
 #smart_tutor_voice
