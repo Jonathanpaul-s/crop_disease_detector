@@ -843,65 +843,6 @@ recommended_features = recommend_features(
 )
 
 
-# ------------------------------------------------------------
-# 7. Current Farm Context Bar
-# ------------------------------------------------------------
-
-if current_farm and menu_v2 != "🏡 Home":
-
-    farm_name = current_farm.get(
-        "farm_name",
-        "Current Farm"
-    )
-
-    crop_name = current_farm.get(
-        "crop_type",
-        "Not specified"
-    )
-
-    farm_location = current_farm.get(
-        "location",
-        "Not specified"
-    )
-
-    st.markdown(
-        f"""
-        <div style="
-            background: rgba(255,255,255,0.90);
-            padding: 14px 18px;
-            border-radius: 14px;
-            margin-bottom: 18px;
-            border-left: 5px solid #2e7d32;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        ">
-            <div style="
-                font-size: 13px;
-                color: #666;
-            ">
-                CURRENT FARM
-            </div>
-
-            <div style="
-                font-size: 22px;
-                font-weight: 700;
-                margin-top: 3px;
-            ">
-                🌱 {farm_name}
-            </div>
-
-            <div style="
-                font-size: 14px;
-                margin-top: 6px;
-                color: #555;
-            ">
-                🌾 Crop: {crop_name}
-                &nbsp;&nbsp;|&nbsp;&nbsp;
-                📍 Location: {farm_location}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
 
 # ------------------------------------------------------------
 # 8. Personalization summary
@@ -14364,6 +14305,66 @@ menu_v2 = st.sidebar.selectbox(
 key=k2("main_menu_option")
 )
 
+
+# ------------------------------------------------------------
+# 7. Current Farm Context Bar
+# ------------------------------------------------------------
+
+if current_farm and menu_v2 != "🏡 Home":
+
+    farm_name = current_farm.get(
+        "farm_name",
+        "Current Farm"
+    )
+
+    crop_name = current_farm.get(
+        "crop_type",
+        "Not specified"
+    )
+
+    farm_location = current_farm.get(
+        "location",
+        "Not specified"
+    )
+
+    st.markdown(
+        f"""
+        <div style="
+            background: rgba(255,255,255,0.90);
+            padding: 14px 18px;
+            border-radius: 14px;
+            margin-bottom: 18px;
+            border-left: 5px solid #2e7d32;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        ">
+            <div style="
+                font-size: 13px;
+                color: #666;
+            ">
+                CURRENT FARM
+            </div>
+
+            <div style="
+                font-size: 22px;
+                font-weight: 700;
+                margin-top: 3px;
+            ">
+                🌱 {farm_name}
+            </div>
+
+            <div style="
+                font-size: 14px;
+                margin-top: 6px;
+                color: #555;
+            ">
+                🌾 Crop: {crop_name}
+                &nbsp;&nbsp;|&nbsp;&nbsp;
+                📍 Location: {farm_location}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 # ============================================================
