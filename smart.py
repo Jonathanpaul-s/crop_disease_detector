@@ -15871,10 +15871,7 @@ if _show_help:
         st.markdown(_help_content)
 # otherwise nothing is shown in the UI (help works "silently" in the code)
   
-# 🏡 HOME
-if menu == "🏡 Home":
-    st.subheader("Welcome to Smart Farm AI!")
-    st.write("Use the sidebar to navigate through available tools.")
+
 
 # 🌿 FARM MANAGEMENT
 elif menu_v2 == "🌿 Farm Management":
