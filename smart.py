@@ -4977,43 +4977,64 @@ def parse_farm_action_command(
     # --------------------------------------------------------
     # RECORD SALE
     # --------------------------------------------------------
-    if (
-        "record sale" in lower
-        or "record a sale" in lower
-        or "add sale" in lower
-        or "sold " in lower
-    ):
+    sale_words = (
+        "sale" in lower
+        or "sold" in lower
+        or "sell" in lower
+    )
 
-        currency_match = re.search(
-            r"(?:₦|ngn|\$|usd|cad|€|eur|irr)\s*"
+    sale_action_words = (
+        "record" in lower
+        or "add" in lower
+        or "sold" in lower
+        or "save" in lower
+    )
+
+    if sale_words and sale_action_words:
+
+        # ----------------------------------------------------
+        # FIND MONEY / TOTAL SALE AMOUNT
+        # Supports:
+        # Record maize sale 1200
+        # Record maize sale ₦1200
+        # Record a maize sale of 1200
+        # Sold maize for 1200
+        # ----------------------------------------------------
+        number_matches = re.findall(
+            r"(?<![A-Za-z])"
+            r"(?:₦|ngn|\$|usd|cad|€|eur|irr)?\s*"
             r"([\d,]+(?:\.\d+)?)",
-            text,
+            lower,
             flags=re.IGNORECASE
         )
 
-        quantity_match = re.search(
-            r"([\d,]+(?:\.\d+)?)\s*"
-            r"(kg|kgs|ton|tons|tonne|tonnes|bag|bags|crate|crates)",
-            lower
-        )
-
-        price_match = re.search(
-            r"(?:at|@)\s*(?:₦|ngn|\$|usd|cad|€|eur|irr)?\s*"
-            r"([\d,]+(?:\.\d+)?)",
-            lower
-        )
-
         amount = None
-        quantity = None
-        unit_price = None
-        unit = "transaction"
 
-        if currency_match:
+        if number_matches:
             amount = _farm_number(
-                currency_match.group(1)
+                number_matches[-1]
             )
 
+        # ----------------------------------------------------
+        # QUANTITY
+        # Example:
+        # Record sale of 500 kg maize at 650
+        # ----------------------------------------------------
+        quantity_match = re.search(
+            r"([\d,]+(?:\.\d+)?)\s*"
+            r"(kg|kgs|kilogram|kilograms|"
+            r"ton|tons|tonne|tonnes|"
+            r"bag|bags|crate|crates|"
+            r"litre|litres|liter|liters)",
+            lower,
+            flags=re.IGNORECASE
+        )
+
+        quantity = None
+        unit = "transaction"
+
         if quantity_match:
+
             quantity = _farm_number(
                 quantity_match.group(1)
             )
@@ -5022,11 +5043,29 @@ def parse_farm_action_command(
                 2
             )
 
+        # ----------------------------------------------------
+        # UNIT PRICE
+        # Example:
+        # 500 kg maize at 650
+        # ----------------------------------------------------
+        price_match = re.search(
+            r"(?:at|@)\s*"
+            r"(?:₦|ngn|\$|usd|cad|€|eur|irr)?\s*"
+            r"([\d,]+(?:\.\d+)?)",
+            lower,
+            flags=re.IGNORECASE
+        )
+
+        unit_price = None
+
         if price_match:
+
             unit_price = _farm_number(
                 price_match.group(1)
             )
 
+        # If quantity + unit price exist,
+        # calculate the sale total.
         if (
             quantity is not None
             and unit_price is not None
@@ -5036,104 +5075,86 @@ def parse_farm_action_command(
                 * unit_price
             )
 
-        if amount is None:
-            return {
-                "intent": "need_more_info",
-                "requires_confirmation": False,
-                "message": (
-                    "Tell me the sale amount. "
-                    "Example: Record a ₦120,000 maize sale."
-                )
-            }
-
-        return {
-            "intent": "record_sale",
-            "requires_confirmation": True,
-            "amount": amount,
-            "product": context[
-                "crop"
-            ],
-            "quantity": quantity,
-            "unit": unit,
-            "unit_price": unit_price,
-            "original_command": text
-        }
-
-    # --------------------------------------------------------
-    # RECORD EXPENSE
-    # --------------------------------------------------------
-    if (
-        "record expense" in lower
-        or "record an expense" in lower
-        or "add expense" in lower
-        or "spent " in lower
-    ):
-
-        amount_match = re.search(
-            r"(?:₦|ngn|\$|usd|cad|€|eur|irr)?\s*"
-            r"([\d,]+(?:\.\d+)?)",
-            lower
+        # ----------------------------------------------------
+        # DETECT PRODUCT / CROP
+        # ----------------------------------------------------
+        product = context.get(
+            "crop",
+            "Farm produce"
         )
 
-        amount = (
-            _farm_number(
-                amount_match.group(1)
-            )
-            if amount_match
-            else None
-        )
+        crop_patterns = [
+            "maize",
+            "corn",
+            "cassava",
+            "rice",
+            "tomato",
+            "yam",
+            "potato",
+            "pepper",
+            "beans",
+            "soybean",
+            "groundnut",
+            "plantain",
+            "banana",
+            "wheat",
+            "sorghum",
+            "millet"
+        ]
 
-        if amount is None:
-            return {
-                "intent": "need_more_info",
-                "requires_confirmation": False,
-                "message": (
-                    "Tell me the expense amount. "
-                    "Example: Record ₦30,000 fertilizer expense."
-                )
-            }
+        for crop_word in crop_patterns:
 
-        category = "Other"
-
-        category_map = {
-            "fertilizer": "Fertilizer",
-            "fertiliser": "Fertilizer",
-            "pesticide": "Pesticides",
-            "seed": "Seeds",
-            "irrigation": "Irrigation",
-            "equipment": "Equipment",
-            "labour": "Labor",
-            "labor": "Labor",
-            "transport": "Transport",
-            "fuel": "Fuel",
-            "feed": "Feed"
-        }
-
-        for keyword, value in (
-            category_map.items()
-        ):
-            if keyword in lower:
-                category = value
+            if crop_word in lower:
+                product = crop_word.title()
                 break
 
-        return {
-            "intent": "record_expense",
-            "requires_confirmation": True,
-            "amount": amount,
-            "category": category,
-            "description": text,
-            "original_command": text
-        }
+        # ----------------------------------------------------
+        # AMOUNT REQUIRED
+        # ----------------------------------------------------
+        if (
+            amount is None
+            or amount <= 0
+        ):
 
-    return {
-        "intent": "general",
-        "requires_confirmation": False,
-        "message": (
-            "I can currently record sales and expenses, "
-            "calculate profit, check low stock, show alerts, "
-            "give irrigation guidance and show today's priorities."
-        )
-    }
+            return {
+                "intent":
+                    "need_more_info",
+
+                "requires_confirmation":
+                    False,
+
+                "message": (
+                    "Tell me the sale amount. "
+                    "For example: "
+                    "'Record maize sale 1200' "
+                    "or 'Record 500 kg maize at 650'."
+                )
+            }
+            return {
+            "intent":
+                "record_sale",
+
+            "requires_confirmation":
+                True,
+
+            "amount":
+                amount,
+
+            "product":
+                product,
+
+            "quantity":
+                quantity,
+
+            "unit":
+                unit,
+
+            "unit_price":
+                unit_price,
+
+            "original_command":
+                text
+        }
 
 
 # ============================================================
