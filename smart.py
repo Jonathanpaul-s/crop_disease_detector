@@ -19517,15 +19517,21 @@ def farmer_command_centre_ui():
 
     # ========================================================
     # TODAY'S PRIORITIES
-    # =========================
+    # ========================================================
+
     st.divider()
 
     st.subheader(
         "🎯 Today's Farm Priorities"
     )
 
-    priorities = (
-        get_today_priorities()
+    priority_result = (
+        farm_action_get_priorities()
+    )
+
+    priorities = priority_result.get(
+        "priorities",
+        []
     )
 
     if priorities:
