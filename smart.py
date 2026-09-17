@@ -2071,51 +2071,2286 @@ def hash_password(password: str) -> str:
 
 # =========================
 
+
+# ============================================================
+# 👤 SMART FARM AI — FINAL ACCOUNT & AUTHENTICATION SYSTEM
+# ============================================================
+
+import streamlit as st
+import hashlib
+import secrets
+import smtplib
+import time
+import re
+
+from datetime import datetime
+from email.message import EmailMessage
+
+
+# ============================================================
+# AUTH SETTINGS
+# ============================================================
+
+AUTH_FILE = "accounts.json"
+
+# Farmer is logged out after 50 minutes without activity.
+SESSION_TIMEOUT_SECONDS = 50 * 60
+
+# Verification code expires after 10 minutes.
+VERIFICATION_CODE_EXPIRY = 10 * 60
+
+# Prevent repeated resend spam.
+VERIFICATION_RESEND_COOLDOWN = 60
+
+# Maximum wrong verification attempts before new code required.
+MAX_VERIFICATION_ATTEMPTS = 5
+
+
+# ============================================================
+# PASSWORD SECURITY
+# ============================================================
+
+def create_password_hash(
+    password,
+    salt=None
+):
+
+    if not salt:
+        salt = secrets.token_hex(16)
+
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        250_000
+    ).hex()
+
+    return (
+        salt,
+        password_hash
+    )
+
+
+def verify_password(
+    password,
+    salt,
+    stored_hash
+):
+
+    try:
+
+        _, calculated_hash = (
+            create_password_hash(
+                password,
+                salt
+            )
+        )
+
+        return secrets.compare_digest(
+            str(calculated_hash),
+            str(stored_hash)
+        )
+
+    except Exception:
+        return False
+
+
+# ============================================================
+# EMAIL NORMALIZATION
+# ============================================================
+
+def normalize_email(email):
+
+    return (
+        email
+        or ""
+    ).strip().lower()
+
+
+# ============================================================
+# EMAIL VALIDATION
+# ============================================================
+
+def valid_email(email):
+
+    email = normalize_email(
+        email
+    )
+
+    pattern = (
+        r"^[A-Za-z0-9._%+-]+"
+        r"@[A-Za-z0-9.-]+"
+        r"\.[A-Za-z]{2,}$"
+    )
+
+    return bool(
+        re.match(
+            pattern,
+            email
+        )
+    )
+
+
+# ============================================================
+# USERNAME VALIDATION
+# ============================================================
+
+def valid_username(username):
+
+    username = (
+        username
+        or ""
+    ).strip()
+
+    return bool(
+        re.match(
+            r"^[A-Za-z0-9_]{3,30}$",
+            username
+        )
+    )
+
+
+# ============================================================
+# VERIFICATION CODE
+# ============================================================
+
+def generate_verification_code():
+
+    return str(
+        secrets.randbelow(
+            900000
+        )
+        + 100000
+    )
+
+
+def hash_verification_code(
+    code
+):
+
+    return hashlib.sha256(
+        str(code).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+# ============================================================
+# SEND EMAIL VERIFICATION CODE
+# ============================================================
+
+def send_verification_email(
+    recipient_email,
+    farmer_name,
+    code
+):
+
+    try:
+
+        smtp_config = st.secrets[
+            "smtp"
+        ]
+
+        smtp_host = smtp_config[
+            "host"
+        ]
+
+        smtp_port = int(
+            smtp_config[
+                "port"
+            ]
+        )
+
+        smtp_username = smtp_config[
+            "username"
+        ]
+
+        smtp_password = smtp_config[
+            "password"
+        ]
+
+        sender_email = smtp_config.get(
+            "sender_email",
+            smtp_username
+        )
+
+        sender_name = smtp_config.get(
+            "sender_name",
+            "Smart Farm AI"
+        )
+
+        message = EmailMessage()
+        message[
+            "Subject"
+        ] = (
+            "Your Smart Farm AI Verification Code"
+        )
+
+        message[
+            "From"
+        ] = (
+            f"{sender_name} "
+            f"<{sender_email}>"
+        )
+
+        message[
+            "To"
+        ] = recipient_email
+
+        message.set_content(
+            f"""
+Hello {farmer_name},
+
+Welcome to Smart Farm AI.
+
+Your verification code is:
+
+{code}
+
+This verification code expires in 10 minutes.
+
+Enter the code inside Smart Farm AI to activate
+your account and open your Farmer Command Centre.
+
+If you did not create this account, ignore this email.
+
+Smart Farm AI
+Intelligent Agriculture • Better Decisions • Better Farming
+            """
+        )
+
+        # ----------------------------------------------------
+        # PORT 465 = SSL
+        # OTHER PORTS, E.G. 587 = STARTTLS
+        # ----------------------------------------------------
+
+        if smtp_port == 465:
+
+            with smtplib.SMTP_SSL(
+                smtp_host,
+                smtp_port,
+                timeout=20
+            ) as server:
+
+                server.login(
+                    smtp_username,
+                    smtp_password
+                )
+
+                server.send_message(
+                    message
+                )
+
+        else:
+
+            with smtplib.SMTP(
+                smtp_host,
+                smtp_port,
+                timeout=20
+            ) as server:
+
+                server.ehlo()
+
+                server.starttls()
+
+                server.ehlo()
+
+                server.login(
+                    smtp_username,
+                    smtp_password
+                )
+
+                server.send_message(
+                    message
+                )
+
+        return (
+            True,
+            None
+        )
+
+    except Exception as error:
+
+        # Do not expose SMTP credentials/errors
+        # directly to farmers.
+        return (
+            False,
+            str(error)
+        )
+
+
+# ============================================================
+# LOAD ACCOUNTS SAFELY
+# ============================================================
+
+def load_farmer_accounts():
+
+    users = _load(
+        AUTH_FILE,
+        []
+    )
+
+    if not isinstance(
+        users,
+        list
+    ):
+        return []
+
+    return users
+
+
+# ============================================================
+# SAVE ACCOUNTS
+# ============================================================
+
+def save_farmer_accounts(
+    users
+):
+
+    _save(
+        AUTH_FILE,
+        users
+    )
+
+
+# ============================================================
+# FIND ACCOUNT
+# ============================================================
+
+def find_account(
+    username_or_email
+):
+
+    users = load_farmer_accounts()
+
+    search_value = (
+        username_or_email
+        or ""
+    ).strip().lower()
+
+    for user in users:
+
+        username = str(
+            user.get(
+                "username",
+                ""
+            )
+        ).strip().lower()
+
+        email = normalize_email(
+            user.get(
+                "email"
+            )
+        )
+
+        if (
+            username == search_value
+            or email == search_value
+        ):
+            return user
+
+    return None
+
+
+# ============================================================
+# UPDATE ACCOUNT RECORD
+# ============================================================
+
+def update_account_record(
+    updated_user
+):
+
+    users = load_farmer_accounts()
+
+    updated_username = str(
+        updated_user.get(
+            "username",
+            ""
+        )
+    ).lower()
+
+    updated_email = normalize_email(
+        updated_user.get(
+            "email"
+        )
+    )
+
+    updated = False
+
+    for index, user in enumerate(
+        users
+    ):
+
+        username = str(
+            user.get(
+                "username",
+                ""
+            )
+        ).lower()
+
+        email = normalize_email(
+            user.get(
+                "email"
+            )
+        )
+        if (
+            username == updated_username
+            or email == updated_email
+        ):
+
+            users[
+                index
+            ] = updated_user
+
+            updated = True
+
+            break
+
+    if not updated:
+
+        users.append(
+            updated_user
+        )
+
+    save_farmer_accounts(
+        users
+    )
+
+
+# ============================================================
+# CREATE STABLE DEFAULT FARM ID
+# ============================================================
+
+def create_default_farm_id(
+    email
+):
+
+    digest = hashlib.sha256(
+        normalize_email(
+            email
+        ).encode(
+            "utf-8"
+        )
+    ).hexdigest()[:12]
+
+    return (
+        f"farm_{digest}"
+    )
+
+
+# ============================================================
+# BUILD INITIAL MAIN FARM
+# ============================================================
+
+def build_default_farm(
+    user
+):
+
+    farm_id = (
+        user.get(
+            "current_farm_id"
+        )
+        or create_default_farm_id(
+            user.get(
+                "email",
+                ""
+            )
+        )
+    )
+
+    return {
+        "farm_id":
+            farm_id,
+
+        "farm_name":
+            "Main Farm",
+
+        "country":
+            user.get(
+                "country",
+                ""
+            ),
+
+        "location":
+            user.get(
+                "location",
+                ""
+            ),
+
+        "crop_type":
+            user.get(
+                "main_crop",
+                ""
+            ),
+
+        "farm_type":
+            user.get(
+                "farm_type",
+                "Crop Farming"
+            ),
+
+        "farm_size":
+            user.get(
+                "farm_size",
+                ""
+            ),
+
+        "status":
+            "active"
+    }
+
+
+# ============================================================
+# BIND REGISTERED FARMER TO SMART FARM AI
+# ============================================================
+
+def bind_farmer_profile(
+    user
+):
+
+    farmer_name = (
+        user.get(
+            "farmer_name"
+        )
+        or user.get(
+            "full_name"
+        )
+        or user.get(
+            "username"
+        )
+        or "Farmer"
+    )
+
+    farms = user.get(
+        "farms",
+        []
+    )
+
+    if not isinstance(
+        farms,
+        list
+    ):
+        farms = []
+
+    if not farms:
+
+        farms = [
+            build_default_farm(
+                user
+            )
+        ]
+
+    current_farm_id = (
+        user.get(
+            "current_farm_id"
+        )
+        or farms[0].get(
+            "farm_id"
+        )
+    )
+
+    current_farm = None
+
+    for farm in farms:
+
+        if str(
+            farm.get(
+                "farm_id",
+                ""
+            )
+        ) == str(
+            current_farm_id
+        ):
+
+            current_farm = farm
+
+            break
+
+    if current_farm is None:
+
+        current_farm = farms[0]
+
+        current_farm_id = (
+            current_farm.get(
+                "farm_id"
+            )
+        )
+
+    country = (
+        current_farm.get(
+            "country"
+        )
+        or user.get(
+            "country",
+            ""
+        )
+    )
+
+    location = (
+        current_farm.get(
+            "location"
+        )
+        or user.get(
+            "location",
+            ""
+        )
+    )
+
+    crop_type = (
+        current_farm.get(
+            "crop_type"
+        )
+        or user.get(
+            "main_crop",
+            ""
+        )
+    )
+
+    farm_type = (
+        current_farm.get(
+            "farm_type"
+        )
+        or user.get(
+            "farm_type",
+            ""
+        )
+    )
+
+    farm_size = (
+        current_farm.get(
+            "farm_size"
+        )
+        or user.get(
+            "farm_size",
+            ""
+        )
+    )
+
+    farming_experience = (
+        user.get(
+            "farming_experience",
+            "Beginner"
+        )
+    )
+
+    # --------------------------------------------------------
+    # MASTER FARMER PROFILE
+    # --------------------------------------------------------
+
+    farmer_profile = {
+        "name":
+            farmer_name,
+
+        "farmer_name":
+            farmer_name,
+
+        "username":
+            user.get(
+                "username",
+                ""
+            ),
+
+        "email":
+            user.get(
+                "email",
+                ""
+            ),
+
+        "country":
+            country,
+
+        "location":
+            location,
+
+        "main_crop":
+            crop_type,
+
+        "crop_type":
+            crop_type,
+
+        "farm_type":
+            farm_type,
+
+        "farm_size":
+            farm_size,
+
+        "experience":
+            farming_experience,
+
+        "farming_experience":
+            farming_experience,
+
+        "farms":
+            farms
+    }
+
+    # --------------------------------------------------------
+    # PERSONALIZATION PROFILE
+    # --------------------------------------------------------
+
+    personalized_profile = dict(
+        farmer_profile
+    )
+
+    personalized_profile.update(
+        {
+            "current_farm_id":
+                current_farm_id,
+
+            "current_farm_name":
+                current_farm.get(
+                    "farm_name",
+                    "Main Farm"
+                ),
+
+            "current_crop":
+                crop_type,
+
+            "current_location":
+                location,
+
+            "current_farm_type":
+                farm_type,
+
+            "current_farm_size":
+                farm_size
+        }
+    )
+
+    st.session_state[
+        "farmer_profile"
+    ] = farmer_profile
+
+    st.session_state[
+        "personalized_profile"
+    ] = personalized_profile
+
+    st.session_state[
+        "current_farm_id"
+    ] = current_farm_id
+
+    st.session_state[
+        "current_farm"
+    ] = current_farm
+
+    # --------------------------------------------------------
+    # RECALCULATE PERSONALIZED FEATURES
+    # --------------------------------------------------------
+
+    try:
+
+        if (
+            "recommend_features"
+            in globals()
+            and
+            "SMART_FARM_FEATURES"
+            in globals()
+        ):
+
+            st.session_state[
+                "recommended_features"
+            ] = recommend_features(
+                SMART_FARM_FEATURES,
+                personalized_profile
+            )
+
+    except Exception:
+        pass
+
+
+# ============================================================
+# START AUTHENTICATED SESSION
+# ============================================================
+
+def start_farmer_session(
+    user
+):
+
+    farmer_name = (
+        user.get(
+            "farmer_name"
+        )
+        or user.get(
+            "full_name"
+        )
+        or user.get(
+            "username"
+        )
+        or "Farmer"
+    )
+
+    # --------------------------------------------------------
+    # AUTHENTICATION
+    # --------------------------------------------------------
+
+    st.session_state[
+        "logged_in"
+    ] = True
+
+    st.session_state[
+        "authenticated_user"
+    ] = user
+
+    # --------------------------------------------------------
+    # REGISTERED FARMER IDENTITY
+    # --------------------------------------------------------
+
+    st.session_state[
+        "current_user"
+    ] = farmer_name
+
+    st.session_state[
+        "registered_name"
+    ] = farmer_name
+
+    st.session_state[
+        "username"
+    ] = user.get(
+        "username",
+        ""
+    )
+
+    st.session_state[
+        "user_email"
+    ] = user.get(
+        "email",
+        ""
+    )
+
+    # --------------------------------------------------------
+    # SESSION TIMING
+    # --------------------------------------------------------
+
+    current_time = time.time()
+
+    st.session_state[
+        "auth_last_activity"
+    ] = current_time
+
+    st.session_state[
+        "auth_session_started"
+    ] = current_time
+
+    # --------------------------------------------------------
+    # FARM / PERSONALIZATION CONTEXT
+    # --------------------------------------------------------
+    bind_farmer_profile(
+        user
+    )
+
+
+# ============================================================
+# LOGOUT
+# ============================================================
+
+def logout_farmer():
+
+    auth_keys = [
+        "logged_in",
+        "authenticated_user",
+        "auth_last_activity",
+        "auth_session_started",
+        "current_user",
+        "registered_name",
+        "username",
+        "user_email"
+    ]
+
+    for key in auth_keys:
+
+        if key in st.session_state:
+
+            del st.session_state[
+                key
+            ]
+
+    st.session_state[
+        "logged_in"
+    ] = False
+
+
+# ============================================================
+# SESSION TIMEOUT — 50 MINUTES INACTIVITY
+# ============================================================
+
+def enforce_farmer_session_timeout():
+
+    if not st.session_state.get(
+        "logged_in",
+        False
+    ):
+
+        return False
+
+    current_time = time.time()
+
+    last_activity = (
+        st.session_state.get(
+            "auth_last_activity"
+        )
+    )
+
+    if last_activity is None:
+
+        st.session_state[
+            "auth_last_activity"
+        ] = current_time
+
+        return True
+
+    try:
+
+        inactive_seconds = (
+            current_time
+            - float(
+                last_activity
+            )
+        )
+
+    except Exception:
+
+        inactive_seconds = (
+            SESSION_TIMEOUT_SECONDS
+            + 1
+        )
+
+    if inactive_seconds >= (
+        SESSION_TIMEOUT_SECONDS
+    ):
+
+        logout_farmer()
+
+        st.session_state[
+            "session_expired"
+        ] = True
+
+        return False
+
+    # Every successful Streamlit interaction
+    # refreshes activity time.
+    st.session_state[
+        "auth_last_activity"
+    ] = current_time
+
+    return True
+
+
+# ============================================================
+# REGISTRATION — STEP 1
+# ============================================================
+
+def register_farmer_account():
+
+    st.markdown(
+        "### 🌱 Create Smart Farm AI Account"
+    )
+
+    st.caption(
+        "Create your farmer profile. "
+        "Your email will be verified before "
+        "your Farmer Command Centre opens."
+    )
+
+    with st.form(
+        "smartfarm_registration_form"
+    ):
+
+        # ----------------------------------------------------
+        # IDENTITY
+        # ----------------------------------------------------
+
+        farmer_name = st.text_input(
+            "Full Name",
+            key="register_farmer_name"
+        )
+
+        username = st.text_input(
+            "Username",
+            key="register_username"
+        )
+
+        email = st.text_input(
+            "Email Address",
+            key="register_email"
+        )
+
+        # ----------------------------------------------------
+        # FARM PROFILE
+        # ----------------------------------------------------
+
+        country = st.text_input(
+            "Country",
+            placeholder="Example: Nigeria",
+            key="register_country"
+        )
+
+        location = st.text_input(
+            "Farm Location / Region",
+            placeholder="Example: Delta State",
+            key="register_location"
+        )
+
+        main_crop = st.text_input(
+            "Main Crop",
+            placeholder="Example: Maize",
+            key="register_main_crop"
+        )
+
+        farm_type = st.selectbox(
+            "Farm Type",
+            [
+                "Crop Farming",
+                "Livestock Farming",
+                "Mixed Farming",
+                "Greenhouse Farming",
+                "Home / Garden Farming",
+                "Other"
+            ],
+            key="register_farm_type"
+        )
+
+        farming_experience = (
+            st.selectbox(
+                "Farming Experience",
+                [
+                    "Beginner",
+ "Intermediate",
+                    "Advanced"
+                ],
+                key="register_farming_experience"
+            )
+        )
+
+        # ----------------------------------------------------
+        # PASSWORD
+        # ----------------------------------------------------
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            key="register_password"
+        )
+
+        confirm_password = (
+            st.text_input(
+                "Confirm Password",
+                type="password",
+                key="register_confirm_password"
+            )
+        )
+
+        register_button = (
+            st.form_submit_button(
+                "Create Account & Send Verification Code",
+                type="primary",
+                use_container_width=True
+            )
+        )
+
+    # ========================================================
+    # PROCESS REGISTRATION
+    # ========================================================
+
+    if register_button:
+
+        farmer_name = (
+            farmer_name
+            or ""
+        ).strip()
+
+        username = (
+            username
+            or ""
+        ).strip()
+
+        email = normalize_email(
+            email
+        )
+
+        country = (
+            country
+            or ""
+        ).strip()
+
+        location = (
+            location
+            or ""
+        ).strip()
+
+        main_crop = (
+            main_crop
+            or ""
+        ).strip()
+
+        # ----------------------------------------------------
+        # VALIDATION
+        # ----------------------------------------------------
+
+        if not farmer_name:
+
+            st.error(
+                "Please enter your full name."
+            )
+
+            return
+
+        if not valid_username(
+            username
+        ):
+
+            st.error(
+                "Username must contain 3–30 characters "
+                "using letters, numbers or underscores."
+            )
+
+            return
+
+        if not valid_email(
+            email
+        ):
+
+            st.error(
+                "Please enter a valid email address."
+            )
+
+            return
+
+        if not country:
+
+            st.error(
+                "Please enter your country."
+            )
+
+            return
+
+        if not location:
+
+            st.error(
+                "Please enter your farm location."
+            )
+
+            return
+
+        if not main_crop:
+
+            st.error(
+                "Please enter your main crop."
+            )
+
+            return
+
+        if len(
+            password
+        ) < 8:
+
+            st.error(
+                "Password must contain at least "
+                "8 characters."
+            )
+
+            return
+
+        if password != confirm_password:
+
+            st.error(
+                "Passwords do not match."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # DUPLICATE CHECK
+        # ----------------------------------------------------
+
+        users = load_farmer_accounts()
+
+        username_exists = any(
+            str(
+                user.get(
+                    "username",
+                    ""
+                )
+            ).strip().lower()
+            == username.lower()
+
+            for user in users
+        )
+
+        email_exists = any(
+            normalize_email(
+                user.get(
+                    "email"
+                )
+            )
+            == email
+
+            for user in users
+        )
+
+        if username_exists:
+
+            st.error(
+                "That username is already registered."
+            )
+
+            return
+
+        if email_exists:
+
+            st.error(
+                "That email address is already registered."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # SECURE PASSWORD HASH
+        # ----------------------------------------------------
+
+        salt, password_hash = (
+            create_password_hash(
+                password
+            )
+        )
+
+        farm_id = (
+            create_default_farm_id(
+                email
+            )
+        )
+
+        # ----------------------------------------------------
+        # CREATE DEFAULT CURRENT FARM
+        # ----------------------------------------------------
+
+        default_farm = {
+            "farm_id":
+                farm_id,
+
+            "farm_name":
+                "Main Farm",
+
+            "country":
+                country,
+
+            "location":
+                location,
+
+            "crop_type":
+                main_crop,
+
+            "farm_type":
+                farm_type,
+
+            "farm_size":
+                "",
+
+            "status":
+                "active"
+        }
+
+        # ----------------------------------------------------
+        # PENDING ACCOUNT
+        # ----------------------------------------------------
+
+        pending_user = {
+            "account_version":
+                2,
+
+            "farmer_name":
+                farmer_name,
+
+            "username":
+                username,
+
+            "email":
+                email,
+
+            "country":
+                country,
+
+            "location":
+                location,
+
+            "main_crop":
+                main_crop,
+
+            "farm_type":
+                farm_type,
+
+            "farming_experience":
+                farming_experience,
+
+            "password_hash":
+                password_hash,
+
+            "password_salt":
+                salt,
+
+            "email_verified":
+                False,
+
+            "current_farm_id":
+                farm_id,
+
+            "farms":
+                [
+                    default_farm
+                ],
+
+            "created_at":
+                datetime.now().isoformat()
+        }
+
+        # ----------------------------------------------------
+        # GENERATE + SEND CODE
+        # ----------------------------------------------------
+
+        verification_code = (
+            generate_verification_code()
+        )
+
+        sent, error = (
+            send_verification_email(
+                email,
+                farmer_name,
+                verification_code
+            )
+        )
+
+        if not sent:
+
+            st.error(
+                "Smart Farm AI could not send "
+                "the verification email. "
+                "Please check the email address "
+                "or try again shortly."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # STORE TEMPORARY VERIFICATION STATE
+        # ----------------------------------------------------
+
+        current_time = time.time()
+
+        st.session_state[
+            "pending_registration"
+        ] = pending_user
+
+        st.session_state[
+            "registration_code_hash"
+        ] = hash_verification_code(
+            verification_code
+        )
+
+        st.session_state[
+            "registration_code_created"
+        ] = current_time
+
+        st.session_state[
+            "registration_last_sent"
+        ] = current_time
+
+        st.session_state[
+            "registration_verify_attempts"
+        ] = 0
+
+        st.session_state[
+            "registration_stage"
+        ] = "verify"
+
+        st.rerun()
+
+
+# ============================================================
+# REGISTRATION — STEP 2 EMAIL VERIFICATION
+# ============================================================
+
+def verify_farmer_email():
+
+    pending_user = (
+        st.session_state.get(
+            "pending_registration"
+        )
+    )
+
+    if not isinstance(
+        pending_user,
+        dict
+    ):
+
+        st.session_state[
+            "registration_stage"
+        ] = "register"
+
+        st.rerun()
+
+        return
+
+    email = pending_user.get(
+        "email",
+        ""
+    )
+
+    farmer_name = pending_user.get(
+        "farmer_name",
+        "Farmer"
+    )
+
+    st.markdown(
+        "### 📧 Verify Your Email"
+    )
+
+    st.write(
+        f"Hello {farmer_name}."
+    )
+
+    st.write(
+        "A 6-digit Smart Farm AI verification "
+        "code has been sent to:"
+    )
+
+    st.info(
+        email
+    )
+
+    entered_code = (
+        st.text_input(
+            "Verification Code",
+            max_chars=6,
+            placeholder="Enter the 6-digit code",
+            key="registration_verification_code"
+        )
+    )
+
+    verify_col, resend_col = (
+        st.columns(2)
+    )
+
+    with verify_col:
+
+        verify_button = st.button(
+            "✅ Verify & Open Dashboard",
+            key="verify_registration_code",
+            type="primary",
+            use_container_width=True
+        )
+
+    with resend_col:
+
+        resend_button = st.button(
+            "📧 Resend Code",
+            key="resend_registration_code",
+            use_container_width=True
+        )
+
+    # ========================================================
+    # VERIFY CODE
+    # ========================================================
+
+    if verify_button:
+
+        stored_hash = (
+            st.session_state.get(
+                "registration_code_hash"
+            )
+        )
+
+        created_at = (
+            st.session_state.get(
+                "registration_code_created",
+                0
+            )
+        )
+
+        attempts = int(
+            st.session_state.get(
+                "registration_verify_attempts",
+                0
+            )
+        )
+
+        if not stored_hash:
+
+            st.error(
+                "No active verification code. "
+                "Please resend the code."
+            )
+
+            return
+
+        try:
+
+            expired = (
+                time.time()
+                - float(
+                    created_at
+                )
+                > VERIFICATION_CODE_EXPIRY
+            )
+
+        except Exception:
+
+            expired = True
+
+        if expired:
+
+            st.error(
+                "This verification code has expired. "
+                "Please request a new code."
+            )
+
+            return
+
+        if attempts >= (
+            MAX_VERIFICATION_ATTEMPTS
+        ):
+
+            st.error(
+                "Too many incorrect attempts. "
+                "Please request a new verification code."
+            )
+
+            return
+
+        clean_code = str(
+            entered_code
+            or ""
+        ).strip()
+
+        entered_hash = (
+            hash_verification_code(
+                clean_code
+            )
+        )
+
+        if not secrets.compare_digest(
+            entered_hash,
+            stored_hash
+        ):
+
+            st.session_state[
+                "registration_verify_attempts"
+            ] = attempts + 1
+
+            remaining = (
+                MAX_VERIFICATION_ATTEMPTS
+                - attempts
+                - 1
+            )
+
+            st.error(
+                f"Incorrect verification code. "
+                f"{max(remaining, 0)} attempt(s) remaining."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # CHECK DUPLICATE AGAIN BEFORE SAVE
+        # ----------------------------------------------------
+
+        users = load_farmer_accounts()
+
+        pending_email = normalize_email(
+            pending_user.get(
+                "email"
+            )
+        )
+
+        pending_username = str(
+            pending_user.get(
+                "username",
+                ""
+            )
+        ).lower()
+
+        already_exists = any(
+
+            normalize_email(
+                user.get(
+                    "email"
+                )
+            )
+            == pending_email
+
+            or
+
+            str(
+                user.get(
+                    "username",
+                    ""
+                )
+            ).lower()
+            == pending_username
+
+            for user in users
+        )
+
+        if already_exists:
+
+            st.error(
+                "This account has already been registered. "
+                "Please use Login."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # ACTIVATE ACCOUNT
+        # ----------------------------------------------------
+
+        pending_user[
+            "email_verified"
+        ] = True
+
+        pending_user[
+            "verified_at"
+        ] = datetime.now().isoformat()
+        users.append(
+            pending_user
+        )
+
+        save_farmer_accounts(
+            users
+        )
+
+        # ----------------------------------------------------
+        # AUTOMATIC LOGIN
+        # ----------------------------------------------------
+
+        start_farmer_session(
+            pending_user
+        )
+
+        # ----------------------------------------------------
+        # CLEAR VERIFICATION DATA
+        # ----------------------------------------------------
+
+        for key in [
+            "pending_registration",
+            "registration_code_hash",
+            "registration_code_created",
+            "registration_last_sent",
+            "registration_verify_attempts",
+            "registration_stage",
+            "registration_verification_code"
+        ]:
+
+            if key in st.session_state:
+
+                del st.session_state[
+                    key
+                ]
+
+        st.success(
+            f"✅ Welcome to Smart Farm AI, "
+            f"{farmer_name}!"
+        )
+
+        # This rerun goes directly into
+        # the Farmer Command Centre.
+        st.rerun()
+
+    # ========================================================
+    # RESEND CODE
+    # ========================================================
+
+    if resend_button:
+
+        current_time = time.time()
+
+        last_sent = float(
+            st.session_state.get(
+                "registration_last_sent",
+                0
+            )
+        )
+
+        seconds_since_last = (
+            current_time
+            - last_sent
+        )
+
+        if seconds_since_last < (
+            VERIFICATION_RESEND_COOLDOWN
+        ):
+
+            remaining = int(
+                VERIFICATION_RESEND_COOLDOWN
+                - seconds_since_last
+            )
+
+            st.warning(
+                f"Please wait {remaining} second(s) "
+                "before requesting another code."
+            )
+
+            return
+
+        new_code = (
+            generate_verification_code()
+        )
+
+        sent, error = (
+            send_verification_email(
+                email,
+                farmer_name,
+                new_code
+            )
+        )
+
+        if not sent:
+
+            st.error(
+                "Unable to resend the verification code. "
+                "Please try again."
+            )
+
+            return
+
+        st.session_state[
+            "registration_code_hash"
+        ] = hash_verification_code(
+            new_code
+        )
+
+        st.session_state[
+            "registration_code_created"
+        ] = current_time
+        st.session_state[
+            "registration_last_sent"
+        ] = current_time
+
+        st.session_state[
+            "registration_verify_attempts"
+        ] = 0
+
+        st.success(
+            "A new verification code has been sent."
+        )
+
+
+# ============================================================
+# LOGIN
+# ============================================================
+
+def login_farmer_account():
+
+    st.markdown(
+        "### 🔐 Farmer Login"
+    )
+
+    st.caption(
+        "After your account has been verified once, "
+        "future logins only require your username/email "
+        "and password."
+    )
+
+    with st.form(
+        "smartfarm_login_form"
+    ):
+
+        username_or_email = (
+            st.text_input(
+                "Username or Email",
+                key="farmer_login_identity"
+            )
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            key="farmer_login_password"
+        )
+
+        login_button = (
+            st.form_submit_button(
+                "Login to Smart Farm AI",
+                type="primary",
+                use_container_width=True
+            )
+        )
+
+    if login_button:
+
+        identity = (
+            username_or_email
+            or ""
+        ).strip()
+
+        if not identity:
+
+            st.error(
+                "Enter your username or email."
+            )
+
+            return
+
+        if not password:
+
+            st.error(
+                "Enter your password."
+            )
+
+            return
+
+        user = find_account(
+            identity
+        )
+
+        # Same response prevents account enumeration.
+        invalid_message = (
+            "Invalid username/email or password."
+        )
+
+        if not user:
+
+            st.error(
+                invalid_message
+            )
+
+            return
+
+        account_version = int(
+            user.get(
+                "account_version",
+                1
+            )
+            or 1
+        )
+
+        # ----------------------------------------------------
+        # NEW ACCOUNT EMAIL VERIFICATION REQUIRED
+        # ----------------------------------------------------
+
+        if (
+            account_version >= 2
+            and not user.get(
+                "email_verified",
+                False
+            )
+        ):
+
+            st.error(
+                "This account has not completed "
+                "email verification."
+            )
+
+            return
+
+        password_hash = (
+            user.get(
+                "password_hash"
+            )
+        )
+
+        password_salt = (
+            user.get(
+                "password_salt"
+            )
+        )
+
+        authenticated = False
+
+        # ----------------------------------------------------
+        # CURRENT SECURE PASSWORD FORMAT
+        # ----------------------------------------------------
+
+        if (
+            password_hash
+            and password_salt
+        ):
+
+            authenticated = (
+                verify_password(
+                    password,
+                    password_salt,
+                    password_hash
+                )
+            )
+
+        # ----------------------------------------------------
+        # LEGACY SMART FARM ACCOUNT MIGRATION
+        # ----------------------------------------------------
+
+        elif user.get(
+            "password"
+        ):
+
+            old_hash_function = (
+                globals().get(
+                    "hash_password"
+                )
+            )
+
+            if callable(
+                old_hash_function
+            ):
+
+                try:
+
+                    authenticated = (
+                        secrets.compare_digest(
+                            str(
+                                user.get(
+                                    "password"
+                                )
+                            ),
+                            str(
+                                old_hash_function(
+                                    password
+                                )
+                                )
+                        )
+                    )
+
+                except Exception:
+
+                    authenticated = False
+
+            # Upgrade legacy password automatically.
+            if authenticated:
+
+                new_salt, new_hash = (
+                    create_password_hash(
+                        password
+                    )
+                )
+
+                user[
+                    "password_salt"
+                ] = new_salt
+
+                user[
+                    "password_hash"
+                ] = new_hash
+
+                user[
+                    "account_version"
+                ] = 2
+
+                # Legacy account existed before
+                # email verification was introduced.
+                if "email_verified" not in user:
+
+                    user[
+                        "email_verified"
+                    ] = True
+
+                    user[
+                        "legacy_account_migrated"
+                    ] = True
+
+                user.pop(
+                    "password",
+                    None
+                )
+
+                update_account_record(
+                    user
+                )
+
+        if not authenticated:
+
+            st.error(
+                invalid_message
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # START SESSION — NO EMAIL CODE AGAIN
+        # ----------------------------------------------------
+
+        start_farmer_session(
+            user
+        )
+
+        farmer_name = (
+            user.get(
+                "farmer_name"
+            )
+            or user.get(
+                "username"
+            )
+            or "Farmer"
+        )
+
+        st.success(
+            f"✅ Welcome back, "
+            f"{farmer_name}!"
+        )
+
+        st.rerun()
+
+
+# ============================================================
+# USER ACCOUNT MANAGEMENT UI
+# ============================================================
+
 def user_account_management_ui():
-    st.subheader("👤 User Account Management")
 
-    action = st.radio("Choose Action", ["Register", "Login"], key="acc_action")
+    # ========================================================
+    # LOGGED-IN FARMER PROFILE
+    # ========================================================
 
-    if action == "Register":
-        username = st.text_input("Username", key="reg_username")
-        email = st.text_input("Email", key="reg_email")
-        password = st.text_input("Password", type="password", key="reg_password")
+    if st.session_state.get(
+        "logged_in",
+        False
+    ):
 
-        if st.button("Register", key="reg_btn"):
-            users = _load("accounts.json", [])
-            if any(u["username"] == username for u in users):
-                st.error("❌ Username already exists.")
-            else:
-                users.append({
-                    "username": username,
-                    "email": email,
-                    "password": hash_password(password)
-                })
-                _save("accounts.json", users)
-                st.success("✅ Registration successful!")
+        user = (
+            st.session_state.get(
+                "authenticated_user",
+                {}
+            )
+            or {}
+        )
 
-    elif action == "Login":
-        username = st.text_input("Username", key="login_username")
-        password = st.text_input("Password", type="password", key="login_password")
+        farmer_name = (
+            user.get(
+                "farmer_name"
+            )
+            or st.session_state.get(
+                "registered_name"
+            )
+            or "Farmer"
+        )
 
-        if st.button("Login", key="login_btn"):
-            users = _load("accounts.json", [])
-            user = next((u for u in users if u["username"] == username), None)
-            if user and user["password"] == hash_password(password):
-                st.success(f"✅ Welcome back, {username}!")
-                st.session_state["logged_in"] = True
-            else:
-                st.error("❌ Invalid username or password.")
+        st.subheader(
+            "👤 User Account Management"
+        )
 
+        st.success(
+            f"Signed in as {farmer_name}"
+        )
 
-# Optional: a simple v2 UI for the "upgrade" router with unique keys
-def user_account_management_ui_v2():
-    st.subheader("👤 User Account Management (v2)")
-    username = st.text_input("Username", key=k2("acc_username"))
-    email = st.text_input("Email", key=k2("acc_email"))
-    if st.button("Save Account", key=k2("acc_save_btn")):
-        _save("account.json", {"username": username, "email": email})
-        st.success("✅ Account saved.")
+        # ----------------------------------------------------
+        # IDENTITY
+        # ----------------------------------------------------
+
+        col1, col2 = (
+            st.columns(2)
+        )
+
+        with col1:
+
+            st.write(
+                "Full Name: "
+                f"{farmer_name}"
+            )
+
+            st.write(
+                "Username: "
+                f"{user.get('username', '')}"
+            )
+
+            st.write(
+                "Email: "
+                f"{user.get('email', '')}"
+            )
+
+        with col2:
+
+            verified = user.get(
+                "email_verified",
+                False
+            )
+
+            st.write(
+                "Email Status: "
+                + (
+                    "✅ Verified"
+                    if verified
+                    else "⚠️ Not Verified"
+                )
+            )
+
+            st.write(
+                "Account Created: "
+                f"{user.get('created_at', 'Unknown')}"
+            )
+
+        st.divider()
+
+        # ----------------------------------------------------
+        # FARMER CONTEXT
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 🌾 Farmer Profile"
+        )
+
+        p1, p2, p3 = (
+            st.columns(3)
+        )
+        with p1:
+
+            st.write(
+                "Country"
+            )
+
+            st.info(
+                user.get(
+                    "country",
+                    "Not specified"
+                )
+                or "Not specified"
+            )
+
+            st.write(
+                "Location"
+            )
+
+            st.info(
+                user.get(
+                    "location",
+                    "Not specified"
+                )
+                or "Not specified"
+            )
+
+        with p2:
+
+            st.write(
+                "Main Crop"
+            )
+
+            st.info(
+                user.get(
+                    "main_crop",
+                    "Not specified"
+                )
+                or "Not specified"
+            )
+
+            st.write(
+                "Farm Type"
+            )
+
+            st.info(
+                user.get(
+                    "farm_type",
+                    "Not specified"
+                )
+                or "Not specified"
+            )
+
+        with p3:
+
+            st.write(
+                "Farming Experience"
+            )
+
+            st.info(
+                user.get(
+                    "farming_experience",
+                    "Not specified"
+                )
+                or "Not specified"
+            )
+
+            st.write(
+                "Current Farm"
+            )
+
+            current_farm = (
+                st.session_state.get(
+                    "current_farm",
+                    {}
+                )
+                or {}
+            )
+
+            st.info(
+                current_farm.get(
+                    "farm_name",
+                    "Main Farm"
+                )
+            )
+
+        st.divider()
+
+        # ----------------------------------------------------
+        # LOGOUT
+        # ----------------------------------------------------
+
+        if st.button(
+            "🚪 Logout",
+            key="final_account_logout",
+            use_container_width=True
+        ):
+
+            logout_farmer()
+
+            st.rerun()
+
+        return
+
+    # ========================================================
+    # SESSION EXPIRED
+    # ========================================================
+
+    if st.session_state.pop(
+        "session_expired",
+        False
+    ):
+
+        st.warning(
+            "Your Smart Farm AI session expired "
+            "after 50 minutes of inactivity. "
+            "Please log in again."
+        )
+
+    # ========================================================
+    # EMAIL VERIFICATION STAGE
+    # ========================================================
+
+    registration_stage = (
+        st.session_state.get(
+            "registration_stage",
+            "register"
+        )
+    )
+
+    if registration_stage == (
+        "verify"
+    ):
+
+        verify_farmer_email()
+
+        return
+
+    # ========================================================
+    # LOGIN / REGISTER
+    # ========================================================
+
+    st.subheader(
+        "👤 Smart Farm AI Account"
+    )
+
+    action = st.radio(
+        "Choose Action",
+        [
+            "Login",
+            "Register"
+        ],
+        horizontal=True,
+        key="final_account_action"
+    )
+
+    if action == (
+        "Register"
+    ):
+
+        register_farmer_account()
+
+    else:
+
+        login_farmer_account()
 
  # ============================================================
 # SMART FARM AI — FARM MANAGEMENT
@@ -4891,9 +7126,7 @@ def farm_action_get_priorities():
 # INTENT PARSER
 # ============================================================
 
-def parse_farm_action_command(
-    command
-):
+def parse_farm_action_command(command):
     import re
 
     context = get_farm_action_context()
@@ -4905,78 +7138,9 @@ def parse_farm_action_command(
 
     lower = text.lower()
 
-    # --------------------------------------------------------
-    # PROFIT
-    # --------------------------------------------------------
-    if (
-        "calculate profit" in lower
-        or "my profit" in lower
-        or "net profit" in lower
-        or "financial position" in lower
-    ):
-        return {
-            "intent": "calculate_profit",
-            "requires_confirmation": False
-        }
-
-    # --------------------------------------------------------
-    # STOCK
-    # --------------------------------------------------------
-    if (
-        "low stock" in lower
-        or "check stock" in lower
-        or "fertilizer stock" in lower
-        or "fertiliser stock" in lower
-        or "pesticide stock" in lower
-    ):
-        return {
-            "intent": "check_stock",
-            "requires_confirmation": False
-        }
-
-    # --------------------------------------------------------
-    # ALERTS
-    # --------------------------------------------------------
-    if (
-        "show alert" in lower
-        or "farm alert" in lower
-        or "my alerts" in lower
-    ):
-        return {
-            "intent": "get_alerts",
-            "requires_confirmation": False
-        }
-
-    # --------------------------------------------------------
-    # IRRIGATION
-    # --------------------------------------------------------
-    if (
-        "irrigat" in lower
-        or "should i water" in lower
-        or "need water" in lower
-    ):
-        return {
-            "intent": "irrigation",
-            "requires_confirmation": False
-        }
-
-    # --------------------------------------------------------
-    # PRIORITIES
-    # --------------------------------------------------------
-    if (
-        "what should i do" in lower
-        or "today's priority" in lower
-        or "todays priority" in lower
-        or "farm priorities" in lower
-    ):
-        return {
-            "intent": "priorities",
-            "requires_confirmation": False
-        }
-
-    # --------------------------------------------------------
+    # ========================================================
     # RECORD SALE
-    # --------------------------------------------------------
+    # ========================================================
     sale_words = (
         "sale" in lower
         or "sold" in lower
@@ -4993,12 +7157,7 @@ def parse_farm_action_command(
     if sale_words and sale_action_words:
 
         # ----------------------------------------------------
-        # FIND MONEY / TOTAL SALE AMOUNT
-        # Supports:
-        # Record maize sale 1200
-        # Record maize sale ₦1200
-        # Record a maize sale of 1200
-        # Sold maize for 1200
+        # FIND NUMBERS
         # ----------------------------------------------------
         number_matches = re.findall(
             r"(?<![A-Za-z])"
@@ -5016,7 +7175,7 @@ def parse_farm_action_command(
             )
 
         # ----------------------------------------------------
-        # QUANTITY
+        # FIND QUANTITY
         # Example:
         # Record sale of 500 kg maize at 650
         # ----------------------------------------------------
@@ -5044,7 +7203,7 @@ def parse_farm_action_command(
             )
 
         # ----------------------------------------------------
-        # UNIT PRICE
+        # FIND UNIT PRICE
         # Example:
         # 500 kg maize at 650
         # ----------------------------------------------------
@@ -5064,8 +7223,9 @@ def parse_farm_action_command(
                 price_match.group(1)
             )
 
-        # If quantity + unit price exist,
-        # calculate the sale total.
+        # ----------------------------------------------------
+        # CALCULATE TOTAL
+        # ----------------------------------------------------
         if (
             quantity is not None
             and unit_price is not None
@@ -5076,7 +7236,7 @@ def parse_farm_action_command(
             )
 
         # ----------------------------------------------------
-        # DETECT PRODUCT / CROP
+        # DETECT CROP / PRODUCT
         # ----------------------------------------------------
         product = context.get(
             "crop",
@@ -5109,7 +7269,7 @@ def parse_farm_action_command(
                 break
 
         # ----------------------------------------------------
-        # AMOUNT REQUIRED
+        # MISSING SALE AMOUNT
         # ----------------------------------------------------
         if (
             amount is None
@@ -5117,12 +7277,8 @@ def parse_farm_action_command(
         ):
 
             return {
-                "intent":
-                    "need_more_info",
-
-                "requires_confirmation":
-                    False,
-
+                "intent": "need_more_info",
+                "requires_confirmation": False,
                 "message": (
                     "Tell me the sale amount. "
                     "For example: "
@@ -5130,31 +7286,312 @@ def parse_farm_action_command(
                     "or 'Record 500 kg maize at 650'."
                 )
             }
-            return {
-            "intent":
-                "record_sale",
 
-            "requires_confirmation":
-                True,
-
-            "amount":
-                amount,
-
-            "product":
-                product,
-
-            "quantity":
-                quantity,
-
-            "unit":
-                unit,
-
-            "unit_price":
-                unit_price,
-
-            "original_command":
-                text
+        # ----------------------------------------------------
+        # VALID SALE
+        # ----------------------------------------------------
+        return {
+            "intent": "record_sale",
+            "requires_confirmation": True,
+            "amount": amount,
+            "product": product,
+            "quantity": quantity,
+            "unit": unit,
+            "unit_price": unit_price,
+            "original_command": text
         }
+
+    # ========================================================
+    # RECORD EXPENSE
+    # ========================================================
+    expense_words = (
+        "expense" in lower
+        or "spent" in lower
+        or "cost" in lower
+    )
+
+    expense_action_words = (
+        "record" in lower
+        or "add" in lower
+        or "spent" in lower
+        or "save" in lower
+    )
+
+    if expense_words and expense_action_words:
+
+        amount_match = re.search(
+            r"(?:₦|ngn|\$|usd|cad|€|eur|irr)?\s*"
+            r"([\d,]+(?:\.\d+)?)",
+            lower,
+            flags=re.IGNORECASE
+        )
+
+        amount = None
+
+        if amount_match:
+            amount = _farm_number(
+                amount_match.group(1)
+            )
+
+        if (
+            amount is None
+            or amount <= 0
+        ):
+
+            return {
+                "intent": "need_more_info",
+                "requires_confirmation": False,
+                "message": (
+                    "Tell me the expense amount. "
+                    "For example: "
+                    "'Record fertilizer expense 3000'."
+                )
+            }
+
+        category = "Other"
+
+        category_map = {
+            "fertilizer": "Fertilizer",
+            "fertiliser": "Fertilizer",
+            "pesticide": "Pesticides",
+            "seed": "Seeds",
+            "irrigation": "Irrigation",
+            "equipment": "Equipment",
+            "labour": "Labor",
+            "labor": "Labor",
+            "transport": "Transport",
+            "fuel": "Fuel",
+            "feed": "Feed"
+        }
+
+        for keyword, value in category_map.items():
+
+            if keyword in lower:
+                category = value
+                break
+
+        return {
+            "intent": "record_expense",
+            "requires_confirmation": True,
+            "amount": amount,
+            "category": category,
+            "description": text,
+            "original_command": text
+        }
+
+    # ========================================================
+    # PROFIT
+    # ========================================================
+    if (
+        "calculate profit" in lower
+        or "my profit" in lower
+        or "net profit" in lower
+        or "financial position" in lower
+        or "how much profit" in lower
+    ):
+
+        return {
+            "intent": "calculate_profit",
+            "requires_confirmation": False
+        }
+
+    # ========================================================
+    # STOCK
+    # ========================================================
+    if (
+        "low stock" in lower
+        or "check stock" in lower
+        or "fertilizer stock" in lower
+        or "fertiliser stock" in lower
+        or "pesticide stock" in lower
+        or "show stock" in lower
+    ):
+
+        return {
+            "intent": "check_stock",
+            "requires_confirmation": False
+        }
+
+    # ========================================================
+    # ALERTS
+    # ========================================================
+    if (
+        "show alert" in lower
+        or "farm alert" in lower
+        or "my alerts" in lower
+        or "show alerts" in lower
+    ):
+
+        return {
+            "intent": "get_alerts",
+            "requires_confirmation": False
+        }
+        # ========================================================
+    # IRRIGATION
+    # ========================================================
+    if (
+        "irrigat" in lower
+        or "should i water" in lower
+        or "need water" in lower
+        or "soil moisture" in lower
+    ):
+
+        return {
+            "intent": "irrigation",
+            "requires_confirmation": False
+        }
+
+    # ========================================================
+    # TODAY'S PRIORITIES
+    # ========================================================
+    if (
+        "what should i do" in lower
+        or "today's priority" in lower
+        or "todays priority" in lower
+        or "farm priorities" in lower
+        or "today's priorities" in lower
+        or "todays priorities" in lower
+    ):
+
+        return {
+            "intent": "priorities",
+            "requires_confirmation": False
+        }
+
+    # ========================================================
+    # GENERAL / UNKNOWN COMMAND
+    # THIS MUST BE THE LAST RETURN IN THE PARSER
+    # ========================================================
+    return {
+        "intent": "general",
+        "requires_confirmation": False,
+        "message": (
+            "I can currently record sales and expenses, "
+            "calculate profit, check low stock, show alerts, "
+            "give irrigation guidance and show today's priorities."
+        )
+    }
+
+
+# ============================================================
+# EXECUTE FARM ACTION
+# ============================================================
+
+def execute_farm_action(action):
+
+    # Safety protection
+    if not isinstance(
+        action,
+        dict
+    ):
+        return {
+            "ok": False,
+            "message": (
+                "I could not understand that farm action. "
+                "Please try again."
+            )
+        }
+
+    intent = action.get(
+        "intent"
+    )
+
+    # --------------------------------------------------------
+    # CALCULATE PROFIT
+    # --------------------------------------------------------
+    if intent == "calculate_profit":
+
+        return farm_action_calculate_profit()
+
+    # --------------------------------------------------------
+    # CHECK STOCK
+    # --------------------------------------------------------
+    if intent == "check_stock":
+
+        return farm_action_check_stock()
+
+    # --------------------------------------------------------
+    # GET ALERTS
+    # --------------------------------------------------------
+    if intent == "get_alerts":
+
+        return farm_action_get_alerts()
+
+    # --------------------------------------------------------
+    # IRRIGATION
+    # --------------------------------------------------------
+    if intent == "irrigation":
+
+        return farm_action_irrigation_guidance()
+
+    # --------------------------------------------------------
+    # PRIORITIES
+    # --------------------------------------------------------
+    if intent == "priorities":
+
+        return farm_action_get_priorities()
+
+    # --------------------------------------------------------
+    # RECORD SALE
+    # --------------------------------------------------------
+    if intent == "record_sale":
+
+        return farm_action_record_sale(
+            amount=action.get(
+                "amount"
+            ),
+            product=action.get(
+                "product"
+            ),
+            quantity=action.get(
+                "quantity"
+            ),
+            unit=action.get(
+                "unit",
+                "transaction"
+            ),
+            unit_price=action.get(
+                "unit_price"
+            ),
+            notes=(
+                "Recorded through "
+                "Farm Action Chatbot"
+            )
+        )
+
+    # --------------------------------------------------------
+    # RECORD EXPENSE
+    # --------------------------------------------------------
+    if intent == "record_expense":
+
+        return farm_action_record_expense(
+            amount=action.get(
+                "amount"
+            ),
+            category=action.get(
+                "category",
+                "Other"
+            ),
+            description=action.get(
+                "description",
+                ""
+            ),
+            notes=(
+                "Recorded through "
+                "Farm Action Chatbot"
+            )
+        )
+
+    # --------------------------------------------------------
+    # FALLBACK
+    # --------------------------------------------------------
+    return {
+        "ok": True,
+        "message": action.get(
+            "message",
+            "I need more information."
+        )
+    }
 
 
 # ============================================================
@@ -5316,8 +7753,28 @@ def farm_action_chatbot_ui(
                 )
             )
 
+            # Safety guard:
+            # the parser must always return a dictionary.
+            if not isinstance(
+                action,
+                dict
+            ):
+                action = {
+                    "intent": "general",
+                    "requires_confirmation": False,
+                    "message": (
+                        "I understood your message, "
+                        "but I could not determine the farm action. "
+                        "Try: 'Record maize sale 1200', "
+                        "'Record fertilizer expense 3000', "
+                        "'Calculate my profit', or "
+                        "'What should I do today?'"
+                    )
+                }
+
             if action.get(
-                "requires_confirmation"
+                "requires_confirmation",
+                False
             ):
 
                 st.session_state[
@@ -15821,6 +18278,46 @@ def kbak(name: str) -> str:  return f"bk_{name}"
 def klot(name: str) -> str:  return f"lot_{name}"
 def sfp(name: str) -> str:   return f"sfp_{name}"
 
+
+# ============================================================
+# 🔐 SMART FARM AI AUTHENTICATION GATE
+# ============================================================
+
+if "logged_in" not in st.session_state:
+    st.session_state[
+        "logged_in"
+    ] = False
+
+
+# ------------------------------------------------------------
+# NOT LOGGED IN
+# ------------------------------------------------------------
+
+if not st.session_state.get(
+    "logged_in",
+    False
+):
+
+    user_account_management_ui()
+
+    st.stop()
+
+
+# ------------------------------------------------------------
+# CHECK 50-MINUTE INACTIVITY
+# ------------------------------------------------------------
+
+if not enforce_farmer_session_timeout():
+
+    user_account_management_ui()
+
+    st.stop()
+
+
+# ============================================================
+# FROM HERE DOWN = LOGGED-IN FARMERS ONLY
+# ============================================================
+
 # 1. Apply pending navigation
 pending_destination = st.session_state.pop(
     "voice_pending_navigation",
@@ -16130,20 +18627,20 @@ def farmer_command_centre_ui():
     )
 
     farmer_name = (
-        farmer_profile.get(
+        st.session_state.get(
+            "registered_name"
+        )
+        or st.session_state.get(
+            "current_user"
+        )
+        or farmer_profile.get(
             "name"
         )
         or farmer_profile.get(
             "farmer_name"
         )
-        or farmer_profile.get(
-            "full_name"
-        )
         or personalized_profile.get(
             "name"
-        )
-        or st.session_state.get(
-            "username"
         )
         or "Farmer"
     )
