@@ -3945,6 +3945,1548 @@ def smart_fert_pest_ui():
         "PA/CSA recommendations, treatment records and Smart Farm Alerts."
     )
 
+# ============================================================
+# 🧠 SMART FARM AI — FARM ACTION ENGINE
+# ============================================================
+
+def get_farm_action_context():
+    import streamlit as st
+
+    current_farm = st.session_state.get(
+        "current_farm",
+        {}
+    ) or {}
+
+    farmer_profile = st.session_state.get(
+        "farmer_profile",
+        {}
+    ) or {}
+
+    personalized_profile = st.session_state.get(
+        "personalized_profile",
+        {}
+    ) or {}
+
+    farm_id = str(
+        st.session_state.get("current_farm_id")
+        or current_farm.get("farm_id")
+        or personalized_profile.get("current_farm_id")
+        or "main_farm"
+    )
+
+    farm_name = (
+        current_farm.get("farm_name")
+        or current_farm.get("name")
+        or personalized_profile.get("current_farm_name")
+        or "Main Farm"
+    )
+
+    crop = (
+        current_farm.get("crop_type")
+        or current_farm.get("crop")
+        or personalized_profile.get("current_crop")
+        or personalized_profile.get("crop_type")
+        or "Not specified"
+    )
+
+    location = (
+        current_farm.get("location")
+        or personalized_profile.get("current_location")
+        or personalized_profile.get("location")
+        or farmer_profile.get("location")
+        or "Not specified"
+    )
+
+    country = (
+        current_farm.get("country")
+        or personalized_profile.get("country")
+        or farmer_profile.get("country")
+        or "Nigeria"
+    )
+
+    farmer_name = (
+        st.session_state.get("current_user")
+        or farmer_profile.get("name")
+        or farmer_profile.get("farmer_name")
+        or personalized_profile.get("name")
+        or "Farmer"
+    )
+
+    return {
+        "farm_id": farm_id,
+        "farm_name": farm_name,
+        "crop": crop,
+        "location": location,
+        "country": country,
+        "farmer_name": farmer_name
+    }
+
+
+# ============================================================
+# CURRENCY
+# ============================================================
+
+def get_farm_currency(country):
+    value = str(country or "").strip().lower()
+
+    mapping = {
+        "nigeria": ("NGN", "₦"),
+        "iran": ("IRR", "IRR"),
+        "canada": ("CAD", "$"),
+        "united states": ("USD", "$"),
+        "usa": ("USD", "$"),
+        "us": ("USD", "$"),
+        "cyprus": ("EUR", "€"),
+    }
+
+    return mapping.get(
+        value,
+        ("USD", "$")
+    )
+
+
+# ============================================================
+# NUMBER PARSER
+# ============================================================
+
+def _farm_number(value):
+    try:
+        return float(
+            str(value)
+            .replace(",", "")
+            .strip()
+        )
+    except Exception:
+        return None
+
+
+# ============================================================
+# FILTER RECORDS TO CURRENT FARM
+# ============================================================
+
+def _farm_filter_dataframe(
+    df,
+    context
+):
+    import pandas as pd
+
+    if not isinstance(
+        df,
+        pd.DataFrame
+    ):
+        return pd.DataFrame()
+
+    if df.empty:
+        return df.copy()
+
+    result = df.copy()
+
+    if "farm_id" in result.columns:
+        return result[
+            result["farm_id"]
+            .astype(str)
+            == str(
+                context["farm_id"]
+            )
+        ].copy()
+
+    if (
+        "farmer" in result.columns
+        and context.get("farmer_name")
+    ):
+        farmer_filtered = result[
+            result["farmer"]
+            .astype(str)
+            == str(
+                context["farmer_name"]
+            )
+        ].copy()
+
+        if not farmer_filtered.empty:
+            return farmer_filtered
+
+    return result
+
+
+# ============================================================
+# SAFE PERSISTENCE
+# ============================================================
+
+def _save_action_dataset(
+    name,
+    dataframe
+):
+    import streamlit as st
+
+    st.session_state[
+        name
+    ] = dataframe
+
+    save_function = globals().get(
+        "save_data"
+    )
+    if callable(
+        save_function
+    ):
+        try:
+            save_function(
+                name,
+                dataframe
+            )
+            return True
+        except Exception:
+            pass
+
+    return False
+
+
+# ============================================================
+# RECORD SALE
+# ============================================================
+
+def farm_action_record_sale(
+    amount,
+    product=None,
+    quantity=None,
+    unit="transaction",
+    unit_price=None,
+    buyer="",
+    notes=""
+):
+    import streamlit as st
+    import pandas as pd
+    from datetime import date
+
+    context = get_farm_action_context()
+
+    amount = _farm_number(
+        amount
+    )
+
+    if (
+        amount is None
+        or amount <= 0
+    ):
+        return {
+            "ok": False,
+            "message": (
+                "The sale amount must be "
+                "greater than zero."
+            )
+        }
+
+    if not product:
+        product = context["crop"]
+
+    if (
+        not product
+        or product == "Not specified"
+    ):
+        product = "Farm produce"
+
+    if quantity is None:
+        quantity = 1.0
+
+    quantity = _farm_number(
+        quantity
+    ) or 1.0
+
+    if unit_price is None:
+        unit_price = (
+            amount / quantity
+            if quantity > 0
+            else amount
+        )
+
+    sales_columns = [
+        "date",
+        "farmer",
+        "farm_id",
+        "farm_name",
+        "product",
+        "quantity",
+        "unit",
+        "unit_price",
+        "total",
+        "buyer",
+        "notes"
+    ]
+
+    sales = st.session_state.get(
+        "sales"
+    )
+
+    if not isinstance(
+        sales,
+        pd.DataFrame
+    ):
+        sales = pd.DataFrame(
+            columns=sales_columns
+        )
+
+    for column in sales_columns:
+        if column not in sales.columns:
+            sales[column] = ""
+
+    new_sale = pd.DataFrame(
+        [
+            {
+                "date": date.today(),
+                "farmer": context[
+                    "farmer_name"
+                ],
+                "farm_id": context[
+                    "farm_id"
+                ],
+                "farm_name": context[
+                    "farm_name"
+                ],
+                "product": product,
+                "quantity": quantity,
+                "unit": unit,
+                "unit_price": float(
+                    unit_price
+                ),
+                "total": float(
+                    amount
+                ),
+                "buyer": buyer,
+                "notes": notes
+            }
+        ]
+    )
+
+    sales = pd.concat(
+        [
+            sales,
+            new_sale
+        ],
+        ignore_index=True
+    )
+
+    persisted = _save_action_dataset(
+        "sales",
+        sales
+    )
+
+    code, symbol = get_farm_currency(
+        context["country"]
+    )
+
+    return {
+        "ok": True,
+        "persisted": persisted,
+        "message": (
+            f"✅ Sale recorded for "
+            f"{context['farm_name']}. "
+            f"{product}: "
+            f"{symbol}{amount:,.2f} "
+            f"({code})."
+        )
+    }
+
+
+# ============================================================
+# RECORD EXPENSE
+# ============================================================
+
+def farm_action_record_expense(
+    amount,
+    category="Other",
+    description="",
+    payment_method="Other",
+    notes=""
+):
+    import streamlit as st
+    import pandas as pd
+    from datetime import date
+
+    context = get_farm_action_context()
+
+    amount = _farm_number(
+        amount
+    )
+
+    if (
+        amount is None
+        or amount <= 0
+    ):
+        return {
+            "ok": False,
+            "message": (
+                "The expense amount must "
+                "be greater than zero."
+            )
+        }
+
+    expense_columns = [
+        "date",
+        "farmer",
+        "farm_id",
+        "farm_name",
+        "category",
+        "description",
+        "amount",
+        "payment_method",
+        "notes"
+    ]
+
+    expenses = st.session_state.get(
+        "expenses"
+    )
+    if not isinstance(
+        expenses,
+        pd.DataFrame
+    ):
+        expenses = pd.DataFrame(
+            columns=expense_columns
+        )
+
+    for column in expense_columns:
+        if column not in expenses.columns:
+            expenses[column] = ""
+
+    new_expense = pd.DataFrame(
+        [
+            {
+                "date": date.today(),
+                "farmer": context[
+                    "farmer_name"
+                ],
+                "farm_id": context[
+                    "farm_id"
+                ],
+                "farm_name": context[
+                    "farm_name"
+                ],
+                "category": category,
+                "description": description,
+                "amount": float(
+                    amount
+                ),
+                "payment_method":
+                    payment_method,
+                "notes": notes
+            }
+        ]
+    )
+
+    expenses = pd.concat(
+        [
+            expenses,
+            new_expense
+        ],
+        ignore_index=True
+    )
+
+    persisted = _save_action_dataset(
+        "expenses",
+        expenses
+    )
+
+    code, symbol = get_farm_currency(
+        context["country"]
+    )
+
+    return {
+        "ok": True,
+        "persisted": persisted,
+        "message": (
+            f"✅ Expense recorded for "
+            f"{context['farm_name']}. "
+            f"{category}: "
+            f"{symbol}{amount:,.2f} "
+            f"({code})."
+        )
+    }
+
+
+# ============================================================
+# PROFIT CALCULATION
+# ============================================================
+
+def farm_action_calculate_profit():
+    import streamlit as st
+    import pandas as pd
+
+    context = get_farm_action_context()
+
+    sales = st.session_state.get(
+        "sales",
+        pd.DataFrame()
+    )
+
+    expenses = st.session_state.get(
+        "expenses",
+        pd.DataFrame()
+    )
+
+    labor = st.session_state.get(
+        "labor",
+        pd.DataFrame()
+    )
+
+    sales = _farm_filter_dataframe(
+        sales,
+        context
+    )
+
+    expenses = _farm_filter_dataframe(
+        expenses,
+        context
+    )
+
+    labor = _farm_filter_dataframe(
+        labor,
+        context
+    )
+
+    total_sales = 0.0
+    total_expenses = 0.0
+    labor_cost = 0.0
+
+    if (
+        not sales.empty
+        and "total" in sales.columns
+    ):
+        total_sales = pd.to_numeric(
+            sales["total"],
+            errors="coerce"
+        ).fillna(0).sum()
+
+    if (
+        not expenses.empty
+        and "amount" in expenses.columns
+    ):
+        total_expenses = pd.to_numeric(
+            expenses["amount"],
+            errors="coerce"
+        ).fillna(0).sum()
+
+    if (
+        not labor.empty
+        and "total" in labor.columns
+    ):
+        labor_cost = pd.to_numeric(
+            labor["total"],
+            errors="coerce"
+        ).fillna(0).sum()
+
+    net_profit = (
+        float(total_sales)
+        - float(total_expenses)
+        - float(labor_cost)
+    )
+
+    code, symbol = get_farm_currency(
+        context["country"]
+    )
+
+    return {
+        "ok": True,
+        "sales": float(total_sales),
+        "expenses": float(total_expenses),
+        "labor": float(labor_cost),
+        "profit": net_profit,
+        "message": (
+            f"💰 {context['farm_name']} financial summary:\n\n"
+            f"• Sales: {symbol}{total_sales:,.2f}\n"
+            f"• Expenses: {symbol}{total_expenses:,.2f}\n"
+            f"• Labor: {symbol}{labor_cost:,.2f}\n"
+            f"• Net Profit: {symbol}{net_profit:,.2f} {code}"
+        )
+    }
+
+
+# ============================================================
+# LOW STOCK
+# ============================================================
+
+def farm_action_check_stock():
+    import streamlit as st
+
+    context = get_farm_action_context()
+
+    stock_key = (
+        f"smart_fert_pest_"
+        f"{context['farm_id']}_stock_items"
+    )
+
+    items = st.session_state.get(
+        stock_key,
+        []
+    ) or []
+
+    low_items = []
+
+    for item in items:
+        try:
+            qty = float(
+                item.get(
+                    "qty",
+                    0
+                )
+            )
+
+            minimum = float(
+                item.get(
+                    "min_level",
+                    0
+                )
+            )
+
+            if qty <= minimum:
+                low_items.append(
+                    item
+                )
+
+        except Exception:
+            pass
+
+    if not low_items:
+        return {
+            "ok": True,
+            "items": [],
+            "message": (
+                "✅ No fertilizer or pesticide "
+                "items are currently below their "
+                "reorder levels."
+            )
+        }
+
+    lines = []
+
+    for item in low_items:
+        lines.append(
+            f"• {item.get('name', 'Input')}: "
+            f"{item.get('qty', 0)} "
+            f"{item.get('unit', '')} "
+            f"(reorder level "
+            f"{item.get('min_level', 0)})"
+        )
+
+    return {
+        "ok": True,
+        "items": low_items,
+        "message": (
+            "⚠️ Low-stock farm inputs:\n\n"
+            + "\n".join(
+                lines
+            )
+        )
+    }
+
+
+# ============================================================
+# FARM ALERTS
+# ============================================================
+
+def farm_action_get_alerts():
+    import streamlit as st
+
+    context = get_farm_action_context()
+
+    key = (
+        f"smart_alerts_"
+        f"{context['farm_id']}_alert_log"
+    )
+
+    alerts = st.session_state.get(
+        key,
+        []
+    ) or []
+
+    recent = alerts[
+        -5:
+    ][::-1]
+
+    if not recent:
+        return {
+            "ok": True,
+            "alerts": [],
+            "message": (
+                "✅ No recent Smart Farm Alerts "
+                "are recorded for this farm."
+            )
+        }
+
+    lines = []
+
+    for row in recent:
+        lines.append(
+            "• "
+            + str(
+                row.get(
+                    "message",
+                    row.get(
+                        "title",
+                        "Farm alert"
+                    )
+                )
+            )
+        )
+
+    return {
+        "ok": True,
+        "alerts": recent,
+        "message": (
+            "🚨 Recent farm alerts:\n\n"
+            + "\n".join(
+                lines
+            )
+        )
+    }
+
+
+# ============================================================
+# IRRIGATION GUIDANCE
+# ============================================================
+
+def farm_action_irrigation_guidance():
+    import streamlit as st
+
+    context = get_farm_action_context()
+
+    sensor_data = (
+        st.session_state.get(
+            "latest_sensor_data"
+        )
+        or st.session_state.get(
+            "sensor_data"
+        )
+        or {}
+    )
+
+    pa = st.session_state.get(
+        "pa_analysis",
+        {}
+    ) or {}
+
+    csa = st.session_state.get(
+        "csa_analysis",
+        {}
+    ) or {}
+
+    soil_moisture = None
+
+    if isinstance(
+        sensor_data,
+        dict
+    ):
+        soil_moisture = sensor_data.get(
+            "soil_moisture"
+        )
+
+    recommendations = []
+
+    if soil_moisture is not None:
+        try:
+            value = float(
+                soil_moisture
+            )
+
+            if value < 30:
+                recommendations.append(
+                    f"Soil moisture is {value:.1f}%. "
+                    "The field may require irrigation."
+                )
+
+            elif value <= 60:
+                recommendations.append(
+                    f"Soil moisture is {value:.1f}%. "
+                    "Moisture is currently within a "
+                    "moderate range."
+                )
+
+            else:
+                recommendations.append(
+                    f"Soil moisture is {value:.1f}%. "
+                    "Avoid unnecessary irrigation until "
+                    "field conditions are checked."
+                )
+
+        except Exception:
+            pass
+
+    for item in (
+        pa.get(
+            "recommendations",
+            []
+        )
+        or []
+    ):
+        text = str(item)
+
+        if (
+            "irrig" in text.lower()
+            or "water" in text.lower()
+            or "moisture" in text.lower()
+        ):
+            recommendations.append(
+                text
+            )
+
+    climate_risks = (
+        csa.get(
+            "climate_risks",
+            []
+        )
+        or []
+    )
+
+    if climate_risks:
+        recommendations.append(
+            "Climate consideration: "
+            + str(
+                climate_risks[0]
+            )
+        )
+
+    if not recommendations:
+        return {
+            "ok": True,
+            "message": (
+                "I don't yet have enough current data "
+                "to recommend irrigation safely. "
+                "Check soil moisture, recent rainfall "
+                "and the Irrigation & Soil module."
+            )
+        }
+
+    return {
+        "ok": True,
+        "message": (
+            f"💧 Irrigation guidance for "
+            f"{context['farm_name']}:\n\n"
+            + "\n".join(
+                f"• {item}"
+                for item
+                in recommendations[:5]
+            )
+        )
+    }
+
+
+# ============================================================
+# TODAY'S PRIORITIES
+# ============================================================
+
+def farm_action_get_priorities():
+    import streamlit as st
+
+    context = get_farm_action_context()
+
+    priorities = []
+
+    alerts_result = (
+        farm_action_get_alerts()
+    )
+
+    for row in alerts_result.get(
+        "alerts",
+        []
+    )[:2]:
+
+        message = row.get(
+            "message"
+        )
+
+        if message:
+            priorities.append(
+                str(message)
+            )
+
+    pa = st.session_state.get(
+        "pa_analysis",
+        {}
+    ) or {}
+
+    for action in (
+        pa.get(
+            "priority_actions",
+            []
+        )
+        or []
+    )[:2]:
+
+        priorities.append(
+            str(action)
+        )
+
+    stock_result = (
+        farm_action_check_stock()
+    )
+
+    for item in stock_result.get(
+        "items",
+        []
+    )[:2]:
+
+        priorities.append(
+            "Restock "
+            + str(
+                item.get(
+                    "name",
+                    "farm input"
+                )
+            )
+        )
+
+    csa = st.session_state.get(
+        "csa_analysis",
+        {}
+    ) or {}
+
+    for risk in (
+        csa.get(
+            "climate_risks",
+            []
+        )
+        or []
+    )[:1]:
+
+        priorities.append(
+            "Monitor climate risk: "
+            + str(risk)
+        )
+
+    unique = []
+
+    for item in priorities:
+        if (
+            item
+            and item not in unique
+        ):
+            unique.append(
+                item
+            )
+
+    if not unique:
+        return {
+            "ok": True,
+            "message": (
+                f"🌱 No urgent priority is currently "
+                f"available for {context['farm_name']}."
+            )
+        }
+
+    return {
+        "ok": True,
+        "priorities": unique[:5],
+        "message": (
+            f"🎯 Today's priorities for "
+            f"{context['farm_name']}:\n\n"
+            + "\n".join(
+                f"{index + 1}. {item}"
+                for index, item
+                in enumerate(
+                    unique[:5]
+                )
+            )
+        )
+    }
+
+
+# ============================================================
+# INTENT PARSER
+# ============================================================
+
+def parse_farm_action_command(
+    command
+):
+    import re
+
+    context = get_farm_action_context()
+
+    text = (
+        command
+        or ""
+    ).strip()
+
+    lower = text.lower()
+
+    # --------------------------------------------------------
+    # PROFIT
+    # --------------------------------------------------------
+    if (
+        "calculate profit" in lower
+        or "my profit" in lower
+        or "net profit" in lower
+        or "financial position" in lower
+    ):
+        return {
+            "intent": "calculate_profit",
+            "requires_confirmation": False
+        }
+
+    # --------------------------------------------------------
+    # STOCK
+    # --------------------------------------------------------
+    if (
+        "low stock" in lower
+        or "check stock" in lower
+        or "fertilizer stock" in lower
+        or "fertiliser stock" in lower
+        or "pesticide stock" in lower
+    ):
+        return {
+            "intent": "check_stock",
+            "requires_confirmation": False
+        }
+
+    # --------------------------------------------------------
+    # ALERTS
+    # --------------------------------------------------------
+    if (
+        "show alert" in lower
+        or "farm alert" in lower
+        or "my alerts" in lower
+    ):
+        return {
+            "intent": "get_alerts",
+            "requires_confirmation": False
+        }
+
+    # --------------------------------------------------------
+    # IRRIGATION
+    # --------------------------------------------------------
+    if (
+        "irrigat" in lower
+        or "should i water" in lower
+        or "need water" in lower
+    ):
+        return {
+            "intent": "irrigation",
+            "requires_confirmation": False
+        }
+
+    # --------------------------------------------------------
+    # PRIORITIES
+    # --------------------------------------------------------
+    if (
+        "what should i do" in lower
+        or "today's priority" in lower
+        or "todays priority" in lower
+        or "farm priorities" in lower
+    ):
+        return {
+            "intent": "priorities",
+            "requires_confirmation": False
+        }
+
+    # --------------------------------------------------------
+    # RECORD SALE
+    # --------------------------------------------------------
+    if (
+        "record sale" in lower
+        or "record a sale" in lower
+        or "add sale" in lower
+        or "sold " in lower
+    ):
+
+        currency_match = re.search(
+            r"(?:₦|ngn|\$|usd|cad|€|eur|irr)\s*"
+            r"([\d,]+(?:\.\d+)?)",
+            text,
+            flags=re.IGNORECASE
+        )
+
+        quantity_match = re.search(
+            r"([\d,]+(?:\.\d+)?)\s*"
+            r"(kg|kgs|ton|tons|tonne|tonnes|bag|bags|crate|crates)",
+            lower
+        )
+
+        price_match = re.search(
+            r"(?:at|@)\s*(?:₦|ngn|\$|usd|cad|€|eur|irr)?\s*"
+            r"([\d,]+(?:\.\d+)?)",
+            lower
+        )
+
+        amount = None
+        quantity = None
+        unit_price = None
+        unit = "transaction"
+
+        if currency_match:
+            amount = _farm_number(
+                currency_match.group(1)
+            )
+
+        if quantity_match:
+            quantity = _farm_number(
+                quantity_match.group(1)
+            )
+
+            unit = quantity_match.group(
+                2
+            )
+
+        if price_match:
+            unit_price = _farm_number(
+                price_match.group(1)
+            )
+
+        if (
+            quantity is not None
+            and unit_price is not None
+        ):
+            amount = (
+                quantity
+                * unit_price
+            )
+
+        if amount is None:
+            return {
+                "intent": "need_more_info",
+                "requires_confirmation": False,
+                "message": (
+                    "Tell me the sale amount. "
+                    "Example: Record a ₦120,000 maize sale."
+                )
+            }
+
+        return {
+            "intent": "record_sale",
+            "requires_confirmation": True,
+            "amount": amount,
+            "product": context[
+                "crop"
+            ],
+            "quantity": quantity,
+            "unit": unit,
+            "unit_price": unit_price,
+            "original_command": text
+        }
+
+    # --------------------------------------------------------
+    # RECORD EXPENSE
+    # --------------------------------------------------------
+    if (
+        "record expense" in lower
+        or "record an expense" in lower
+        or "add expense" in lower
+        or "spent " in lower
+    ):
+
+        amount_match = re.search(
+            r"(?:₦|ngn|\$|usd|cad|€|eur|irr)?\s*"
+            r"([\d,]+(?:\.\d+)?)",
+            lower
+        )
+
+        amount = (
+            _farm_number(
+                amount_match.group(1)
+            )
+            if amount_match
+            else None
+        )
+
+        if amount is None:
+            return {
+                "intent": "need_more_info",
+                "requires_confirmation": False,
+                "message": (
+                    "Tell me the expense amount. "
+                    "Example: Record ₦30,000 fertilizer expense."
+                )
+            }
+
+        category = "Other"
+
+        category_map = {
+            "fertilizer": "Fertilizer",
+            "fertiliser": "Fertilizer",
+            "pesticide": "Pesticides",
+            "seed": "Seeds",
+            "irrigation": "Irrigation",
+            "equipment": "Equipment",
+            "labour": "Labor",
+            "labor": "Labor",
+            "transport": "Transport",
+            "fuel": "Fuel",
+            "feed": "Feed"
+        }
+
+        for keyword, value in (
+            category_map.items()
+        ):
+            if keyword in lower:
+                category = value
+                break
+
+        return {
+            "intent": "record_expense",
+            "requires_confirmation": True,
+            "amount": amount,
+            "category": category,
+            "description": text,
+            "original_command": text
+        }
+
+    return {
+        "intent": "general",
+        "requires_confirmation": False,
+        "message": (
+            "I can currently record sales and expenses, "
+            "calculate profit, check low stock, show alerts, "
+            "give irrigation guidance and show today's priorities."
+        )
+    }
+
+
+# ============================================================
+# EXECUTE FARM ACTION
+# ============================================================
+
+def execute_farm_action(
+    action
+):
+    intent = action.get(
+        "intent"
+    )
+
+    if intent == "calculate_profit":
+        return farm_action_calculate_profit()
+
+    if intent == "check_stock":
+        return farm_action_check_stock()
+
+    if intent == "get_alerts":
+        return farm_action_get_alerts()
+
+    if intent == "irrigation":
+        return farm_action_irrigation_guidance()
+
+    if intent == "priorities":
+        return farm_action_get_priorities()
+
+    if intent == "record_sale":
+        return farm_action_record_sale(
+            amount=action.get(
+                "amount"
+            ),
+            product=action.get(
+                "product"
+            ),
+            quantity=action.get(
+                "quantity"
+            ),
+            unit=action.get(
+                "unit",
+                "transaction"
+            ),
+            unit_price=action.get(
+                "unit_price"
+            ),
+            notes=(
+                "Recorded through "
+                "Farm Action Chatbot"
+            )
+        )
+
+    if intent == "record_expense":
+        return farm_action_record_expense(
+            amount=action.get(
+                "amount"
+            ),
+            category=action.get(
+                "category",
+                "Other"
+            ),
+            description=action.get(
+                "description",
+                ""
+            ),
+            notes=(
+                "Recorded through "
+                "Farm Action Chatbot"
+            )
+        )
+
+    return {
+        "ok": True,
+        "message": action.get(
+            "message",
+            "I need more information."
+        )
+    }
+
+
+# ============================================================
+# FARM ACTION CHATBOT UI
+# ============================================================
+
+def farm_action_chatbot_ui(
+    surface="dashboard",
+    compact=True
+):
+    import streamlit as st
+
+    context = get_farm_action_context()
+    prefix = (
+        f"farm_action_{surface}_"
+        f"{context['farm_id']}"
+    )
+
+    history_key = (
+        f"{prefix}_history"
+    )
+
+    pending_key = (
+        f"{prefix}_pending"
+    )
+
+    input_key = (
+        f"{prefix}_input"
+    )
+
+    if history_key not in st.session_state:
+        st.session_state[
+            history_key
+        ] = []
+
+    if pending_key not in st.session_state:
+        st.session_state[
+            pending_key
+        ] = None
+
+    st.subheader(
+        "🧠 Ask Smart Farm AI"
+    )
+
+    st.caption(
+        f"Smart Farm AI is working with "
+        f"{context['farm_name']} as the Current Farm."
+    )
+
+    command = st.text_input(
+        "What would you like Smart Farm AI to do?",
+        placeholder=(
+            "Example: Record a ₦120,000 maize sale"
+        ),
+        key=input_key
+    )
+
+    if st.button(
+        "Send",
+        key=f"{prefix}_send",
+        type="primary",
+        use_container_width=True
+    ):
+
+        clean_command = (
+            command
+            or ""
+        ).strip()
+
+        if not clean_command:
+
+            st.warning(
+                "Enter a farm question or action."
+            )
+
+        else:
+
+            action = (
+                parse_farm_action_command(
+                    clean_command
+                )
+            )
+
+            if action.get(
+                "requires_confirmation"
+            ):
+
+                st.session_state[
+                    pending_key
+                ] = action
+
+                st.session_state[
+                    history_key
+                ].append(
+                    {
+                        "role": "user",
+                        "text": clean_command
+                    }
+                )
+
+            else:
+
+                result = (
+                    execute_farm_action(
+                        action
+                    )
+                )
+
+                st.session_state[
+                    history_key
+                ].append(
+                    {
+                        "role": "user",
+                        "text": clean_command
+                    }
+                )
+
+                st.session_state[
+                    history_key
+                ].append(
+                    {
+                        "role": "assistant",
+                        "text": result.get(
+                            "message",
+                            ""
+                        )
+                    }
+                )
+
+            st.rerun()
+
+    # ========================================================
+    # CONFIRM WRITE ACTION
+    # ========================================================
+    pending = st.session_state.get(
+        pending_key
+    )
+
+    if pending:
+
+        code, symbol = get_farm_currency(
+            context["country"]
+        )
+
+        intent = pending.get(
+            "intent"
+        )
+
+        if intent == "record_sale":
+
+            amount = pending.get(
+                "amount",
+                0
+            )
+
+            st.warning(
+                f"Confirm sale for "
+                f"{context['farm_name']}: "
+                f"{symbol}{amount:,.2f} {code}"
+            )
+
+        elif intent == "record_expense":
+
+            amount = pending.get(
+                "amount",
+                0
+            )
+
+            category = pending.get(
+                "category",
+                "Other"
+            )
+
+            st.warning(
+                f"Confirm {category} expense for "
+                f"{context['farm_name']}: "
+                f"{symbol}{amount:,.2f} {code}"
+            )
+
+        confirm_col, cancel_col = (
+            st.columns(2)
+        )
+
+        with confirm_col:
+
+            if st.button(
+                "✅ Confirm",
+                key=f"{prefix}_confirm",
+                use_container_width=True
+            ):
+
+                result = (
+                    execute_farm_action(
+                        pending
+                    )
+                )
+                st.session_state[
+                    history_key
+                ].append(
+                    {
+                        "role": "assistant",
+                        "text": result.get(
+                            "message",
+                            ""
+                        )
+                    }
+                )
+
+                st.session_state[
+                    pending_key
+                ] = None
+
+                st.rerun()
+
+        with cancel_col:
+
+            if st.button(
+                "❌ Cancel",
+                key=f"{prefix}_cancel",
+                use_container_width=True
+            ):
+
+                st.session_state[
+                    pending_key
+                ] = None
+
+                st.session_state[
+                    history_key
+                ].append(
+                    {
+                        "role": "assistant",
+                        "text": (
+                            "Action cancelled. "
+                            "No farm record was changed."
+                        )
+                    }
+                )
+
+                st.rerun()
+
+    # ========================================================
+    # CONVERSATION
+    # ========================================================
+    history = st.session_state.get(
+        history_key,
+        []
+    )
+
+    if history:
+
+        messages = (
+            history[-6:]
+            if compact
+            else history
+        )
+
+        for item in messages:
+
+            role = item.get(
+                "role",
+                "assistant"
+            )
+
+            text = item.get(
+                "text",
+                ""
+            )
+
+            with st.chat_message(
+                role
+            ):
+                st.write(
+                    text
+                )
+
 
 def smart_tutor_voice():
     import os
@@ -15255,447 +16797,13 @@ def farmer_command_centre_ui():
     st.divider()
 
     # ========================================================
-    # ASK SMART FARM AI
+    # FARM ACTION CHATBOT
     # ========================================================
-    st.subheader(
-        "🧠 Ask Smart Farm AI"
+
+    farm_action_chatbot_ui(
+        surface="dashboard",
+        compact=True
     )
-
-    st.caption(
-        "Ask about priorities, alerts, irrigation, "
-        "crop health, farm inputs or financial status."
-    )
-
-    assistant_history_key = ck(
-        "assistant_history"
-    )
-
-    if assistant_history_key not in st.session_state:
-
-        st.session_state[
-            assistant_history_key
-        ] = []
-
-    # ========================================================
-    # PRIORITY ENGINE
-    # ========================================================
-    def get_today_priorities():
-
-        priorities = []
-
-        for row in recent_alerts[:3]:
-
-            message = row.get(
-                "message"
-            )
-
-            if message:
-                priorities.append(
-                    str(message)
-                )
-
-        for action in pa_priority_actions[:3]:
-
-            priorities.append(
-                str(action)
-            )
-
-        for risk in climate_risks[:2]:
-
-            priorities.append(
-                f"Monitor climate risk: {risk}"
-            )
-
-        for item in low_stock_items[:2]:
-
-            priorities.append(
-                "Restock "
-                + str(
-                    item.get(
-                        "name",
-                        "farm input"
-                    )
-                )
-            )
-
-        if soil_moisture is not None:
-
-            try:
-                moisture_value = float(
-                    soil_moisture
-                )
-
-                if moisture_value < 30:
-
-                    priorities.append(
-                        "Check irrigation because "
-                        "soil moisture is low."
-                    )
-
-            except Exception:
-                pass
-
-        unique = []
-
-        for item in priorities:
-
-            if (
-                item
-                and item not in unique
-            ):
-                unique.append(
-                    item
-                )
-
-        return unique[:5]
-
-    # ========================================================
-    # COMMAND CENTRE CHATBOT
-    # ========================================================
-    def command_centre_answer(question):
-
-        q = (
-            question
-            or ""
-        ).strip().lower()
-
-        # ----------------------------------------------------
-        # TODAY / PRIORITIES
-        # ----------------------------------------------------
-        if (
-            "what should i do" in q
-            or "today" in q
-            or "priority" in q
-        ):
-
-            priorities = (
-                get_today_priorities()
-            )
-
-            if priorities:
-
-                return (
-                    "Today's farm priorities:\n\n"
-                    + "\n".join(
-                        f"{index + 1}. {item}"
-                        for index, item
-                        in enumerate(
-                            priorities
-                        )
-                    )
-                )
-
-            return (
-                "No urgent priority is currently available "
-                "from connected farm data."
-            )
-
-        # ----------------------------------------------------
-        # ALERTS
-        # ----------------------------------------------------
-        if "alert" in q:
-
-            if recent_alerts:
-
-                return (
-                    "Recent farm alerts:\n\n"
-                    + "\n".join(
-                        "• "
-                        + str(
-                            row.get(
-                                "message",
-                                "Farm alert"
-                            )
-                        )
-                        for row
-                        in recent_alerts[:5]
-                    )
-                )
-
-            return (
-                "No recent alerts are currently "
-                "recorded for this farm."
-            )
-
-        # ----------------------------------------------------
-        # STOCK
-        # ----------------------------------------------------
-        if (
-            "stock" in q
-            or "fertilizer" in q
-            or "fertiliser" in q
-            or "pesticide" in q
-        ):
-
-            if low_stock_items:
-
-                return (
-                    "Low-stock farm inputs:\n\n"
-                    + "\n".join(
-                        "• "
-                        + str(
-                            item.get(
-                                "name",
-                                "Input"
-                            )
-                        )
-                        + ": "
-                        + str(
-                            item.get(
-                                "qty",
-                                0
-                            )
-                        )
-                        + " "
-                        + str(
-                            item.get(
-                                "unit",
-                                ""
-                            )
-                        )
-                        for item
-                        in low_stock_items
-                    )
-                )
-
-            return (
-                "No low-stock fertilizer or pesticide "
-                "items are currently detected."
-            )
-
-        # ----------------------------------------------------
-        # IRRIGATION
-        # ----------------------------------------------------
-        if (
-            "irrigat" in q
-            or "water" in q
-        ):
-
-            answers = []
-
-            if soil_moisture is not None:
-
-                answers.append(
-                    f"Current soil moisture: "
-                    f"{soil_moisture}%."
-                )
-
-            irrigation_recs = [
-                str(item)
-                for item
-                in pa_recommendations
-                if (
-                    "irrig" in str(
-                        item
-                    ).lower()
-                    or "water" in str(
-                        item
-                    ).lower()
-                )
-            ]
-
-            if irrigation_recs:
-
-                answers.extend(
-                    irrigation_recs[:3]
-                )
-
-            if climate_risks:
-
-                answers.append(
-                    "Climate consideration: "
-                    + str(
-                        climate_risks[0]
-                    )
-                )
-
-            if answers:
-
-                return (
-                    "Current irrigation guidance:\n\n"
-                    + "\n".join(
-                        f"• {item}"
-                        for item
-                        in answers
-                    )
-                )
-
-            return (
-                "No current irrigation recommendation is "
-                "available from connected data. Check soil "
-                "moisture, rainfall and Irrigation & Soil."
-            )
-
-        # ----------------------------------------------------
-        # PROFIT
-        # ----------------------------------------------------
-        if (
-            "profit" in q
-            or "financial" in q
-            or "money" in q
-        ):
-
-            if net_profit not in (
-                None,
-                ""
-            ):
-
-                return (
-                    f"The current recorded net profit for "
-                    f"{farm_name} is "
-                    f"{display_number(net_profit)}."
-                )
-
-            return (
-                "A current profit figure is not available "
-                "on the Command Centre yet. Open Farm Profit "
-                "& Loss Statement for detailed calculation."
-            )
-
-        # ----------------------------------------------------
-        # CROP HEALTH
-        # ----------------------------------------------------
-        if (
-            "crop" in q
-            or "health" in q
-            or "disease" in q
-        ):
-
-            response = (
-                f"Current crop: {crop_name}. "
-                f"Health status: {farm_health}."
-            )
-
-            if cig_value is not None:
-
-                response += (
-                    f" Current CIG value: "
-                    f"{cig_value}."
-                )
-
-            return response
-
-        # ----------------------------------------------------
-        # WEATHER
-        # ----------------------------------------------------
-        if (
-            "weather" in q
-            or "temperature" in q
-            or "rain" in q
-        ):
-
-            parts = []
-
-            if temperature is not None:
-                parts.append(
-                    f"Temperature: "
-                    f"{temperature}°C"
-                )
-
-            if humidity is not None:
-                parts.append(
-                    f"Humidity: "
-                    f"{humidity}%"
-                )
-
-            if rainfall is not None:
-                parts.append(
-                    f"Rainfall: "
-                    f"{rainfall}"
-                )
-
-            if climate_risks:
-                parts.append(
-                    "Climate risk: "
-                    + str(
-                        climate_risks[0]
-                    )
-                )
-
-            if parts:
-                return (
-                    "\n".join(
-                        f"• {item}"
-                        for item in parts
-                    )
-                )
-
-            return (
-                "Live weather information is "
-                "not connected yet."
-            )
-
-        return (
-            f"I'm monitoring {farm_name}. "
-            "Ask me about today's priorities, alerts, "
-            "irrigation, crop health, weather, low-stock "
-            "inputs or financial status."
-        )
-
-    question = st.text_input(
-        "Ask about your farm",
-        placeholder=(
-            "Example: What should I do today?"
-        ),
-        key=ck(
-            "assistant_input"
-        )
-    )
-
-    if st.button(
-        "🧠 Ask Smart Farm AI",
-        key=ck(
-            "assistant_ask"
-        ),
-        type="primary",
-        use_container_width=True
-    ):
-
-        clean_question = (
-            question
-            or ""
-        ).strip()
-
-        if not clean_question:
-            st.warning(
-                "Please ask a farm question."
-            )
-
-        else:
-            answer = command_centre_answer(
-                clean_question
-            )
-
-            st.session_state[
-                assistant_history_key
-            ].append(
-                {
-                    "question": clean_question,
-                    "answer": answer,
-                    "time": datetime.now().strftime(
-                        "%H:%M"
-                    )
-                }
-            )
-
-    history = st.session_state.get(
-        assistant_history_key,
-        []
-    )
-
-    if history:
-        latest = history[-1]
-
-        st.markdown(
-            "### 🤖 Smart Farm AI"
-        )
-
-        st.write(
-            latest.get(
-                "answer",
-                ""
-            )
-        )
 
     st.divider()
 
