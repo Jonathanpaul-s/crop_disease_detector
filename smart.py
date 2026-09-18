@@ -8514,201 +8514,162 @@ Farmer question:
 
 
 # ============================================================
-# FARM ACTION CHATBOT UI
+# 🤖 SMART FARM AI FARM COPILOT — FINAL UI
 # ============================================================
 
 def farm_action_chatbot_ui(
     surface="dashboard",
     compact=True
 ):
-    import streamlit as st
-
-    context = get_farm_action_context()
-    prefix = (
-        f"farm_action_{surface}_"
-        f"{context['farm_id']}"
-    )
 
     history_key = (
-        f"{prefix}_history"
+        f"farm_ai_history_{surface}"
     )
 
     pending_key = (
-        f"{prefix}_pending"
+        f"farm_ai_pending_action_{surface}"
     )
 
-    input_key = (
-        f"{prefix}_input"
+    suggestion_key = (
+        f"farm_ai_suggestions_{surface}"
     )
 
-    if history_key not in st.session_state:
+    # --------------------------------------------------------
+    # INITIALIZE CHAT
+    # --------------------------------------------------------
+
+    if history_key not in (
+        st.session_state
+    ):
+
+        farmer_name = (
+            st.session_state.get(
+                "registered_name"
+            )
+            or "Farmer"
+        )
+
         st.session_state[
             history_key
-        ] = []
+        ] = [
+            {
+                "role": "assistant",
+                "content": (
+                    f"Hello {farmer_name} 👋. "
+                    "Ask me about your farm, ask how to use "
+                    "Smart Farm AI, tell me to open a feature, "
+                    "or ask me to record a farm action."
+                )
+            }
+        ]
 
-    if pending_key not in st.session_state:
+    history = (
         st.session_state[
-            pending_key
-        ] = None
+            history_key
+        ]
+    )
 
-    st.subheader(
-        "🧠 Ask Smart Farm AI"
+    # --------------------------------------------------------
+    # HEADER
+    # --------------------------------------------------------
+
+    st.markdown(
+        "### 🤖 Ask Smart Farm AI"
     )
 
     st.caption(
-        f"Smart Farm AI is working with "
-        f"{context['farm_name']} as the Current Farm."
+        "Farm guidance • Feature navigation • "
+        "Records • Alerts • Decisions"
     )
 
-    command = st.text_input(
-        "What would you like Smart Farm AI to do?",
-        placeholder=(
-            "Example: Record a ₦120,000 maize sale"
-        ),
-        key=input_key
-    )
+    # --------------------------------------------------------
+    # CHAT HISTORY
+    # --------------------------------------------------------
 
-    if st.button(
-        "Send",
-        key=f"{prefix}_send",
-        type="primary",
-        use_container_width=True
-    ):
+    for message in history[
+        -10:
+    ]:
 
-        clean_command = (
-            command
-            or ""
-        ).strip()
-
-        if not clean_command:
-
-            st.warning(
-                "Enter a farm question or action."
-            )
-
-        else:
-
-            action = (
-                parse_farm_action_command(
-                    clean_command
-                )
-            )
-
-            # Safety guard:
-            # the parser must always return a dictionary.
-            if not isinstance(
-                action,
-                dict
-            ):
-                action = {
-                    "intent": "general",
-                    "requires_confirmation": False,
-                    "message": (
-                        "I understood your message, "
-                        "but I could not determine the farm action. "
-                        "Try: 'Record maize sale 1200', "
-                        "'Record fertilizer expense 3000', "
-                        "'Calculate my profit', or "
-                        "'What should I do today?'"
-                    )
-                }
-
-            if action.get(
-                "requires_confirmation",
-                False
-            ):
-
-                st.session_state[
-                    pending_key
-                ] = action
-
-                st.session_state[
-                    history_key
-                ].append(
-                    {
-                        "role": "user",
-                        "text": clean_command
-                    }
-                )
-
-            else:
-
-                result = (
-                    execute_farm_action(
-                        action
-                    )
-                )
-
-                st.session_state[
-                    history_key
-                ].append(
-                    {
-                        "role": "user",
-                        "text": clean_command
-                    }
-                )
-
-                st.session_state[
-                    history_key
-                ].append(
-                    {
-                        "role": "assistant",
-                        "text": result.get(
-                            "message",
-                            ""
-                        )
-                    }
-                )
-
-            st.rerun()
-
-    # ========================================================
-    # CONFIRM WRITE ACTION
-    # ========================================================
-    pending = st.session_state.get(
-        pending_key
-    )
-
-    if pending:
-
-        code, symbol = get_farm_currency(
-            context["country"]
+        role = message.get(
+            "role",
+            "assistant"
         )
 
-        intent = pending.get(
+        content = message.get(
+            "content",
+            ""
+        )
+
+        with st.chat_message(
+            role
+        ):
+
+            st.markdown(
+                content
+            )
+
+    # ========================================================
+    # PENDING WRITE ACTION CONFIRMATION
+    # ========================================================
+
+    pending_action = (
+        st.session_state.get(
+            pending_key
+        )
+    )
+
+    if isinstance(
+        pending_action,
+        dict
+    ):
+
+        intent = pending_action.get(
             "intent"
         )
 
         if intent == "record_sale":
 
-            amount = pending.get(
+            amount = pending_action.get(
                 "amount",
                 0
             )
 
-            st.warning(
-                f"Confirm sale for "
-                f"{context['farm_name']}: "
-                f"{symbol}{amount:,.2f} {code}"
+            product = pending_action.get(
+                "product",
+                "Farm Produce"
+            )
+
+            confirmation_text = (
+                f"Record sale of {product} "
+                f"for {float(amount):,.2f}?"
             )
 
         elif intent == "record_expense":
 
-            amount = pending.get(
+            amount = pending_action.get(
                 "amount",
                 0
             )
 
-            category = pending.get(
+            category = pending_action.get(
                 "category",
                 "Other"
             )
 
-            st.warning(
-                f"Confirm {category} expense for "
-                f"{context['farm_name']}: "
-                f"{symbol}{amount:,.2f} {code}"
+            confirmation_text = (
+                f"Record {category} expense "
+                f"of {float(amount):,.2f}?"
             )
+
+        else:
+
+            confirmation_text = (
+                "Confirm this farm action?"
+            )
+
+        st.warning(
+            confirmation_text
+        )
 
         confirm_col, cancel_col = (
             st.columns(2)
@@ -8717,31 +8678,37 @@ def farm_action_chatbot_ui(
         with confirm_col:
 
             if st.button(
-                "✅ Confirm",
-                key=f"{prefix}_confirm",
+                "✅ Confirm Action",
+                key=(
+                    f"confirm_farm_ai_"
+                    f"{surface}"
+                ),
+                type="primary",
                 use_container_width=True
             ):
 
                 result = (
                     execute_farm_action(
-                        pending
+                        pending_action
                     )
                 )
-                st.session_state[
-                    history_key
-                ].append(
+
+                history.append(
                     {
-                        "role": "assistant",
-                        "text": result.get(
-                            "message",
-                            ""
-                        )
+                        "role":
+                            "assistant",
+                            "content":
+                            result.get(
+                                "message",
+                                "Action completed."
+                            )
                     }
                 )
 
-                st.session_state[
-                    pending_key
-                ] = None
+                st.session_state.pop(
+                    pending_key,
+                    None
+                )
 
                 st.rerun()
 
@@ -8749,62 +8716,362 @@ def farm_action_chatbot_ui(
 
             if st.button(
                 "❌ Cancel",
-                key=f"{prefix}_cancel",
+                key=(
+                    f"cancel_farm_ai_"
+                    f"{surface}"
+                ),
                 use_container_width=True
             ):
 
-                st.session_state[
-                    pending_key
-                ] = None
+                st.session_state.pop(
+                    pending_key,
+                    None
+                )
 
-                st.session_state[
-                    history_key
-                ].append(
+                history.append(
                     {
-                        "role": "assistant",
-                        "text": (
-                            "Action cancelled. "
-                            "No farm record was changed."
-                        )
+                        "role":
+                            "assistant",
+
+                        "content":
+                            "Action cancelled."
                     }
                 )
 
                 st.rerun()
 
     # ========================================================
-    # CONVERSATION
+    # FEATURE ACTION TRIGGERS
     # ========================================================
-    history = st.session_state.get(
-        history_key,
-        []
+
+    suggestions = (
+        st.session_state.get(
+            suggestion_key,
+            []
+        )
+        or []
     )
 
-    if history:
+    if suggestions:
 
-        messages = (
-            history[-6:]
-            if compact
-            else history
+        st.markdown(
+            "#### Recommended Smart Farm AI Tools"
         )
 
-        for item in messages:
+        visible_suggestions = (
+            suggestions[
+                :3
+            ]
+        )
 
-            role = item.get(
-                "role",
-                "assistant"
+        columns = st.columns(
+            len(
+                visible_suggestions
             )
+        )
 
-            text = item.get(
-                "text",
-                ""
-            )
+        for index, feature in enumerate(
+            visible_suggestions
+        ):
 
-            with st.chat_message(
-                role
-            ):
-                st.write(
-                    text
+            with columns[
+                index
+            ]:
+
+                import html
+
+                title = html.escape(
+                    feature[
+                        "title"
+                    ]
                 )
+
+                description = html.escape(
+                    feature[
+                        "description"
+                    ]
+                )
+
+                icon = feature[
+                    "icon"
+                ]
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        border: 1px solid rgba(120,120,120,0.20);
+                        border-radius: 16px;
+                        padding: 14px;
+                        margin-bottom: 8px;
+                        min-height: 118px;
+                    ">
+                        <div style="
+                            font-size: 19px;
+                            font-weight: 700;
+                            margin-bottom: 7px;
+                        ">
+                            {icon} {title}
+                        </div>
+
+                        <div style="
+                            font-size: 13px;
+                            line-height: 1.45;
+                            opacity: 0.78;
+                        ">
+                            {description}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                if st.button(
+                    f"Open {feature['title']}",
+                    key=(
+                        f"farm_ai_open_"
+                        f"{surface}_"
+                        f"{index}_"
+                        f"{feature['destination']}"
+                    ),
+                    use_container_width=True
+                ):
+
+                    open_smart_farm_feature(
+                        feature[
+                            "destination"
+                        ]
+                    )
+
+    # ========================================================
+    # FARMER INPUT
+    # ========================================================
+
+    command = st.chat_input(
+        (
+            "Ask about your farm or tell "
+            "Smart Farm AI what to do..."
+        ),
+        key=(
+            f"farm_ai_chat_input_"
+            f"{surface}"
+        )
+    )
+    if not command:
+        return
+
+    command = command.strip()
+
+    if not command:
+        return
+
+    history.append(
+        {
+            "role": "user",
+            "content": command
+        }
+    )
+
+    # ========================================================
+    # 1. DIRECT NAVIGATION
+    # ========================================================
+
+    navigation_feature = (
+        farm_assistant_navigation_request(
+            command
+        )
+    )
+
+    if navigation_feature:
+
+        history.append(
+            {
+                "role":
+                    "assistant",
+
+                "content":
+                    (
+                        f"Opening "
+                        f"{navigation_feature['title']} "
+                        f"for you."
+                    )
+            }
+        )
+
+        st.session_state[
+            "dashboard_pending_navigation"
+        ] = navigation_feature[
+            "destination"
+        ]
+
+        st.rerun()
+
+    # ========================================================
+    # 2. FARM ACTION PARSER
+    # ========================================================
+
+    action = (
+        parse_farm_action_command(
+            command
+        )
+    )
+
+    if not isinstance(
+        action,
+        dict
+    ):
+
+        action = {
+            "intent": "general",
+            "requires_confirmation": False
+        }
+
+    intent = action.get(
+        "intent",
+        "general"
+    )
+
+    # --------------------------------------------------------
+    # WRITE ACTIONS NEED CONFIRMATION
+    # --------------------------------------------------------
+
+    if (
+        action.get(
+            "requires_confirmation",
+            False
+        )
+        and intent in (
+            "record_sale",
+            "record_expense"
+        )
+    ):
+
+        st.session_state[
+            pending_key
+        ] = action
+
+        history.append(
+            {
+                "role":
+                    "assistant",
+
+                "content":
+                    (
+                        "I understood the record you want "
+                        "to save. Please confirm the action "
+                        "below before I change your farm records."
+                    )
+            }
+        )
+
+        st.rerun()
+
+    # --------------------------------------------------------
+    # NEED MORE INFORMATION
+    # --------------------------------------------------------
+
+    if intent == (
+        "need_more_info"
+    ):
+
+        history.append(
+            {
+                "role":
+                    "assistant",
+
+                "content":
+                    action.get(
+                        "message",
+                        "I need a little more information."
+                    )
+            }
+        )
+
+        st.rerun()
+
+    # --------------------------------------------------------
+    # READ-ONLY FARM ACTIONS
+    # --------------------------------------------------------
+
+    if intent in (
+        "calculate_profit",
+        "check_stock",
+        "get_alerts",
+        "irrigation",
+        "priorities"
+    ):
+
+        result = (
+            execute_farm_action(
+                action
+            )
+        )
+
+        answer = result.get(
+            "message",
+            "Done."
+        )
+
+        history.append(
+            {
+                "role":
+                    "assistant",
+
+                "content":
+                    answer
+            }
+        )
+
+        suggestions = (
+            farm_assistant_find_features(
+                command
+                + " "
+                + answer,
+                limit=3
+            )
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = suggestions
+
+        st.rerun()
+
+    # ========================================================
+    # 3. OPEN FARMING / APP INTELLIGENCE
+    # ========================================================
+
+    answer = (
+        farm_ai_guidance_answer(
+            command,
+            history
+        )
+    )
+
+    history.append(
+        {
+            "role": "assistant",
+            "content": answer
+        }
+    )
+
+    # --------------------------------------------------------
+    # Detect features relevant to question + answer
+    # --------------------------------------------------------
+
+    suggested_features = (
+        farm_assistant_find_features(
+            command
+            + " "
+            + answer,
+            limit=3
+        )
+    )
+
+    st.session_state[
+        suggestion_key
+    ] = suggested_features
+
+    st.rerun()
 
 
 def smart_tutor_voice():
@@ -20517,105 +20784,123 @@ def farmer_command_centre_ui():
                 else "Not connected"
             )
         )
-
+        
+        # ========================================================
+    # QUICK ACTIONS
     # ========================================================
-    # QUICK ACTION NAVIGATION
-    # ========================================================
-    st.divider()
 
     st.subheader(
         "⚡ Quick Actions"
     )
 
-    def navigate_to(destination):
+    quick_actions = [
+        {
+            "title":
+                "Live Sensors",
 
-        st.session_state[
-            "dashboard_pending_navigation"
-        ] = destination
+            "icon":
+                "📡",
 
-        st.rerun()
+            "destination":
+                "📡 Live Sensor Dashboard"
+        },
 
-    q1, q2, q3 = st.columns(
-        3
+        {
+            "title":
+                "Performance",
+
+            "icon":
+                "📍",
+
+            "destination":
+                "📍 Farm Performance Indicators"
+        },
+
+        {
+            "title":
+                "Crop Calendar",
+
+            "icon":
+                "🤖",
+
+            "destination":
+                "🤖 AI Crop Calendar"
+        },
+
+        {
+            "title":
+                "AI Farm Tips",
+
+            "icon":
+                "📚",
+
+            "destination":
+                "📚 AI Farm Tips"
+        }
+    ]
+
+    quick_columns = st.columns(
+        4
     )
 
-    with q1:
+    for index, action in enumerate(
+        quick_actions
+    ):
 
-        if st.button(
-            "🧪 Crop Diagnosis",
-            key=ck(
-                "quick_disease"
-            ),
-            use_container_width=True
-        ):
+        with quick_columns[
+            index
+        ]:
 
-            navigate_to(
-                "🧪 AI Predictions"
+            st.markdown(
+                f"""
+                <div style="
+                    border: 1px solid rgba(120,120,120,0.18);
+                    border-radius: 16px;
+                    padding: 13px;
+                    text-align: center;
+                    min-height: 78px;
+                    margin-bottom: 7px;
+                ">
+                    <div style="
+                        font-size: 26px;
+                        margin-bottom: 4px;
+                    ">
+                        {action['icon']}
+                    </div>
+
+                    <div style="
+                        font-size: 14px;
+                        font-weight: 700;
+                    ">
+                        {action['title']}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
-        if st.button(
-            "💧 Check Irrigation",
-            key=ck(
-                "quick_irrigation"
-            ),
-            use_container_width=True
-        ):
+            if st.button(
+                "Open",
+                key=(
+                    f"dashboard_quick_"
+                    f"{index}"
+                ),
+                use_container_width=True
+            ):
 
-            navigate_to(
-                "💧 Irrigation & Soil"
-            )
+                st.session_state[
+                    "dashboard_pending_navigation"
+                ] = action[
+                    "destination"
+                ]
 
-    with q2:
+                st.rerun() 
+        
 
-        if st.button(
-            "📊 Farm Records",
-            key=ck(
-                "quick_records"
-            ),
-            use_container_width=True
-        ):
 
-            navigate_to(
-                "📊 Productivity & Records"
-            )
 
-        if st.button(
-            "💰 Profit & Loss",
-            key=ck(
-                "quick_profit"
-            ),
-            use_container_width=True
-        ):
 
-            navigate_to(
-                "📊 Farm Profit & Loss Statement"
-            )
-
-    with q3:
-
-        if st.button(
-            "🚨 View Alerts",
-            key=ck(
-                "quick_alerts"
-            ),
-            use_container_width=True
-        ):
-
-            navigate_to(
-                "🚨 Smart Farm Alerts"
-            )
-
-        if st.button(
-            "📡 Live Sensors",
-            key=ck(
-                "quick_sensors"
-            ),
-            use_container_width=True
-        ):
-
-            navigate_to(
-                "📡 Live Sensor Dashboard"
-            )
+   
 
     # ========================================================
     # FARM INTELLIGENCE SUMMARY
