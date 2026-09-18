@@ -6375,12 +6375,111 @@ def _save_action_dataset(
     return False
 
 
+
+
 # ============================================================
-# RECORD SALE
+# 🔄 SHARED FARM RECORD SYNCHRONIZATION
+# ============================================================
+
+def _farm_shared_dataframe(
+    name,
+    columns
+):
+    import pandas as pd
+
+    current_df = st.session_state.get(
+        name
+    )
+
+    if isinstance(
+        current_df,
+        pd.DataFrame
+    ):
+        return current_df.copy()
+
+    return pd.DataFrame(
+        columns=columns
+    )
+
+
+def _sync_farm_dataset(
+    name,
+    dataframe
+):
+    """
+    Keep chatbot actions and normal Smart Farm AI
+    features on the SAME dataframe.
+    """
+
+    # --------------------------------------------------------
+    # Update live Streamlit state first
+    # --------------------------------------------------------
+
+    st.session_state[
+        name
+    ] = dataframe
+
+    saved = False
+
+    # --------------------------------------------------------
+    # Use normal application storage when available
+    # --------------------------------------------------------
+
+    normal_saver = globals().get(
+        "save_data"
+    )
+
+    if callable(
+        normal_saver
+    ):
+
+        try:
+
+            normal_saver(
+                name,
+                dataframe
+            )
+
+            saved = True
+
+        except Exception:
+            pass
+
+    # --------------------------------------------------------
+    # Fall back to Farm Action storage
+    # --------------------------------------------------------
+
+    if not saved:
+
+        action_saver = globals().get(
+            "_save_action_dataset"
+        )
+
+        if callable(
+            action_saver
+        ):
+
+            try:
+
+                action_saver(
+                    name,
+                    dataframe
+                )
+
+                saved = True
+
+            except Exception:
+                pass
+
+    return saved
+
+
+# ============================================================
+# 💰 RECORD SALE — SHARED WITH PRODUCTIVITY
 # ============================================================
 
 def farm_action_record_sale(
-    amount,
+    amount=None,
     product=None,
     quantity=None,
     unit="transaction",
@@ -6388,56 +6487,119 @@ def farm_action_record_sale(
     buyer="",
     notes=""
 ):
-    import streamlit as st
     import pandas as pd
-    from datetime import date
+    from datetime import datetime
 
-    context = get_farm_action_context()
-
-    amount = _farm_number(
-        amount
+    context = (
+        get_farm_action_context()
+        or {}
     )
 
+    farmer_name = (
+        st.session_state.get(
+            "current_user"
+        )
+        or context.get(
+            "farmer_name"
+        )
+        or context.get(
+            "name"
+        )
+        or "Farmer"
+    )
+
+    product = (
+        product
+        or context.get(
+            "crop"
+        )
+        or context.get(
+            "crop_type"
+        )
+        or "Farm Produce"
+    )
+
+    amount_value = (
+        _farm_number(
+            amount
+        )
+        if amount is not None
+        else None
+    )
+
+    quantity_value = (
+        _farm_number(
+            quantity
+        )
+        if quantity is not None
+        else None
+    )
+
+    unit_price_value = (
+        _farm_number(
+            unit_price
+        )
+        if unit_price is not None
+        else None
+    )
+
+    # --------------------------------------------------------
+    # Calculate total when quantity × unit price was supplied
+    # --------------------------------------------------------
+
     if (
-        amount is None
-        or amount <= 0
+        (
+            amount_value is None
+            or amount_value <= 0
+        )
+        and quantity_value
+        and unit_price_value
     ):
+
+        amount_value = (
+            quantity_value
+            * unit_price_value
+        )
+
+    if (
+        amount_value is None
+        or amount_value <= 0
+    ):
+
         return {
             "ok": False,
             "message": (
-                "The sale amount must be "
-                "greater than zero."
+                "I need a valid sale amount "
+                "before I can save this record."
             )
         }
 
-    if not product:
-        product = context["crop"]
+    # --------------------------------------------------------
+    # Provide sensible values when only total was given
+    # --------------------------------------------------------
 
     if (
-        not product
-        or product == "Not specified"
+        quantity_value is None
+        or quantity_value <= 0
     ):
-        product = "Farm produce"
+        quantity_value = 1.0
 
-    if quantity is None:
-        quantity = 1.0
+        if unit == "transaction":
+            unit = "transaction"
 
-    quantity = _farm_number(
-        quantity
-    ) or 1.0
+    if (
+        unit_price_value is None
+        or unit_price_value <= 0
+    ):
 
-    if unit_price is None:
-        unit_price = (
-            amount / quantity
-            if quantity > 0
-            else amount
+        unit_price_value = (
+            amount_value
+            / quantity_value
         )
 
-    sales_columns = [
+    columns = [
         "date",
         "farmer",
-        "farm_id",
-        "farm_name",
         "product",
         "quantity",
         "unit",
@@ -6447,118 +6609,129 @@ def farm_action_record_sale(
         "notes"
     ]
 
-    sales = st.session_state.get(
-        "sales"
-    )
-
-    if not isinstance(
-        sales,
-        pd.DataFrame
-    ):
-        sales = pd.DataFrame(
-            columns=sales_columns
+    sales_df = (
+        _farm_shared_dataframe(
+            "sales",
+            columns
         )
-
-    for column in sales_columns:
-        if column not in sales.columns:
-            sales[column] = ""
-
-    new_sale = pd.DataFrame(
-        [
-            {
-                "date": date.today(),
-                "farmer": context[
-                    "farmer_name"
-                ],
-                "farm_id": context[
-                    "farm_id"
-                ],
-                "farm_name": context[
-                    "farm_name"
-                ],
-                "product": product,
-                "quantity": quantity,
-                "unit": unit,
-                "unit_price": float(
-                    unit_price
-                ),
-                "total": float(
-                    amount
-                ),
-                "buyer": buyer,
-                "notes": notes
-            }
-        ]
     )
 
-    sales = pd.concat(
+    new_record = {
+        "date":
+            datetime.now().strftime(
+                "%Y-%m-%d"
+            ),
+
+        "farmer":
+            farmer_name,
+
+        "product":
+            str(product),
+
+        "quantity":
+            float(quantity_value),
+
+        "unit":
+            str(unit),
+
+        "unit_price":
+            float(unit_price_value),
+
+        "total":
+            float(amount_value),
+
+        "buyer":
+            str(buyer or ""),
+
+        "notes":
+            str(notes or "")
+    }
+
+    sales_df = pd.concat(
         [
-            sales,
-            new_sale
+            sales_df,
+            pd.DataFrame(
+                [
+                    new_record
+                ]
+            )
         ],
         ignore_index=True
     )
 
-    persisted = _save_action_dataset(
+    _sync_farm_dataset(
         "sales",
-        sales
-    )
-
-    code, symbol = get_farm_currency(
-        context["country"]
+        sales_df
     )
 
     return {
         "ok": True,
-        "persisted": persisted,
         "message": (
-            f"✅ Sale recorded for "
-            f"{context['farm_name']}. "
-            f"{product}: "
-            f"{symbol}{amount:,.2f} "
-            f"({code})."
-        )
+            f"✅ Sale recorded successfully: "
+            f"{product} — "
+            f"{amount_value:,.2f}. "
+            f"It is now available in "
+            f"Productivity & Records."
+        ),
+        "record": new_record
     }
 
-
-# ============================================================
-# RECORD EXPENSE
+    # ============================================================
+# 💳 RECORD EXPENSE — SHARED WITH PRODUCTIVITY
 # ============================================================
 
 def farm_action_record_expense(
-    amount,
+    amount=None,
     category="Other",
     description="",
-    payment_method="Other",
+    payment_method="",
     notes=""
 ):
-    import streamlit as st
     import pandas as pd
-    from datetime import date
+    from datetime import datetime
 
-    context = get_farm_action_context()
+    context = (
+        get_farm_action_context()
+        or {}
+    )
 
-    amount = _farm_number(
-        amount
+    farmer_name = (
+        st.session_state.get(
+            "current_user"
+        )
+        or context.get(
+            "farmer_name"
+        )
+        or context.get(
+            "name"
+        )
+        or "Farmer"
+    )
+
+    amount_value = (
+        _farm_number(
+            amount
+        )
+        if amount is not None
+        else None
     )
 
     if (
-        amount is None
-        or amount <= 0
+        amount_value is None
+        or amount_value <= 0
     ):
+
         return {
             "ok": False,
             "message": (
-                "The expense amount must "
-                "be greater than zero."
+                "I need a valid expense amount "
+                "before I can save this record."
             )
         }
 
-    expense_columns = [
+    columns = [
         "date",
         "farmer",
-        "farm_id",
-        "farm_name",
         "category",
         "description",
         "amount",
@@ -6566,74 +6739,81 @@ def farm_action_record_expense(
         "notes"
     ]
 
-    expenses = st.session_state.get(
-        "expenses"
-    )
-    if not isinstance(
-        expenses,
-        pd.DataFrame
-    ):
-        expenses = pd.DataFrame(
-            columns=expense_columns
+    expenses_df = (
+        _farm_shared_dataframe(
+            "expenses",
+            columns
         )
-
-    for column in expense_columns:
-        if column not in expenses.columns:
-            expenses[column] = ""
-
-    new_expense = pd.DataFrame(
-        [
-            {
-                "date": date.today(),
-                "farmer": context[
-                    "farmer_name"
-                ],
-                "farm_id": context[
-                    "farm_id"
-                ],
-                "farm_name": context[
-                    "farm_name"
-                ],
-                "category": category,
-                "description": description,
-                "amount": float(
-                    amount
-                ),
-                "payment_method":
-                    payment_method,
-                "notes": notes
-            }
-        ]
     )
 
-    expenses = pd.concat(
+    new_record = {
+        "date":
+            datetime.now().strftime(
+                "%Y-%m-%d"
+            ),
+
+        "farmer":
+            farmer_name,
+
+        "category":
+            str(
+                category
+                or "Other"
+            ),
+
+        "description":
+            str(
+                description
+                or ""
+            ),
+
+        "amount":
+            float(
+                amount_value
+            ),
+
+        "payment_method":
+            str(
+                payment_method
+                or ""
+            ),
+
+        "notes":
+            str(
+                notes
+                or ""
+            )
+    }
+
+    expenses_df = pd.concat(
         [
-            expenses,
-            new_expense
+            expenses_df,
+            pd.DataFrame(
+                [
+                    new_record
+                ]
+            )
         ],
         ignore_index=True
     )
 
-    persisted = _save_action_dataset(
+    _sync_farm_dataset(
         "expenses",
-        expenses
-    )
-
-    code, symbol = get_farm_currency(
-        context["country"]
+        expenses_df
     )
 
     return {
         "ok": True,
-        "persisted": persisted,
         "message": (
-            f"✅ Expense recorded for "
-            f"{context['farm_name']}. "
-            f"{category}: "
-            f"{symbol}{amount:,.2f} "
-            f"({code})."
-        )
+            f"✅ {category} expense of "
+            f"{amount_value:,.2f} was recorded. "
+            f"It is now available in "
+            f"Productivity & Records."
+        ),
+        "record": new_record
     }
+
+
 
 
 # ============================================================
@@ -7670,6 +7850,667 @@ def execute_farm_action(
             "I need more information."
         )
     }
+
+
+# ============================================================
+# 🧭 SMART FARM AI FEATURE NAVIGATION ENGINE
+# ============================================================
+
+FARM_ASSISTANT_FEATURES = [
+
+    {
+        "title": "Farm Management",
+        "icon": "🌿",
+        "destination": "🌿 Farm Management",
+        "description": "Manage crops, equipment, labour and farm operations.",
+        "keywords": (
+            "farm management",
+            "equipment",
+            "labour",
+            "labor",
+            "farm record",
+            "crop record"
+        )
+    },
+
+    {
+        "title": "Productivity & Records",
+        "icon": "📊",
+        "destination": "📊 Productivity & Records",
+        "description": "View sales, expenses, productivity and farm records.",
+        "keywords": (
+            "productivity",
+            "sales",
+            "sale",
+            "expense",
+            "expenses",
+            "records",
+            "farmer record"
+        )
+    },
+
+    {
+        "title": "Irrigation & Soil",
+        "icon": "💧",
+        "destination": "💧 Irrigation & Soil",
+        "description": "Check soil condition, moisture and water use.",
+        "keywords": (
+            "soil",
+            "soil health",
+            "soil moisture",
+            "water usage",
+            "ph",
+            "nitrogen",
+            "phosphorus",
+            "potassium"
+        )
+    },
+
+    {
+        "title": "Profit & Loss",
+        "icon": "📊",
+        "destination": "📊 Farm Profit & Loss Statement",
+        "description": "Review farm income, costs and profitability.",
+        "keywords": (
+            "profit",
+            "loss",
+            "income",
+            "financial statement",
+            "profit and loss",
+            "profit & loss"
+        )
+    },
+
+    {
+        "title": "Calendar & Seasons",
+        "icon": "📅",
+        "destination": "📅 Calendar & Seasons",
+        "description": "Plan planting, harvesting and seasonal activities.",
+        "keywords": (
+            "season",
+            "planting calendar",
+            "harvest",
+            "seasonal task",
+            "calendar"
+        )
+    },
+
+    {
+        "title": "AI Predictions",
+        "icon": "🧪",
+        "destination": "🧪 AI Predictions",
+        "description": "Use crop, yield, disease and soil intelligence.",
+        "keywords": (
+            "prediction",
+            "predict",
+            "disease",
+            "yield prediction",
+            "crop disease",
+            "soil prediction"
+        )
+    },
+
+    {
+        "title": "AI Farm Tips",
+        "icon": "📚",
+        "destination": "📚 AI Farm Tips",
+        "description": "Get practical farming knowledge and guidance.",
+        "keywords": (
+            "tips",
+            "farm tips",
+            "advice",
+            "guidance",
+            "teach",
+            "learn"
+        )
+    },
+
+    {
+        "title": "Market & Economic Tools",
+        "icon": "📈",
+        "destination": "📈 Market & Economic Tools",
+        "description": "Review prices, ROI, budgets and market decisions.",
+        "keywords": (
+            "market",
+            "price",
+            "roi",
+            "budget",
+            "break even",
+            "economics"
+        )
+    },
+
+    {
+        "title": "Smart Fertilizer & Pesticide",
+        "icon": "🧪",
+        "destination": "🧪 Smart Fertilizer & Pesticide",
+        "description": "Manage fertilizer, pesticide and input stock.",
+        "keywords": (
+            "fertilizer",
+            "fertiliser",
+            "pesticide",
+            "chemical",
+            "stock",
+            "low stock"
+        )
+    },
+
+    {
+        "title": "Live Sensor Dashboard",
+        "icon": "📡",
+        "destination": "📡 Live Sensor Dashboard",
+        "description": "View connected farm sensor information.",
+        "keywords": (
+            "sensor",
+            "sensors",
+            "temperature",
+            "humidity",
+            "live data",
+            "iot"
+        )
+    },
+
+    {
+        "title": "Irrigation Scheduler",
+        "icon": "💦",
+
+"destination": "💦 Irrigation Scheduler",
+        "description": "Plan irrigation timing and water use.",
+        "keywords": (
+            "irrigation scheduler",
+            "irrigate",
+            "irrigation",
+            "watering",
+            "water crop"
+        )
+    },
+
+    {
+        "title": "Smart Farm Alerts",
+        "icon": "🚨",
+        "destination": "🚨 Smart Farm Alerts",
+        "description": "Review farm risks, warnings and alerts.",
+        "keywords": (
+            "alert",
+            "alerts",
+            "warning",
+            "risk",
+            "emergency"
+        )
+    },
+
+    {
+        "title": "AI Crop Calendar",
+        "icon": "🤖",
+        "destination": "🤖 AI Crop Calendar",
+        "description": "Generate crop-specific farming schedules.",
+        "keywords": (
+            "ai crop calendar",
+            "crop calendar",
+            "crop schedule"
+        )
+    },
+
+    {
+        "title": "Decision-Making Models",
+        "icon": "📈",
+        "destination": "📈 Decision-Making Models",
+        "description": "Compare irrigation, fertilizer and rotation decisions.",
+        "keywords": (
+            "decision",
+            "decision model",
+            "rotation",
+            "recommend decision"
+        )
+    },
+
+    {
+        "title": "Farm Performance Indicators",
+        "icon": "📍",
+        "destination": "📍 Farm Performance Indicators",
+        "description": "Measure farm performance and progress.",
+        "keywords": (
+            "performance",
+            "indicator",
+            "kpi",
+            "farm performance"
+        )
+    },
+
+    {
+        "title": "User Account Management",
+        "icon": "🔒",
+        "destination": "🔒 User Account Management",
+        "description": "Review farmer account and registered information.",
+        "keywords": (
+            "account",
+            "profile",
+            "email",
+            "user account"
+        )
+    }
+]
+
+
+# ============================================================
+# FIND RELEVANT FEATURES
+# ============================================================
+
+def farm_assistant_find_features(
+    text,
+    limit=3
+):
+
+    lower = (
+        text
+        or ""
+    ).lower()
+
+    scored = []
+
+    for feature in (
+        FARM_ASSISTANT_FEATURES
+    ):
+
+        score = 0
+
+        title = feature[
+            "title"
+        ].lower()
+
+        if title in lower:
+            score += 5
+
+        for keyword in feature[
+            "keywords"
+        ]:
+
+            if keyword.lower() in lower:
+                score += 2
+
+        if score > 0:
+
+            scored.append(
+                (
+                    score,
+                    feature
+                )
+            )
+
+    scored.sort(
+        key=lambda item: item[0],
+        reverse=True
+    )
+
+    return [
+        item[1]
+        for item in scored[
+            :limit
+        ]
+    ]
+
+
+# ============================================================
+# DETECT DIRECT NAVIGATION
+# ============================================================
+
+def farm_assistant_navigation_request(
+    text
+):
+
+    lower = (
+        text
+        or ""
+    ).lower()
+
+    navigation_words = (
+        "open",
+        "go to",
+        "take me",
+        "navigate",
+        "show me the",
+        "bring me to"
+    )
+
+    if not any(
+        word in lower
+        for word in navigation_words
+    ):
+        return None
+
+    matches = (
+        farm_assistant_find_features(
+            text,
+            limit=1
+        )
+    )
+
+    if matches:
+        return matches[0]
+
+    return None
+
+
+# ============================================================
+# OPEN FEATURE
+# ============================================================
+
+def open_smart_farm_feature(
+    destination
+):
+
+    st.session_state[
+        "dashboard_pending_navigation"
+    ] = destination
+
+    st.rerun()
+
+
+# ============================================================
+# FARM CONTEXT FOR AI
+# ============================================================
+
+def build_farm_assistant_context():
+    context = (
+        get_farm_action_context()
+        or {}
+    )
+
+    profile = (
+        st.session_state.get(
+            "farmer_profile",
+            {}
+        )
+        or {}
+    )
+
+    current_farm = (
+        st.session_state.get(
+            "current_farm",
+            {}
+        )
+        or {}
+    )
+
+    farmer_name = (
+        st.session_state.get(
+            "registered_name"
+        )
+        or st.session_state.get(
+            "current_user"
+        )
+        or "Farmer"
+    )
+
+    crop = (
+        current_farm.get(
+            "crop_type"
+        )
+        or profile.get(
+            "main_crop"
+        )
+        or context.get(
+            "crop"
+        )
+        or "Unknown"
+    )
+
+    location = (
+        current_farm.get(
+            "location"
+        )
+        or profile.get(
+            "location"
+        )
+        or "Unknown"
+    )
+
+    country = (
+        current_farm.get(
+            "country"
+        )
+        or profile.get(
+            "country"
+        )
+        or "Unknown"
+    )
+
+    farm_type = (
+        current_farm.get(
+            "farm_type"
+        )
+        or profile.get(
+            "farm_type"
+        )
+        or "Unknown"
+    )
+
+    experience = (
+        profile.get(
+            "farming_experience"
+        )
+        or profile.get(
+            "experience"
+        )
+        or "Unknown"
+    )
+
+    return {
+        "farmer_name":
+            farmer_name,
+
+        "crop":
+            crop,
+
+        "location":
+            location,
+
+        "country":
+            country,
+
+        "farm_type":
+            farm_type,
+
+        "experience":
+            experience
+    }
+
+
+    # ============================================================
+# 🧠 SMART FARM AI — OPEN FARM GUIDANCE
+# ============================================================
+
+def farm_ai_guidance_answer(
+    question,
+    conversation=None
+):
+
+    context = (
+        build_farm_assistant_context()
+    )
+
+    # --------------------------------------------------------
+    # Prepare relevant Smart Farm features
+    # --------------------------------------------------------
+
+    feature_names = ", ".join(
+        feature["title"]
+        for feature in FARM_ASSISTANT_FEATURES
+    )
+
+    recent_history = ""
+
+    if conversation:
+
+        recent_items = conversation[
+            -6:
+        ]
+
+        recent_history = "\n".join(
+            (
+                f"{item.get('role', 'user')}: "
+                f"{item.get('content', '')}"
+            )
+            for item in recent_items
+        )
+
+    # --------------------------------------------------------
+    # API key
+    # --------------------------------------------------------
+
+    try:
+
+        api_key = (
+            st.secrets[
+                "openai"
+            ][
+                "api_key"
+            ]
+        )
+
+    except Exception:
+
+        api_key = None
+
+    # --------------------------------------------------------
+    # LOCAL FALLBACK WHEN AI API IS NOT CONNECTED
+    # --------------------------------------------------------
+
+    if not api_key:
+
+        matches = (
+            farm_assistant_find_features(
+                question,
+                limit=3
+            )
+        )
+
+        if matches:
+
+            names = ", ".join(
+                feature[
+                    "title"
+                ]
+                for feature in matches
+            )
+
+            return (
+                "I can help you with that. "
+                f"Based on your request, the most relevant "
+                f"Smart Farm AI tools are: {names}. "
+                "Use the buttons below to open the one "
+                "you want."
+            )
+
+        return (
+            "I can perform farm actions, explain how to use "
+            "Smart Farm AI and recommend features. "
+            "The open-ended agricultural AI service is not "
+            "connected yet, so connect the AI API to enable "
+            "full conversational farming guidance."
+        )
+
+    # --------------------------------------------------------
+    # OPENAI AI FALLBACK
+    # --------------------------------------------------------
+
+    try:
+
+        from openai import OpenAI
+
+        try:
+
+            model_name = (
+                st.secrets[
+                    "openai"
+                ].get(
+                    "model",
+                    "gpt-5.6-luna"
+                )
+            )
+
+        except Exception:
+
+            model_name = (
+                "gpt-5.6-luna"
+            )
+
+        client = OpenAI(
+            api_key=api_key
+        )
+
+        instructions = f"""
+You are Smart Farm AI, an intelligent agricultural copilot.
+
+Your job is to help farmers understand their farm,
+make better agricultural decisions and use Smart Farm AI.
+
+Current farm context:
+Farmer: {context['farmer_name']}
+Crop: {context['crop']}
+Country: {context['country']}
+Location: {context['location']}
+Farm type: {context['farm_type']}
+Experience: {context['experience']}
+
+Smart Farm AI features available:
+{feature_names}
+
+Rules:
+- Give practical and understandable farming guidance.
+- Adapt explanations to the farmer's crop and experience.
+- Do not invent live sensor readings, weather values,
+  disease results or financial records.
+- Clearly say when real measurements or inspection are needed.
+- Explain WHAT to do, WHY it matters and the NEXT action.
+- When relevant, recommend up to three Smart Farm AI features
+  using their exact feature names.
+- Do not claim that you saved, deleted or changed a record.
+  Actual app actions are handled separately by the action engine.
+- For potentially dangerous chemical or pesticide decisions,
+tell the farmer to follow product labels and local agricultural
+  guidance and avoid guessing application rates.
+- Keep responses useful and reasonably concise.
+"""
+
+        user_input = f"""
+Recent conversation:
+{recent_history}
+
+Farmer question:
+{question}
+"""
+
+        response = (
+            client.responses.create(
+                model=model_name,
+                reasoning={
+                    "effort": "low"
+                },
+                instructions=instructions,
+                input=user_input
+            )
+        )
+
+        answer = (
+            response.output_text
+            or ""
+        ).strip()
+
+        if answer:
+            return answer
+
+    except Exception:
+
+        pass
+
+    return (
+        "I could not reach the agricultural AI service "
+        "right now. You can still ask me to record sales "
+        "or expenses, calculate profit, check alerts, "
+        "show priorities, or open Smart Farm AI features."
+    )
+
 
 
 # ============================================================
@@ -18366,65 +19207,6 @@ key=k2("main_menu_option")
 )
 
 
-# ------------------------------------------------------------
-# 7. Current Farm Context Bar
-# ------------------------------------------------------------
-
-if current_farm and menu_v2 != "🏡 Home":
-
-    farm_name = current_farm.get(
-        "farm_name",
-        "Current Farm"
-    )
-
-    crop_name = current_farm.get(
-        "crop_type",
-        "Not specified"
-    )
-
-    farm_location = current_farm.get(
-        "location",
-        "Not specified"
-    )
-
-    st.markdown(
-        f"""
-        <div style="
-            background: rgba(255,255,255,0.90);
-            padding: 14px 18px;
-            border-radius: 14px;
-            margin-bottom: 18px;
-            border-left: 5px solid #2e7d32;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        ">
-            <div style="
-                font-size: 13px;
-                color: #666;
-            ">
-                CURRENT FARM
-            </div>
-
-            <div style="
-                font-size: 22px;
-                font-weight: 700;
-                margin-top: 3px;
-            ">
-                🌱 {farm_name}
-            </div>
-
-            <div style="
-                font-size: 14px;
-                margin-top: 6px;
-                color: #555;
-            ">
-                🌾 Crop: {crop_name}
-                &nbsp;&nbsp;|&nbsp;&nbsp;
-                📍 Location: {farm_location}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
 
 
 # ============================================================
