@@ -8210,18 +8210,30 @@ def farm_assistant_navigation_request(
 
 
 # ============================================================
-# OPEN FEATURE
+# 🧭 SMART FARM AI — FEATURE NAVIGATION HELPER
 # ============================================================
 
 def open_smart_farm_feature(
     destination
 ):
+    """
+    Send the farmer to an existing Smart Farm AI feature.
+    """
+
+    destination = str(
+        destination or ""
+    ).strip()
+
+    if not destination:
+        return False
 
     st.session_state[
         "dashboard_pending_navigation"
     ] = destination
 
     st.rerun()
+
+    return True
 
 
 # ============================================================
@@ -8765,6 +8777,545 @@ def farm_ai_format_money(
         return str(value)
 
 
+# ============================================================
+# 🤖 SMART FARM AI COPILOT — MULTI-TURN SALE INTELLIGENCE
+# ============================================================
+
+def farm_ai_is_sale_request(
+    text
+):
+    """
+    Detect when the farmer wants to create a sale record.
+    """
+
+    clean_text = str(
+        text or ""
+    ).strip().lower()
+
+    sale_phrases = (
+        "record sale",
+        "record a sale",
+        "add sale",
+        "add a sale",
+        "add sales record",
+        "add sale record",
+        "sales record",
+        "save sale",
+        "record my sale",
+        "i sold",
+        "sold "
+    )
+
+    return any(
+        phrase in clean_text
+        for phrase in sale_phrases
+    )
+
+
+def farm_ai_normalize_sale_unit(
+    unit
+):
+    """
+    Normalize common farm sale units.
+    """
+
+    clean_unit = str(
+        unit or "transaction"
+    ).strip().lower()
+
+    unit_map = {
+        "kg": "kg",
+        "kgs": "kg",
+        "kilogram": "kg",
+        "kilograms": "kg",
+
+        "bag": "bag",
+        "bags": "bag",
+
+        "ton": "ton",
+        "tons": "ton",
+        "tonne": "ton",
+        "tonnes": "ton",
+
+        "crate": "crate",
+        "crates": "crate",
+
+        "unit": "unit",
+        "units": "unit",
+
+        "transaction": "transaction"
+    }
+
+    return unit_map.get(
+        clean_unit,
+        clean_unit
+    )
+
+
+def farm_ai_extract_sale_details(
+    text,
+    existing=None
+):
+    """
+    Extract sale information from natural farmer language.
+
+    Examples:
+    - 500 kg maize at 650
+    - 500 kg at 650
+    - maize
+    - total 325000
+    """
+
+    import re
+
+    data = dict(
+        existing
+        or {}
+    )
+
+    raw_text = str(
+        text or ""
+    ).strip()
+
+    clean_text = (
+        raw_text
+        .replace(",", "")
+    )
+
+    # --------------------------------------------------------
+    # QUANTITY + UNIT + PRODUCT + PRICE
+    # Example: 500 kg maize at 650
+    # --------------------------------------------------------
+
+    full_match = re.search(
+        r"(\d+(?:\.\d+)?)"
+        r"\s*"
+        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
+        r"\s+(?:of\s+)?"
+        r"([A-Za-z][A-Za-z\s\-]*?)"
+        r"\s+(?:at|@)\s*"
+        r"(\d+(?:\.\d+)?)",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if full_match:
+
+        quantity = float(
+            full_match.group(
+                1
+            )
+        )
+
+        unit = (
+            farm_ai_normalize_sale_unit(
+                full_match.group(
+                    2
+                )
+            )
+        )
+
+        product = (
+            full_match.group(
+                3
+            ).strip()
+        )
+
+        unit_price = float(
+            full_match.group(
+                4
+            )
+        )
+
+        data.update(
+            {
+                "quantity":
+                    quantity,
+
+                "unit":
+                    unit,
+
+                "product":
+                    product,
+
+                "unit_price":
+                    unit_price,
+
+                "amount":
+                    quantity
+                    * unit_price
+            }
+        )
+
+        return data
+
+    # --------------------------------------------------------
+    # QUANTITY + UNIT + PRICE
+    # Product may already be known.
+    # Example: 500 kg at 650
+    # --------------------------------------------------------
+
+    quantity_price_match = re.search(
+        r"(\d+(?:\.\d+)?)"
+        r"\s*"
+        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
+        r"\s+(?:at|@)\s*"
+        r"(\d+(?:\.\d+)?)",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if quantity_price_match:
+
+        quantity = float(
+            quantity_price_match.group(
+                1
+            )
+        )
+
+        unit = (
+            farm_ai_normalize_sale_unit(
+                quantity_price_match.group(
+                    2
+                )
+            )
+        )
+
+        unit_price = float(
+            quantity_price_match.group(
+                3
+            )
+        )
+        data.update(
+            {
+                "quantity":
+                    quantity,
+
+                "unit":
+                    unit,
+
+                "unit_price":
+                    unit_price,
+
+                "amount":
+                    quantity
+                    * unit_price
+            }
+        )
+
+    # --------------------------------------------------------
+    # EXPLICIT TOTAL
+    # Example: total 325000
+    # --------------------------------------------------------
+
+    total_match = re.search(
+        r"(?:total(?:\s+is)?|worth|for)"
+        r"\s*"
+        r"(\d+(?:\.\d+)?)",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if (
+        total_match
+        and not (
+            data.get(
+                "quantity"
+            )
+            and data.get(
+                "unit_price"
+            )
+        )
+    ):
+
+        data[
+            "amount"
+        ] = float(
+            total_match.group(
+                1
+            )
+        )
+
+    # --------------------------------------------------------
+    # SIMPLE PRODUCT FOLLOW-UP
+    # Example: maize
+    # --------------------------------------------------------
+
+    if not data.get(
+        "product"
+    ):
+
+        contains_number = bool(
+            re.search(
+                r"\d",
+                clean_text
+            )
+        )
+
+        word_count = len(
+            clean_text.split()
+        )
+
+        if (
+            not contains_number
+            and 1 <= word_count <= 3
+        ):
+
+            ignored_words = {
+                "yes",
+                "no",
+                "confirmed",
+                "confirm",
+                "correct",
+                "cancel",
+                "okay",
+                "ok"
+            }
+
+            if (
+                clean_text.lower()
+                not in ignored_words
+            ):
+
+                data[
+                    "product"
+                ] = clean_text.strip()
+
+    # --------------------------------------------------------
+    # ALWAYS TRUST QUANTITY × UNIT PRICE FOR CALCULATED TOTAL
+    # --------------------------------------------------------
+
+    if (
+        data.get(
+            "quantity"
+        )
+        and data.get(
+            "unit_price"
+        )
+    ):
+
+        data[
+            "amount"
+        ] = (
+            float(
+                data[
+                    "quantity"
+                ]
+            )
+            * float(
+                data[
+                    "unit_price"
+                ]
+            )
+        )
+
+    return data
+
+
+def farm_ai_sale_draft_message(
+    data
+):
+    """
+    Ask only for the information still missing.
+    """
+
+    product = data.get(
+        "product"
+    )
+
+    quantity = data.get(
+        "quantity"
+    )
+
+    unit_price = data.get(
+        "unit_price"
+    )
+
+    amount = data.get(
+        "amount"
+    )
+
+    if not product:
+
+        return (
+            "What did you sell? "
+            "For example: maize, cassava or rice."
+        )
+
+    if (
+        not quantity
+        or not unit_price
+    ) and not amount:
+
+        return (
+            f"Okay, {product}. "
+            "Tell me the quantity and selling price. "
+            "For example: 500 kg at 650."
+        )
+
+    return (
+        "I still need a little more information "
+        "before I can prepare this sale."
+    )
+
+
+def farm_ai_start_sale_draft(
+    initial_text=""
+):
+    """
+    Begin collecting a sale across multiple messages.
+    """
+
+    data = (
+        farm_ai_extract_sale_details(
+            initial_text,
+            {}
+        )
+    )
+
+    # --------------------------------------------------------
+    # COMPLETE SALE ALREADY PROVIDED
+    # --------------------------------------------------------
+
+    if (
+        data.get(
+            "product"
+        )
+        and data.get(
+            "amount"
+        )
+    ):
+
+        return (
+            farm_ai_prepare_sale_confirmation(
+                amount=data.get(
+                    "amount"
+                ),
+                product=data.get(
+                    "product"
+                ),
+                quantity=data.get(
+                    "quantity"
+                ),
+                unit=data.get(
+                    "unit",
+                    "transaction"
+                ),
+                unit_price=data.get(
+                    "unit_price"
+                )
+            )
+        )
+
+    # --------------------------------------------------------
+    # OTHERWISE REMEMBER INCOMPLETE SALE
+    # --------------------------------------------------------
+
+    farm_ai_set_pending_action(
+        action_type="record_sale",
+        data=data,
+        status="collecting"
+    )
+
+    return {
+        "ok": True,
+        "collecting": True,
+        "message": (
+            farm_ai_sale_draft_message(
+                data
+            )
+        )
+    }
+
+
+def farm_ai_continue_sale_draft(
+    text
+):
+    """
+    Continue an unfinished sale conversation.
+    """
+
+    pending = (
+        farm_ai_get_pending_action()
+        or {}
+    )
+
+    current_data = (
+        pending.get(
+            "data",
+            {}
+        )
+    )
+
+    data = (
+        farm_ai_extract_sale_details(
+            text,
+            current_data
+        )
+    )
+
+    # --------------------------------------------------------
+    # SALE NOW HAS ENOUGH INFORMATION
+    # --------------------------------------------------------
+
+    if (
+        data.get(
+            "product"
+        )
+        and data.get(
+            "amount"
+        )
+    ):
+
+        return (
+            farm_ai_prepare_sale_confirmation(
+                amount=data.get(
+                    "amount"
+                ),
+                product=data.get(
+                    "product"
+                ),
+                quantity=data.get(
+                    "quantity"
+                ),
+                unit=data.get(
+                    "unit",
+                    "transaction"
+                ),
+                unit_price=data.get(
+                    "unit_price"
+                ),
+                buyer=data.get(
+                    "buyer",
+                    ""
+                ),
+                notes=data.get(
+                    "notes",
+                    ""
+                )
+            )
+        )
+
+    # --------------------------------------------------------
+    # STILL INCOMPLETE
+    # --------------------------------------------------------
+
+    farm_ai_update_pending_action(
+        data=data,
+        status="collecting"
+    )
+
+    return {
+        "ok": True,
+        "collecting": True,
+        "message": (
+            farm_ai_sale_draft_message(
+                data
+            )
+        )
+    }
+
+#farm ai prepare sale confirmation
 def farm_ai_prepare_sale_confirmation(
     amount=None,
     product=None,
@@ -9029,11 +9580,13 @@ def farm_ai_handle_pending_action_message(
     text
 ):
     """
-    Intercept confirmation/cancellation messages BEFORE
-    sending them to the normal parser or AI provider.
+    Handle an unfinished or confirmation-stage farm action
+    BEFORE the normal parser or external AI receives it.
     """
 
-    pending = farm_ai_get_pending_action()
+    pending = (
+        farm_ai_get_pending_action()
+    )
 
     if not pending:
 
@@ -9041,19 +9594,21 @@ def farm_ai_handle_pending_action_message(
             "handled": False
         }
 
-    status = pending.get(
-        "status"
+    action_type = (
+        pending.get(
+            "action_type"
+        )
     )
 
-    if status != "awaiting_confirmation":
+    status = (
+        pending.get(
+            "status"
+        )
+    )
 
-        return {
-            "handled": False
-        }
-
-    # --------------------------------------------------------
-    # Farmer cancelled
-    # --------------------------------------------------------
+    # ========================================================
+    # CANCELLATION — WORKS AT ANY STAGE
+    # ========================================================
 
     if farm_ai_is_cancellation(
         text
@@ -9070,29 +9625,77 @@ def farm_ai_handle_pending_action_message(
             )
         }
 
-    # --------------------------------------------------------
-    # Farmer confirmed
-    # --------------------------------------------------------
+    # ========================================================
+    # COLLECTING A MULTI-TURN SALE
+    # ========================================================
 
-    if farm_ai_is_confirmation(
-        text
+    if (
+        action_type == "record_sale"
+        and status == "collecting"
     ):
 
         result = (
-            farm_ai_execute_pending_action()
+            farm_ai_continue_sale_draft(
+                text
+            )
         )
 
         return {
             "handled": True,
             "ok": result.get(
                 "ok",
-                False
+                True
             ),
             "message": result.get(
                 "message",
-                "The farm action was processed."
+                "Tell me more about the sale."
             ),
             "result": result
+        }
+
+    # ========================================================
+    # WAITING FOR FINAL CONFIRMATION
+    # ========================================================
+
+    if (
+        status
+        == "awaiting_confirmation"
+    ):
+
+        if farm_ai_is_confirmation(
+            text
+        ):
+
+            result = (
+                farm_ai_execute_pending_action()
+            )
+
+            return {
+                "handled": True,
+                "ok": result.get(
+                    "ok",
+                    False
+                ),
+                "message": result.get(
+                    "message",
+                    "The farm action was processed."
+                ),
+                "result": result
+            }
+
+        # ----------------------------------------------------
+        # Do not send random follow-up text to general AI
+        # while a financial action is waiting.
+        # ----------------------------------------------------
+
+        return {
+            "handled": True,
+            "ok": True,
+            "message": (
+                "This action is waiting for confirmation. "
+                "Reply Yes/Confirmed to save it, "
+                "or Cancel to discard it."
+            )
         }
 
     return {
@@ -9947,6 +10550,37 @@ label_visibility="collapsed",
 
         st.rerun()
 
+    
+    # ========================================================
+    # NEW MULTI-TURN SALE REQUEST
+    # ========================================================
+
+    if farm_ai_is_sale_request(
+        command
+    ):
+
+        sale_result = (
+            farm_ai_start_sale_draft(
+                command
+            )
+        )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": sale_result.get(
+                    "message",
+                    "Tell me about the sale."
+                )
+            }
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+        st.rerun()
+    
     # ========================================================
     # 2. PARSE SMART FARM ACTION
     # ========================================================
@@ -20641,15 +21275,33 @@ if not enforce_farmer_session_timeout():
 # FROM HERE DOWN = LOGGED-IN FARMERS ONLY
 # ============================================================
 
-# 1. Apply pending navigation
-pending_destination = st.session_state.pop(
-    "voice_pending_navigation",
-    None
+# ============================================================
+# 🧭 APPLY PENDING NAVIGATION
+# Supports Copilot, Dashboard and Voice navigation
+# ============================================================
+
+pending_destination = (
+    st.session_state.pop(
+        "dashboard_pending_navigation",
+        None
+    )
 )
 
+if not pending_destination:
+
+    pending_destination = (
+        st.session_state.pop(
+            "voice_pending_navigation",
+            None
+        )
+    )
+
 if pending_destination:
+
     st.session_state[
-        k2("main_menu_option")
+        k2(
+            "main_menu_option"
+        )
     ] = pending_destination
 
 
