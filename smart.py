@@ -8512,6 +8512,204 @@ Farmer question:
     )
 
 
+    # ============================================================
+# 🤖 SMART FARM AI COPILOT — ACTION STATE FOUNDATION
+# ============================================================
+
+def farm_ai_initialize_copilot_state():
+    """
+    Prepare persistent Copilot conversation/action state.
+    """
+
+    if "farm_ai_pending_action" not in st.session_state:
+        st.session_state["farm_ai_pending_action"] = None
+
+    if "farm_ai_conversation" not in st.session_state:
+        st.session_state["farm_ai_conversation"] = []
+
+    if "farm_ai_current_draft" not in st.session_state:
+        st.session_state["farm_ai_current_draft"] = {}
+
+    if "farm_ai_last_action_result" not in st.session_state:
+        st.session_state["farm_ai_last_action_result"] = None
+
+
+def farm_ai_get_pending_action():
+    """
+    Return the action currently waiting for more information
+    or farmer confirmation.
+    """
+
+    farm_ai_initialize_copilot_state()
+
+    return st.session_state.get(
+        "farm_ai_pending_action"
+    )
+
+
+def farm_ai_set_pending_action(
+    action_type,
+    data=None,
+    status="collecting"
+):
+    """
+    Store an unfinished Copilot action.
+
+    status examples:
+    - collecting
+    - awaiting_confirmation
+    - executing
+    """
+
+    farm_ai_initialize_copilot_state()
+
+    st.session_state["farm_ai_pending_action"] = {
+        "action_type": action_type,
+        "status": status,
+        "data": data or {}
+    }
+
+    return st.session_state[
+        "farm_ai_pending_action"
+    ]
+
+
+def farm_ai_update_pending_action(
+    data=None,
+    status=None
+):
+    """
+    Update the existing unfinished action.
+    """
+
+    farm_ai_initialize_copilot_state()
+
+    pending = st.session_state.get(
+        "farm_ai_pending_action"
+    )
+
+    if not pending:
+        return None
+
+    if data:
+
+        current_data = pending.get(
+            "data",
+            {}
+        )
+
+        current_data.update(
+            data
+        )
+
+        pending["data"] = current_data
+
+    if status:
+        pending["status"] = status
+
+    st.session_state[
+        "farm_ai_pending_action"
+    ] = pending
+
+    return pending
+
+
+def farm_ai_clear_pending_action():
+    """
+    Remove the current unfinished action.
+    """
+
+    st.session_state[
+        "farm_ai_pending_action"
+    ] = None
+
+    st.session_state[
+        "farm_ai_current_draft"
+    ] = {}
+
+
+def farm_ai_is_confirmation(text):
+    """
+    Detect common farmer confirmation messages.
+    """
+
+    clean_text = str(
+        text or ""
+    ).strip().lower()
+
+    confirmations = {
+        "yes",
+        "yes correct",
+        "correct",
+        "confirm",
+        "confirmed",
+        "yes confirm",
+        "yes confirmed",
+        "go ahead",
+        "proceed",
+        "save",
+        "save it",
+        "record it",
+        "do it",
+        "okay",
+        "ok",
+        "yes please"
+    }
+
+    return clean_text in confirmations
+
+
+def farm_ai_is_cancellation(text):
+    """
+    Detect common farmer cancellation messages.
+    """
+
+    clean_text = str(
+        text or ""
+    ).strip().lower()
+
+    cancellations = {
+        "no",
+        "cancel",
+        "cancel it",
+        "don't",
+        "do not",
+        "stop",
+        "never mind",
+        "nevermind",
+        "wrong",
+        "not correct"
+    }
+
+    return clean_text in cancellations
+
+
+def farm_ai_add_message(
+    role,
+    content
+):
+    """
+    Save a message to the current Copilot conversation.
+    """
+
+    farm_ai_initialize_copilot_state()
+
+    message = {
+        "role": role,
+        "content": str(content)
+    }
+
+    st.session_state[
+        "farm_ai_conversation"
+    ].append(
+        message
+    )
+
+
+# Initialize Copilot memory
+farm_ai_initialize_copilot_state()
+
+
 
 # ============================================================
 # 🤖 SMART FARM AI FARM COPILOT — FINAL UI
