@@ -6401,28 +6401,23 @@ def _farm_shared_dataframe(
         columns=columns
     )
 
-
+# sync farm dataset
 def _sync_farm_dataset(
     name,
     dataframe
 ):
     """
-    Keep chatbot actions and normal Smart Farm AI
+    Keep Copilot actions and normal Smart Farm AI
     features on the SAME dataframe.
+
+    Returns True only when the dataset was
+    successfully persisted.
     """
-
-    # --------------------------------------------------------
-    # Update live Streamlit state first
-    # --------------------------------------------------------
-
-    st.session_state[
-        name
-    ] = dataframe
 
     saved = False
 
     # --------------------------------------------------------
-    # Use normal application storage when available
+    # Try normal application storage first
     # --------------------------------------------------------
 
     normal_saver = globals().get(
@@ -6443,7 +6438,7 @@ def _sync_farm_dataset(
             saved = True
 
         except Exception:
-            pass
+            saved = False
 
     # --------------------------------------------------------
     # Fall back to Farm Action storage
@@ -6469,7 +6464,17 @@ def _sync_farm_dataset(
                 saved = True
 
             except Exception:
-                pass
+                saved = False
+
+    # --------------------------------------------------------
+    # Update live Streamlit state ONLY after successful save
+    # --------------------------------------------------------
+
+    if saved:
+
+        st.session_state[
+            name
+        ] = dataframe
 
     return saved
 
@@ -6659,10 +6664,23 @@ def farm_action_record_sale(
         ignore_index=True
     )
 
-    _sync_farm_dataset(
+    saved = _sync_farm_dataset(
         "sales",
         sales_df
     )
+
+    if not saved:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ I prepared the sale record, "
+                "but Smart Farm AI could not "
+                "save it reliably. "
+                "The sale was not confirmed "
+                "as recorded."
+            )
+        }
 
     return {
         "ok": True,
@@ -8710,6 +8728,378 @@ def farm_ai_add_message(
 farm_ai_initialize_copilot_state()
 
 
+# ============================================================
+# 🤖 SMART FARM AI COPILOT — SALE ACTION CONTROLLER
+# ============================================================
+
+def farm_ai_format_money(
+    value
+):
+    """
+    Format money using Smart Farm AI's country currency
+    formatter when available.
+    """
+
+    formatter = globals().get(
+        "format_farm_money"
+    )
+
+    if callable(
+        formatter
+    ):
+
+        try:
+            return formatter(
+                value
+            )
+
+        except Exception:
+            pass
+
+    try:
+
+        return f"{float(value):,.2f}"
+
+    except Exception:
+
+        return str(value)
+
+
+def farm_ai_prepare_sale_confirmation(
+    amount=None,
+    product=None,
+    quantity=None,
+    unit="transaction",
+    unit_price=None,
+    buyer="",
+    notes=""
+):
+    """
+    Prepare a sale but DO NOT save it yet.
+
+    The sale remains pending until the farmer
+    explicitly confirms it.
+    """
+
+    context = (
+        get_farm_action_context()
+        or {}
+    )
+
+    product_value = (
+        product
+        or context.get(
+            "crop"
+        )
+        or context.get(
+            "crop_type"
+        )
+        or "Farm Produce"
+    )
+
+    amount_value = (
+        _farm_number(
+            amount
+        )
+        if amount is not None
+        else None
+    )
+
+    quantity_value = (
+        _farm_number(
+            quantity
+        )
+        if quantity is not None
+        else None
+    )
+
+    unit_price_value = (
+        _farm_number(
+            unit_price
+        )
+        if unit_price is not None
+        else None
+    )
+
+    # --------------------------------------------------------
+    # Calculate total from quantity × unit price
+    # --------------------------------------------------------
+
+    if (
+        (
+            amount_value is None
+            or amount_value <= 0
+        )
+        and quantity_value
+        and unit_price_value
+    ):
+
+        amount_value = (
+            quantity_value
+            * unit_price_value
+        )
+
+    # --------------------------------------------------------
+    # We still need enough information
+    # --------------------------------------------------------
+
+    if (
+        amount_value is None
+        or amount_value <= 0
+    ):
+
+        return {
+            "ok": False,
+            "needs_input": True,
+            "message": (
+                "I still need the sale amount, "
+                "or the quantity and unit price."
+            )
+        }
+
+    sale_data = {
+        "amount":
+            amount_value,
+
+        "product":
+            product_value,
+
+        "quantity":
+            quantity_value,
+
+        "unit":
+            unit or "transaction",
+
+        "unit_price":
+            unit_price_value,
+
+        "buyer":
+            buyer or "",
+
+        "notes":
+            notes or ""
+    }
+
+    farm_ai_set_pending_action(
+        action_type="record_sale",
+        data=sale_data,
+        status="awaiting_confirmation"
+    )
+
+    # --------------------------------------------------------
+    # Build farmer-friendly confirmation
+    # --------------------------------------------------------
+
+    money_total = farm_ai_format_money(
+        amount_value
+    )
+
+    if (
+        quantity_value
+        and unit_price_value
+    ):
+
+        unit_price_text = farm_ai_format_money(
+            unit_price_value
+        )
+
+        message = (
+            f"I have a sale of "
+            f"{quantity_value:g} "
+            f"{unit} of "
+            f"{product_value} at "
+            f"{unit_price_text} per {unit}. "
+            f"Total: {money_total}. "
+            f"Should I record this sale?"
+        )
+
+    else:
+
+        message = (
+            f"I have a {product_value} sale "
+            f"worth {money_total}. "
+            f"Should I record this sale?"
+        )
+
+    return {
+        "ok": True,
+        "awaiting_confirmation": True,
+        "message": message,
+        "data": sale_data
+    }
+
+
+def farm_ai_execute_pending_action():
+    """
+    Execute the action currently waiting for confirmation.
+    The Copilot must never claim success unless
+    the underlying Smart Farm AI action succeeds.
+    """
+
+    pending = farm_ai_get_pending_action()
+
+    if not pending:
+
+        return {
+            "ok": False,
+            "message": (
+                "There is no farm action "
+                "waiting for confirmation."
+            )
+        }
+
+    action_type = pending.get(
+        "action_type"
+    )
+
+    data = pending.get(
+        "data",
+        {}
+    )
+
+    # --------------------------------------------------------
+    # RECORD EXPENSE
+    # --------------------------------------------------------
+
+    if action_type == "record_expense":
+
+        farm_ai_update_pending_action(
+            status="executing"
+        )
+
+        expense_action = dict(
+            data
+        )
+
+        expense_action[
+            "intent"
+        ] = "record_expense"
+
+        try:
+
+            result = execute_farm_action(
+                expense_action
+            )
+
+        except Exception as error:
+
+            result = {
+                "ok": False,
+                "message": (
+                    "❌ Smart Farm AI could not "
+                    "complete the expense record."
+                ),
+                "error": str(
+                    error
+                )
+            }
+
+        st.session_state[
+            "farm_ai_last_action_result"
+        ] = result
+
+        if result.get(
+            "ok"
+        ):
+
+            farm_ai_clear_pending_action()
+
+        else:
+
+            farm_ai_update_pending_action(
+                status="awaiting_confirmation"
+            )
+
+        return result
+
+    # --------------------------------------------------------
+    # UNKNOWN ACTION
+    # --------------------------------------------------------
+
+    return {
+        "ok": False,
+        "message": (
+            "Smart Farm AI does not yet know "
+            "how to execute this pending action."
+        )
+    }
+
+
+def farm_ai_handle_pending_action_message(
+    text
+):
+    """
+    Intercept confirmation/cancellation messages BEFORE
+    sending them to the normal parser or AI provider.
+    """
+
+    pending = farm_ai_get_pending_action()
+
+    if not pending:
+
+        return {
+            "handled": False
+        }
+
+    status = pending.get(
+        "status"
+    )
+
+    if status != "awaiting_confirmation":
+
+        return {
+            "handled": False
+        }
+
+    # --------------------------------------------------------
+    # Farmer cancelled
+    # --------------------------------------------------------
+
+    if farm_ai_is_cancellation(
+        text
+    ):
+
+        farm_ai_clear_pending_action()
+
+        return {
+            "handled": True,
+            "ok": True,
+            "message": (
+                "Okay. I cancelled that farm action "
+                "and nothing was recorded."
+            )
+        }
+
+    # --------------------------------------------------------
+    # Farmer confirmed
+    # --------------------------------------------------------
+
+    if farm_ai_is_confirmation(
+        text
+    ):
+
+        result = (
+            farm_ai_execute_pending_action()
+        )
+
+        return {
+            "handled": True,
+            "ok": result.get(
+                "ok",
+                False
+            ),
+            "message": result.get(
+                "message",
+                "The farm action was processed."
+            ),
+            "result": result
+        }
+
+    return {
+        "handled": False
+    }
+
+
 
 # ============================================================
 # 🤖 SMART FARM AI FARM COPILOT — FINAL UI
@@ -8720,32 +9110,82 @@ def farm_action_chatbot_ui(
     compact=True
 ):
 
+    # ========================================================
+    # SESSION KEYS
+    # ========================================================
+
     history_key = (
         f"farm_ai_history_{surface}"
-    )
-
-    pending_key = (
-        f"farm_ai_pending_action_{surface}"
     )
 
     suggestion_key = (
         f"farm_ai_suggestions_{surface}"
     )
 
-    # --------------------------------------------------------
-    # INITIALIZE CHAT
-    # --------------------------------------------------------
+    archive_key = (
+        f"farm_ai_archived_chats_{surface}"
+    )
 
-    if history_key not in (
-        st.session_state
-    ):
+    menu_key = (
+        f"farm_ai_menu_open_{surface}"
+    )
 
-        farmer_name = (
-            st.session_state.get(
-                "registered_name"
-            )
-            or "Farmer"
+    history_view_key = (
+        f"farm_ai_history_view_{surface}"
+    )
+
+    # ========================================================
+    # FARMER CONTEXT
+    # ========================================================
+
+    context = (
+        get_farm_action_context()
+        or {}
+    )
+
+    farmer_name = (
+        st.session_state.get(
+            "registered_name"
         )
+        or st.session_state.get(
+            "current_user"
+        )
+        or context.get(
+            "farmer_name"
+        )
+        or context.get(
+            "name"
+        )
+        or "Farmer"
+    )
+
+    farm_name = (
+        context.get(
+            "farm_name"
+        )
+        or context.get(
+            "name"
+        )
+        or "Current Farm"
+    )
+
+    crop_name = (
+        context.get(
+            "crop"
+        )
+        or context.get(
+            "crop_type"
+        )
+        or "Crop not set"
+    )
+
+    # ========================================================
+    # INITIALIZE COPILOT STATE
+    # ========================================================
+
+    farm_ai_initialize_copilot_state()
+
+    if history_key not in st.session_state:
 
         st.session_state[
             history_key
@@ -8754,12 +9194,38 @@ def farm_action_chatbot_ui(
                 "role": "assistant",
                 "content": (
                     f"Hello {farmer_name} 👋. "
-                    "Ask me about your farm, ask how to use "
-                    "Smart Farm AI, tell me to open a feature, "
-                    "or ask me to record a farm action."
+                    "I am your Smart Farm AI Copilot. "
+                    "Ask me about your farm, ask a farming "
+                    "question, open a feature, check your "
+                    "records, or tell me to perform a farm "
+                    "action."
                 )
             }
         ]
+
+    if suggestion_key not in st.session_state:
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+    if archive_key not in st.session_state:
+
+        st.session_state[
+            archive_key
+        ] = []
+
+    if menu_key not in st.session_state:
+
+        st.session_state[
+            menu_key
+        ] = False
+
+    if history_view_key not in st.session_state:
+
+        st.session_state[
+            history_view_key
+        ] = False
 
     history = (
         st.session_state[
@@ -8767,300 +9233,677 @@ def farm_action_chatbot_ui(
         ]
     )
 
-    # --------------------------------------------------------
-    # HEADER
-    # --------------------------------------------------------
-
-    st.markdown(
-        "### 🤖 Ask Smart Farm AI"
-    )
-
-    st.caption(
-        "Farm guidance • Feature navigation • "
-        "Records • Alerts • Decisions"
-    )
-
-    # --------------------------------------------------------
-    # CHAT HISTORY
-    # --------------------------------------------------------
-
-    for message in history[
-        -10:
-    ]:
-
-        role = message.get(
-            "role",
-            "assistant"
-        )
-
-        content = message.get(
-            "content",
-            ""
-        )
-
-        with st.chat_message(
-            role
-        ):
-
-            st.markdown(
-                content
-            )
-
     # ========================================================
-    # PENDING WRITE ACTION CONFIRMATION
+    # CHATGPT-STYLE COPILOT BOX
     # ========================================================
 
-    pending_action = (
-        st.session_state.get(
-            pending_key
-        )
-    )
-
-    if isinstance(
-        pending_action,
-        dict
+    with st.container(
+        border=True
     ):
 
-        intent = pending_action.get(
-            "intent"
+        # ====================================================
+        # HEADER
+        # ====================================================
+
+        title_col, menu_col = (
+            st.columns(
+                [
+                    8,
+                    1
+                ]
+            )
         )
 
-        if intent == "record_sale":
+        with title_col:
 
-            amount = pending_action.get(
-                "amount",
-                0
+            st.markdown(
+                "### 🤖 Ask Smart Farm AI"
             )
 
-            product = pending_action.get(
-                "product",
-                "Farm Produce"
+            st.caption(
+                f"{farm_name} • {crop_name}"
             )
 
-            confirmation_text = (
-                f"Record sale of {product} "
-                f"for {float(amount):,.2f}?"
-            )
-
-        elif intent == "record_expense":
-
-            amount = pending_action.get(
-                "amount",
-                0
-            )
-
-            category = pending_action.get(
-                "category",
-                "Other"
-            )
-
-            confirmation_text = (
-                f"Record {category} expense "
-                f"of {float(amount):,.2f}?"
-            )
-
-        else:
-
-            confirmation_text = (
-                "Confirm this farm action?"
-            )
-
-        st.warning(
-            confirmation_text
-        )
-
-        confirm_col, cancel_col = (
-            st.columns(2)
-        )
-
-        with confirm_col:
+        with menu_col:
 
             if st.button(
-                "✅ Confirm Action",
+                "⋮",
                 key=(
-                    f"confirm_farm_ai_"
+                    f"farm_ai_menu_button_"
                     f"{surface}"
                 ),
-                type="primary",
-                use_container_width=True
+                help="Copilot options"
             ):
 
-                result = (
-                    execute_farm_action(
-                        pending_action
-                    )
-                )
-
-                history.append(
-                    {
-                        "role":
-                            "assistant",
-                            "content":
-                            result.get(
-                                "message",
-                                "Action completed."
-                            )
-                    }
-                )
-
-                st.session_state.pop(
-                    pending_key,
-                    None
+                st.session_state[
+                    menu_key
+                ] = not st.session_state.get(
+                    menu_key,
+                    False
                 )
 
                 st.rerun()
+                # ====================================================
+        # COPILOT MENU
+        # ====================================================
 
-        with cancel_col:
-
-            if st.button(
-                "❌ Cancel",
-                key=(
-                    f"cancel_farm_ai_"
-                    f"{surface}"
-                ),
-                use_container_width=True
-            ):
-
-                st.session_state.pop(
-                    pending_key,
-                    None
-                )
-
-                history.append(
-                    {
-                        "role":
-                            "assistant",
-
-                        "content":
-                            "Action cancelled."
-                    }
-                )
-
-                st.rerun()
-
-    # ========================================================
-    # FEATURE ACTION TRIGGERS
-    # ========================================================
-
-    suggestions = (
-        st.session_state.get(
-            suggestion_key,
-            []
-        )
-        or []
-    )
-
-    if suggestions:
-
-        st.markdown(
-            "#### Recommended Smart Farm AI Tools"
-        )
-
-        visible_suggestions = (
-            suggestions[
-                :3
-            ]
-        )
-
-        columns = st.columns(
-            len(
-                visible_suggestions
-            )
-        )
-
-        for index, feature in enumerate(
-            visible_suggestions
+        if st.session_state.get(
+            menu_key,
+            False
         ):
 
-            with columns[
-                index
-            ]:
+            menu_col_1, menu_col_2, menu_col_3 = (
+                st.columns(3)
+            )
 
-                import html
+            # ------------------------------------------------
+            # HISTORY
+            # ------------------------------------------------
 
-                title = html.escape(
-                    feature[
-                        "title"
-                    ]
-                )
-
-                description = html.escape(
-                    feature[
-                        "description"
-                    ]
-                )
-
-                icon = feature[
-                    "icon"
-                ]
-
-                st.markdown(
-                    f"""
-                    <div style="
-                        border: 1px solid rgba(120,120,120,0.20);
-                        border-radius: 16px;
-                        padding: 14px;
-                        margin-bottom: 8px;
-                        min-height: 118px;
-                    ">
-                        <div style="
-                            font-size: 19px;
-                            font-weight: 700;
-                            margin-bottom: 7px;
-                        ">
-                            {icon} {title}
-                        </div>
-
-                        <div style="
-                            font-size: 13px;
-                            line-height: 1.45;
-                            opacity: 0.78;
-                        ">
-                            {description}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+            with menu_col_1:
 
                 if st.button(
-                    f"Open {feature['title']}",
+                    "🕘 History",
                     key=(
-                        f"farm_ai_open_"
-                        f"{surface}_"
-                        f"{index}_"
-                        f"{feature['destination']}"
+                        f"farm_ai_history_button_"
+                        f"{surface}"
                     ),
                     use_container_width=True
                 ):
 
-                    open_smart_farm_feature(
-                        feature[
-                            "destination"
-                        ]
+                    st.session_state[
+                        history_view_key
+                    ] = not st.session_state.get(
+                        history_view_key,
+                        False
                     )
 
-    # ========================================================
-    # FARMER INPUT
-    # ========================================================
+                    st.rerun()
 
-    command = st.chat_input(
-        (
-            "Ask about your farm or tell "
-            "Smart Farm AI what to do..."
-        ),
-        key=(
-            f"farm_ai_chat_input_"
-            f"{surface}"
+            # ------------------------------------------------
+            # NEW CHAT
+            # ------------------------------------------------
+
+            with menu_col_2:
+
+                if st.button(
+                    "➕ New Chat",
+                    key=(
+                        f"farm_ai_new_chat_"
+                        f"{surface}"
+                    ),
+                    use_container_width=True
+                ):
+
+                    if len(
+                        history
+                    ) > 1:
+
+                        st.session_state[
+                            archive_key
+                        ].append(
+                            list(
+                                history
+                            )
+                        )
+
+                    st.session_state[
+                        history_key
+                    ] = [
+                        {
+                            "role": "assistant",
+                            "content": (
+                                f"New conversation started, "
+                                f"{farmer_name}. "
+                                "What would you like to do "
+                                "on your farm?"
+                            )
+                        }
+                    ]
+
+                    st.session_state[
+                        suggestion_key
+                    ] = []
+
+                    farm_ai_clear_pending_action()
+
+                    st.session_state[
+                        menu_key
+                    ] = False
+
+                    st.rerun()
+
+            # ------------------------------------------------
+            # CLEAR CURRENT CHAT
+            # ------------------------------------------------
+
+            with menu_col_3:
+
+                if st.button(
+                    "🗑 Clear",
+                    key=(
+                        f"farm_ai_clear_chat_"
+                        f"{surface}"
+                    ),
+                    use_container_width=True
+                ):
+
+                    st.session_state[
+                        history_key
+                    ] = [
+                        {
+                            "role": "assistant",
+                            "content": (
+                                f"Chat cleared, "
+                                f"{farmer_name}. "
+                                "How can I help with your farm?"
+                            )
+                        }
+                    ]
+
+                    st.session_state[
+                        suggestion_key
+                    ] = []
+
+                    farm_ai_clear_pending_action()
+
+                    st.session_state[
+                        menu_key
+                    ] = False
+
+                    st.rerun()
+
+        # ====================================================
+        # ARCHIVED CHAT HISTORY
+        # ====================================================
+
+        if st.session_state.get(
+            history_view_key,
+            False
+        ):
+
+            archived_chats = (
+                st.session_state.get(
+                    archive_key,
+                    []
+                )
+            )
+
+            if not archived_chats:
+
+                st.info(
+                    "No previous Copilot conversations yet."
+                )
+
+            else:
+
+                st.markdown(
+                    "#### 🕘 Previous Conversations"
+                )
+                recent_archives = (
+                    archived_chats[
+                        -5:
+                    ]
+                )
+
+                for chat_index, old_chat in enumerate(
+                    reversed(
+                        recent_archives
+                    ),
+                    start=1
+                ):
+
+                    with st.expander(
+                        f"Conversation {chat_index}"
+                    ):
+
+                        for old_message in old_chat[
+                            -8:
+                        ]:
+
+                            old_role = old_message.get(
+                                "role",
+                                "assistant"
+                            )
+
+                            old_content = old_message.get(
+                                "content",
+                                ""
+                            )
+
+                            speaker = (
+                                "You"
+                                if old_role == "user"
+                                else "Smart Farm AI"
+                            )
+
+                            st.markdown(
+                                f"{speaker}: "
+                                f"{old_content}"
+                            )
+
+        st.divider()
+
+        # ====================================================
+        # CURRENT CHAT HISTORY
+        # ====================================================
+
+        chat_messages = (
+            history[
+                -12:
+            ]
         )
-    )
-    if not command:
+
+        for message in chat_messages:
+
+            role = message.get(
+                "role",
+                "assistant"
+            )
+
+            content = message.get(
+                "content",
+                ""
+            )
+
+            with st.chat_message(
+                role
+            ):
+
+                st.markdown(
+                    content
+                )
+
+        # ====================================================
+        # PENDING FARM ACTION
+        # ====================================================
+
+        pending_action = (
+            farm_ai_get_pending_action()
+        )
+
+        if isinstance(
+            pending_action,
+            dict
+        ):
+
+            action_type = (
+                pending_action.get(
+                    "action_type"
+                )
+            )
+
+            action_status = (
+                pending_action.get(
+                    "status"
+                )
+            )
+
+            action_data = (
+                pending_action.get(
+                    "data",
+                    {}
+                )
+            )
+
+            if (
+                action_status
+                == "awaiting_confirmation"
+            ):
+
+                # ============================================
+                # SALE CONFIRMATION
+                # ============================================
+
+                if action_type == "record_sale":
+
+                    product = (
+                        action_data.get(
+                            "product",
+                            "Farm Produce"
+                        )
+                    )
+
+                    amount = (
+                        action_data.get(
+                            "amount",
+                            0
+                        )
+                    )
+
+                    quantity = (
+                        action_data.get(
+                            "quantity"
+                        )
+                    )
+
+                    unit = (
+                        action_data.get(
+                            "unit",
+                            "transaction"
+                        )
+                    )
+
+                    unit_price = (
+                        action_data.get(
+                            "unit_price"
+                        )
+                    )
+
+                    total_text = (
+                        farm_ai_format_money(
+                            amount
+                        )
+                    )
+
+                    if (
+                        quantity
+                        and unit_price
+                    ):
+
+                        price_text = (
+                            farm_ai_format_money(
+                                unit_price
+                            )
+                        )
+
+                        confirmation_text = (
+                            f"Record {quantity:g} "
+                            f"{unit} of {product} "
+                            f"at {price_text} "
+                            f"per {unit}? "
+                            f"Total: {total_text}"
+                        )
+
+                    else:
+
+                        confirmation_text = (
+                            f"Record {product} sale "
+                            f"for {total_text}?"
+                        )
+
+                # ============================================
+                # EXPENSE CONFIRMATION
+                # ============================================
+
+                elif action_type == "record_expense":
+
+                    amount = (
+                        action_data.get(
+                            "amount",
+                            0
+                        )
+                    )
+
+                    category = (
+                        action_data.get(
+                            "category",
+                            "Other"
+                        )
+                    )
+
+                    confirmation_text = (
+                        f"Record {category} expense "
+                        f"of "
+                        f"{farm_ai_format_money(amount)}?"
+                    )
+
+                else:
+
+                    confirmation_text = (
+                        "Confirm this farm action?"
+                    )
+
+                st.warning(
+                    confirmation_text
+                )
+
+                confirm_col, cancel_col = (
+                    st.columns(2)
+                )
+
+                # --------------------------------------------
+                # CONFIRM BUTTON
+                # --------------------------------------------
+
+                with confirm_col:
+
+                    if st.button(
+                        "✅ Confirm Action",
+                        key=(
+                            f"confirm_farm_ai_"
+                            f"{surface}"
+                        ),
+                        type="primary",
+                        use_container_width=True
+                    ):
+
+                        result = (
+                            farm_ai_execute_pending_action()
+                        )
+
+                        result_message = (
+                            result.get(
+                                "message",
+                                "Farm action processed."
+                            )
+                        )
+
+                        history.append(
+                            {
+                                "role": "assistant",
+                                "content": result_message
+                            }
+                        )
+
+                        st.session_state[
+                            suggestion_key
+                        ] = []
+
+                        st.rerun()
+
+                # --------------------------------------------
+                # CANCEL BUTTON
+                # --------------------------------------------
+
+                with cancel_col:
+
+                    if st.button(
+                        "❌ Cancel",
+                        key=(
+                            f"cancel_farm_ai_"
+                            f"{surface}"
+                        ),
+                        use_container_width=True
+                    ):
+
+                        farm_ai_clear_pending_action()
+
+                        history.append(
+                            {
+                                "role": "assistant",
+                                "content": (
+                                    "Okay. I cancelled that "
+                                    "farm action and nothing "
+                                    "was recorded."
+                                )
+                            }
+                        )
+
+                        st.session_state[
+                            suggestion_key
+                        ] = []
+
+                        st.rerun()
+
+        # ====================================================
+        # SMART FEATURE SUGGESTIONS
+        # ====================================================
+
+        suggestions = (
+            st.session_state.get(
+                suggestion_key,
+                []
+            )
+            or []
+        )
+
+        if suggestions:
+
+            st.markdown(
+                "Recommended tools"
+            )
+
+            visible_suggestions = (
+                suggestions[
+                    :3
+                ]
+            )
+
+            for index, feature in enumerate(
+                visible_suggestions
+            ):
+
+                feature_title = (
+                    feature.get(
+                        "title",
+                        "Smart Farm Tool"
+                    )
+                )
+
+                feature_icon = (
+                    feature.get(
+                        "icon",
+                        "🌱"
+                    )
+                )
+
+                feature_description = (
+                    feature.get(
+                        "description",
+                        ""
+                    )
+                )
+
+                destination = (
+                    feature.get(
+                        "destination"
+                    )
+                )
+
+                suggestion_col, open_col = (
+                    st.columns(
+                        [
+                            3,
+                            1
+                        ]
+                    )
+                )
+
+                with suggestion_col:
+
+                    st.markdown(
+                        f"{feature_icon} "
+                        f"{feature_title}"
+                    )
+
+                    if feature_description:
+
+                        st.caption(
+                            feature_description
+                        )
+
+                with open_col:
+
+                    if (
+                        destination
+                        and st.button(
+                            "Open",
+                            key=(
+                                f"farm_ai_open_"
+                                f"{surface}_"
+                                f"{index}"
+                            ),
+                            use_container_width=True
+                        )
+                    ):
+
+                        open_smart_farm_feature(
+                            destination
+                        )
+
+        st.divider()
+
+        # ====================================================
+        # FARMER INPUT — INSIDE COPILOT BOX
+        # ====================================================
+
+        with st.form(
+            key=(
+                f"farm_ai_input_form_"
+                f"{surface}"
+            ),
+            clear_on_submit=True
+        ):
+
+            command = st.text_input(
+                "Ask Smart Farm AI",
+                placeholder=(
+                    "Ask about your farm or tell me what to do..."
+                ),
+
+label_visibility="collapsed",
+                key=(
+                    f"farm_ai_input_"
+                    f"{surface}"
+                )
+            )
+
+            input_col, send_col = (
+                st.columns(
+                    [
+                        5,
+                        1
+                    ]
+                )
+            )
+
+            with input_col:
+
+                st.caption(
+                    "You can ask questions, open features, "
+                    "or record farm actions."
+                )
+
+            with send_col:
+
+                submitted = (
+                    st.form_submit_button(
+                        "➤ Send",
+                        type="primary",
+                        use_container_width=True
+                    )
+                )
+
+    # ========================================================
+    # STOP IF NOTHING WAS SUBMITTED
+    # ========================================================
+
+    if not submitted:
+
         return
 
-    command = command.strip()
+    command = str(
+        command or ""
+    ).strip()
 
     if not command:
+
         return
+
+    # ========================================================
+    # SAVE FARMER MESSAGE
+    # ========================================================
 
     history.append(
         {
@@ -9070,125 +9913,258 @@ def farm_action_chatbot_ui(
     )
 
     # ========================================================
-    # 1. DIRECT NAVIGATION
+    # 1. PENDING ACTION INTERCEPT
     # ========================================================
 
-    navigation_feature = (
-        farm_assistant_navigation_request(
+    pending_response = (
+        farm_ai_handle_pending_action_message(
             command
         )
     )
 
-    if navigation_feature:
+    if pending_response.get(
+        "handled",
+        False
+    ):
+
+        response_message = (
+            pending_response.get(
+                "message",
+                "Farm action processed."
+            )
+        )
 
         history.append(
             {
-                "role":
-                    "assistant",
-
-                "content":
-                    (
-                        f"Opening "
-                        f"{navigation_feature['title']} "
-                        f"for you."
-                    )
+                "role": "assistant",
+                "content": response_message
             }
         )
 
         st.session_state[
-            "dashboard_pending_navigation"
-        ] = navigation_feature[
-            "destination"
-        ]
+            suggestion_key
+        ] = []
 
         st.rerun()
 
     # ========================================================
-    # 2. FARM ACTION PARSER
+    # 2. PARSE SMART FARM ACTION
     # ========================================================
 
-    action = (
-        parse_farm_action_command(
-            command
+    try:
+
+        action = (
+            parse_farm_action_command(
+                command
+            )
         )
-    )
+
+    except Exception:
+
+        action = {}
 
     if not isinstance(
         action,
         dict
     ):
 
-        action = {
-            "intent": "general",
-            "requires_confirmation": False
-        }
+        action = {}
 
-    intent = action.get(
-        "intent",
-        "general"
+    intent = (
+        action.get(
+            "intent",
+            ""
+        )
     )
 
-    # --------------------------------------------------------
-    # WRITE ACTIONS NEED CONFIRMATION
-    # --------------------------------------------------------
+    # ========================================================
+    # FEATURE NAVIGATION
+    # ========================================================
+
+    navigation_words = (
+        "open ",
+        "go to ",
+        "take me to ",
+        "show me ",
+        "navigate to "
+    )
+
+    command_lower = (
+        command.lower()
+    )
+
+    if any(
+        phrase in command_lower
+        for phrase in navigation_words
+    ):
+
+        navigation_matches = (
+            farm_assistant_find_features(
+                command,
+                limit=1
+            )
+        )
+
+        if navigation_matches:
+
+            destination = (
+                navigation_matches[
+                    0
+                ].get(
+                    "destination"
+                )
+            )
+
+            feature_title = (
+                navigation_matches[
+                    0
+                ].get(
+                    "title",
+                    "that feature"
+                )
+            )
+
+            if destination:
+
+                history.append(
+                    {
+                        "role": "assistant",
+                        "content": (
+                            f"Opening "
+                            f"{feature_title}."
+                        )
+                    }
+                )
+
+                open_smart_farm_feature(
+                    destination
+                )
+                return
+
+    # ========================================================
+    # 3. WRITE ACTION — SALE
+    # ========================================================
 
     if (
         action.get(
             "requires_confirmation",
             False
         )
-        and intent in (
-            "record_sale",
-            "record_expense"
-        )
+        and intent == "record_sale"
     ):
 
-        st.session_state[
-            pending_key
-        ] = action
+        prepared = (
+            farm_ai_prepare_sale_confirmation(
+                amount=action.get(
+                    "amount"
+                ),
+                product=action.get(
+                    "product"
+                ),
+                quantity=action.get(
+                    "quantity"
+                ),
+                unit=action.get(
+                    "unit",
+                    "transaction"
+                ),
+                unit_price=action.get(
+                    "unit_price"
+                ),
+                buyer=action.get(
+                    "buyer",
+                    ""
+                ),
+                notes=action.get(
+                    "notes",
+                    ""
+                )
+            )
+        )
 
         history.append(
             {
-                "role":
-                    "assistant",
+                "role": "assistant",
+                "content": prepared.get(
+                    "message",
+                    "Please confirm the sale."
+                )
+            }
+        )
 
-                "content":
+        st.rerun()
+
+    # ========================================================
+    # 4. WRITE ACTION — EXPENSE
+    # ========================================================
+
+    if (
+        action.get(
+            "requires_confirmation",
+            False
+        )
+        and intent == "record_expense"
+    ):
+
+        farm_ai_set_pending_action(
+            action_type="record_expense",
+            data=action,
+            status="awaiting_confirmation"
+        )
+
+        amount = (
+            action.get(
+                "amount",
+                0
+            )
+        )
+
+        category = (
+            action.get(
+                "category",
+                "Other"
+            )
+        )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": (
+                    f"I have a {category} "
+                    f"expense of "
+                    f"{farm_ai_format_money(amount)}. "
+                    "Should I record this expense?"
+                )
+            }
+        )
+
+        st.rerun()
+
+    # ========================================================
+    # 5. NEED MORE INFORMATION
+    # ========================================================
+
+    if intent == "need_more_info":
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": action.get(
+                    "message",
                     (
-                        "I understood the record you want "
-                        "to save. Please confirm the action "
-                        "below before I change your farm records."
+                        "I need a little more "
+                        "information before I can "
+                        "complete that action."
                     )
+                )
             }
         )
 
         st.rerun()
 
-    # --------------------------------------------------------
-    # NEED MORE INFORMATION
-    # --------------------------------------------------------
-
-    if intent == (
-        "need_more_info"
-    ):
-
-        history.append(
-            {
-                "role":
-                    "assistant",
-
-                "content":
-                    action.get(
-                        "message",
-                        "I need a little more information."
-                    )
-            }
-        )
-
-        st.rerun()
-
-    # --------------------------------------------------------
-    # READ-ONLY FARM ACTIONS
-    # --------------------------------------------------------
+    # ========================================================
+    # 6. READ-ONLY FARM ACTIONS
+    # ========================================================
 
     if intent in (
         "calculate_profit",
@@ -9198,24 +10174,35 @@ def farm_action_chatbot_ui(
         "priorities"
     ):
 
-        result = (
-            execute_farm_action(
-                action
-            )
-        )
+        try:
 
-        answer = result.get(
-            "message",
-            "Done."
+            result = (
+                execute_farm_action(
+                    action
+                )
+            )
+
+        except Exception:
+
+            result = {
+                "ok": False,
+                "message": (
+                    "I could not complete that "
+                    "farm request right now."
+                )
+            }
+
+        answer = (
+            result.get(
+                "message",
+                "Done."
+            )
         )
 
         history.append(
             {
-                "role":
-                    "assistant",
-
-                "content":
-                    answer
+                "role": "assistant",
+                "content": answer
             }
         )
 
@@ -9227,7 +10214,6 @@ def farm_action_chatbot_ui(
                 limit=3
             )
         )
-
         st.session_state[
             suggestion_key
         ] = suggestions
@@ -9235,42 +10221,73 @@ def farm_action_chatbot_ui(
         st.rerun()
 
     # ========================================================
-    # 3. OPEN FARMING / APP INTELLIGENCE
+    # 7. OPEN FARMING / APP INTELLIGENCE
     # ========================================================
 
-    answer = (
-        farm_ai_guidance_answer(
-            command,
-            history
+    try:
+
+        answer = (
+            farm_ai_guidance_answer(
+                command,
+                history
+            )
         )
-    )
+
+    except Exception:
+
+        answer = (
+            "I understood your question, but my broader "
+            "guidance service is temporarily unavailable. "
+            "You can still use farm records, alerts, "
+            "irrigation guidance, feature navigation, "
+            "and other Smart Farm AI actions."
+        )
+
+    if not answer:
+
+        answer = (
+            "I need a little more information "
+            "to answer that accurately."
+        )
 
     history.append(
         {
             "role": "assistant",
-            "content": answer
+            "content": str(
+                answer
+            )
         }
     )
 
-    # --------------------------------------------------------
-    # Detect features relevant to question + answer
-    # --------------------------------------------------------
+    # ========================================================
+    # RELEVANT SMART FARM AI TOOLS
+    # ========================================================
 
-    suggested_features = (
-        farm_assistant_find_features(
-            command
-            + " "
-            + answer,
-            limit=3
+    try:
+
+        suggested_features = (
+            farm_assistant_find_features(
+                command
+                + " "
+                + str(
+                    answer
+                ),
+                limit=3
+            )
         )
-    )
+
+    except Exception:
+
+        suggested_features = []
 
     st.session_state[
         suggestion_key
-    ] = suggested_features
+    ] = (
+        suggested_features
+        or []
+    )
 
     st.rerun()
-
 
 def smart_tutor_voice():
     import os
