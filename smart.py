@@ -8778,6 +8778,370 @@ def farm_ai_format_money(
 
 
 # ============================================================
+# 🧭 SMART FARM AI COPILOT — FULL FEATURE NAVIGATION
+# ============================================================
+
+FARM_AI_NAVIGATION_CATALOG = [
+    {
+        "title": "Farm Management",
+        "destination": "🌿 Farm Management",
+        "icon": "🌿",
+        "description": "Manage farms, plots, equipment, labor and farm details.",
+        "keywords": [
+            "farm management",
+            "equipment tracker",
+            "labor record",
+            "location mapper",
+            "farm plot mapping",
+            "pesticide recommendation"
+        ]
+    },
+    {
+        "title": "Productivity & Records",
+        "destination": "📊 Productivity & Records",
+        "icon": "📊",
+        "description": "Sales, expenses, inventory, loans, reports and productivity.",
+        "keywords": [
+            "productivity",
+            "productivity records",
+            "productivity and records",
+            "sales",
+            "sales record",
+            "sale record",
+            "expense",
+            "expense record",
+            "inventory",
+            "farmer record",
+            "farm summary",
+            "loan recorder",
+            "add loan",
+            "yield estimator",
+            "farm report"
+        ]
+    },
+    {
+        "title": "Irrigation & Soil",
+        "destination": "💧 Irrigation & Soil",
+        "icon": "💧",
+        "description": "Soil moisture, water usage, soil records and irrigation tools.",
+        "keywords": [
+            "irrigation and soil",
+            "soil moisture",
+            "soil health record",
+            "water usage",
+            "irrigation cost",
+            "soil record"
+        ]
+    },
+    {
+        "title": "Profit & Loss",
+        "destination": "📊 Farm Profit & Loss Statement",
+        "icon": "💰",
+        "description": "Review farm income, expenses and financial position.",
+        "keywords": [
+            "profit and loss",
+            "profit loss",
+            "p&l",
+            "financial statement",
+            "farm profit",
+            "farm loss"
+        ]
+    },
+    {
+        "title": "Calendar & Seasons",
+        "destination": "📅 Calendar & Seasons",
+        "icon": "📅",
+        "description": "Planting, harvest and seasonal farm planning.",
+        "keywords": [
+            "calendar and seasons",
+            "planting calendar",
+            "harvest estimator",
+            "seasonal task",
+            "season planner"
+        ]
+    },
+    {
+        "title": "AI Predictions",
+        "destination": "🧪 AI Predictions",
+        "icon": "🧪",
+        "description": "Crop disease, yield and soil prediction tools.",
+        "keywords": [
+            "ai predictions",
+            "crop disease",
+            "disease detection",
+            "yield prediction",
+            "soil health check",
+            "prediction"
+        ]
+    },
+    {
+        "title": "AI Farm Tips",
+        "destination": "📚 AI Farm Tips",
+        "icon": "📚",
+        "description": "Practical AI-supported farming guidance.",
+        "keywords": [
+            "ai farm tips",
+            "farm tips",
+            "farming advice",
+            "farm advice"
+        ]
+    },
+    {
+        "title": "Market & Economic Tools",
+        "destination": "📈 Market & Economic Tools",
+        "icon": "📈",
+        "description": "Prices, ROI, budgets, break-even and market tools.",
+        "keywords": [
+            "market",
+            "market price",
+            "price trend",
+            "roi",
+            "break even",
+            "budget planner",
+            "economic tools",
+            "loan tracker"
+        ]
+    },
+    {
+        "title": "Fertilizer & Pesticide Manager",
+        "destination": "🧪 Smart Fertilizer & Pesticide",
+        "icon": "🧪",
+        "description": "Manage fertilizer and pesticide stocks.",
+        "keywords": [
+            "fertilizer",
+            "pesticide",
+            "fertilizer stock",
+            "pesticide stock",
+            "chemical stock",
+            "stock manager"
+        ]
+    },
+   {
+        "title": "Live Sensor Dashboard",
+        "destination": "📡 Live Sensor Dashboard",
+        "icon": "📡",
+        "description": "View connected farm sensor information.",
+        "keywords": [
+            "live sensor",
+            "sensor dashboard",
+            "sensors",
+            "sensor reading",
+            "live conditions"
+        ]
+    },
+    {
+        "title": "Irrigation Scheduler",
+        "destination": "💦 Irrigation Scheduler",
+        "icon": "💦",
+        "description": "Plan and manage irrigation schedules.",
+        "keywords": [
+            "irrigation scheduler",
+            "irrigation schedule",
+            "schedule irrigation"
+        ]
+    },
+    {
+        "title": "Voice Command",
+        "destination": "🎙️ Voice Command Interface",
+        "icon": "🎙️",
+        "description": "Use Smart Farm AI through voice commands.",
+        "keywords": [
+            "voice command",
+            "voice interface",
+            "voice control"
+        ]
+    },
+    {
+        "title": "Smart Farm Alerts",
+        "destination": "🚨 Smart Farm Alerts",
+        "icon": "🚨",
+        "description": "View weather, soil, pest, market and farm alerts.",
+        "keywords": [
+            "smart farm alerts",
+            "farm alerts",
+            "alerts",
+            "warnings"
+        ]
+    },
+    {
+        "title": "Drone Irrigation Assistant",
+        "destination": "🚁 Voice-Controlled Drone Irrigation Assistant",
+        "icon": "🚁",
+        "description": "Manage supported drone irrigation assistance.",
+        "keywords": [
+            "drone irrigation",
+            "voice controlled drone",
+            "drone assistant"
+        ]
+    },
+    {
+        "title": "Drone Flight Scheduler",
+        "destination": "🚁 Drone Flight Scheduler",
+        "icon": "🚁",
+        "description": "Schedule agricultural drone flights.",
+        "keywords": [
+            "drone flight",
+            "drone scheduler",
+            "flight scheduler"
+        ]
+    },
+    {
+        "title": "Farm Lot Management",
+        "destination": "📍 Farm Lot Management",
+        "icon": "📍",
+        "description": "Manage farm lots and field sections.",
+        "keywords": [
+            "farm lot",
+            "lot management",
+            "field lot",
+            "farm lots"
+        ]
+    },
+    {
+        "title": "Expanded AI Crop Calendar",
+        "destination": "📅 Expanded AI Crop Calendar",
+        "icon": "📅",
+        "description": "Use the expanded crop planning calendar.",
+        "keywords": [
+            "expanded ai crop calendar",
+            "expanded crop calendar"
+        ]
+    },
+    {
+        "title": "AI Crop Calendar",
+        "destination": "🤖 AI Crop Calendar",
+        "icon": "🤖",
+        "description": "AI-supported crop timing and calendar guidance.",
+        "keywords": [
+            "ai crop calendar",
+            "crop calendar"
+        ]
+    },
+    {
+        "title": "Decision-Making Models",
+        "destination": "📈 Decision-Making Models",
+        "icon": "📈",
+        "description": "Irrigation, fertilizer and crop decision support.",
+        "keywords": [
+            "decision making",
+            "decision model",
+            "decision-making models",
+            "rotation decision",
+            "fertilizer decision"
+        ]
+    },
+    {
+        "title": "Farm Performance Indicators",
+        "destination": "📍 Farm Performance Indicators",
+        "icon": "📍",
+        "description": "Review farm performance and operational indicators.",
+        "keywords": [
+            "farm performance",
+            "performance indicators",
+            "farm indicators",
+            "kpi",
+            "farm kpi"
+        ]
+    },
+    {
+        "title": "Settings",
+        "destination": "⚙️ Settings",
+        "icon": "⚙️",
+        "description": "View farmer profile, country, currency and account settings.",
+        "keywords": [
+            "settings",
+            "profile",
+            "account settings",
+            "farmer profile"
+        ]
+    }
+]
+
+
+def farm_ai_navigation_score(
+    text,
+    feature
+):
+    clean_text = str(
+        text or ""
+    ).strip().lower()
+
+    score = 0
+
+    for keyword in feature.get(
+        "keywords",
+        []
+    ):
+
+        keyword_lower = keyword.lower()
+
+        if keyword_lower in clean_text:
+
+            score += (
+                10
+                + len(
+                    keyword_lower
+                )
+            )
+
+    return score
+
+def farm_ai_find_navigation_destination(
+    text
+):
+    best_feature = None
+    best_score = 0
+
+    for feature in FARM_AI_NAVIGATION_CATALOG:
+
+        score = farm_ai_navigation_score(
+            text,
+            feature
+        )
+
+        if score > best_score:
+
+            best_score = score
+            best_feature = feature
+
+    return best_feature
+
+
+def farm_ai_recommend_navigation_features(
+    text,
+    limit=3
+):
+    scored = []
+
+    for feature in FARM_AI_NAVIGATION_CATALOG:
+
+        score = farm_ai_navigation_score(
+            text,
+            feature
+        )
+
+        if score > 0:
+
+            scored.append(
+                (
+                    score,
+                    feature
+                )
+            )
+
+    scored.sort(
+        key=lambda item: item[0],
+        reverse=True
+    )
+
+    return [
+        feature
+        for _, feature in scored[
+            :limit
+        ]
+    ]
+
+# ============================================================
 # 🤖 SMART FARM AI COPILOT — MULTI-TURN SALE INTELLIGENCE
 # ============================================================
 
@@ -9315,6 +9679,253 @@ def farm_ai_continue_sale_draft(
         )
     }
 
+# ============================================================
+# 💰 SMART FARM AI COPILOT — MULTI-TURN EXPENSES
+# ============================================================
+
+def farm_ai_is_expense_request(
+    text
+):
+    clean_text = str(
+        text or ""
+    ).strip().lower()
+
+    phrases = (
+        "record expense",
+        "record an expense",
+        "add expense",
+        "add an expense",
+        "expense record",
+        "save expense",
+        "i spent",
+        "spent "
+    )
+
+    return any(
+        phrase in clean_text
+        for phrase in phrases
+    )
+
+
+def farm_ai_extract_expense_details(
+    text,
+    existing=None
+):
+    import re
+
+    data = dict(
+        existing
+        or {}
+    )
+
+    clean_text = str(
+        text or ""
+    ).replace(
+        ",",
+        ""
+    ).strip()
+
+    amount_match = re.search(
+        r"(\d+(?:\.\d+)?)",
+        clean_text
+    )
+
+    if amount_match:
+
+        data[
+            "amount"
+        ] = float(
+            amount_match.group(
+                1
+            )
+        )
+
+    category_map = {
+        "fertilizer": "Fertilizer",
+        "pesticide": "Pesticide",
+        "seed": "Seeds",
+        "seeds": "Seeds",
+        "labor": "Labor",
+        "labour": "Labor",
+        "transport": "Transport",
+        "fuel": "Fuel",
+        "irrigation": "Irrigation",
+        "equipment": "Equipment",
+        "maintenance": "Maintenance",
+        "rent": "Rent"
+    }
+
+    lower_text = (
+        clean_text.lower()
+    )
+
+    for keyword, category in category_map.items():
+
+        if keyword in lower_text:
+
+            data[
+                "category"
+            ] = category
+
+            break
+
+    return data
+
+
+def farm_ai_expense_draft_message(
+    data
+):
+    amount = data.get(
+        "amount"
+    )
+
+    category = data.get(
+        "category"
+    )
+
+    if not category:
+
+        return (
+            "What was the expense for? "
+            "For example: fertilizer, labor, "
+            "transport or equipment."
+        )
+
+    if not amount:
+
+        return (
+            f"Okay, {category}. "
+            "How much did you spend?"
+        )
+
+    return (
+        "I need a little more information "
+        "about that expense."
+    )
+
+
+def farm_ai_prepare_expense_confirmation(
+    data
+):
+    amount = data.get(
+        "amount"
+    )
+
+    category = data.get(
+        "category",
+        "Other"
+    )
+
+    farm_ai_set_pending_action(
+        action_type="record_expense",
+        data=data,
+        status="awaiting_confirmation"
+    )
+
+    return {
+        "ok": True,
+        "awaiting_confirmation": True,
+        "message": (
+            f"Record {category} expense of "
+            f"{farm_ai_format_money(amount)}?"
+        )
+    }
+
+
+def farm_ai_start_expense_draft(
+    text
+):
+    data = (
+        farm_ai_extract_expense_details(
+            text,
+            {}
+        )
+    )
+
+    if (
+        data.get(
+            "category"
+        )
+        and data.get(
+            "amount"
+        )
+    ):
+
+        return (
+            farm_ai_prepare_expense_confirmation(
+                data
+            )
+        )
+
+    farm_ai_set_pending_action(
+        action_type="record_expense",
+        data=data,
+        status="collecting"
+    )
+
+    return {
+        "ok": True,
+        "collecting": True,
+        "message": (
+            farm_ai_expense_draft_message(
+                data
+            )
+        )
+    }
+
+
+def farm_ai_continue_expense_draft(
+    text
+):
+    pending = (
+        farm_ai_get_pending_action()
+        or {}
+    )
+
+    current_data = (
+        pending.get(
+            "data",
+            {}
+        )
+    )
+
+    data = (
+        farm_ai_extract_expense_details(
+            text,
+            current_data
+        )
+    )
+
+    if (
+        data.get(
+            "category"
+        )
+        and data.get(
+            "amount"
+        )
+    ):
+
+        return (
+            farm_ai_prepare_expense_confirmation(
+                data
+            )
+        )
+
+    farm_ai_update_pending_action(
+        data=data,
+        status="collecting"
+    )
+    return {
+        "ok": True,
+        "collecting": True,
+        "message": (
+            farm_ai_expense_draft_message(
+                data
+            )
+        )
+    }
+
+
 #farm ai prepare sale confirmation
 def farm_ai_prepare_sale_confirmation(
     amount=None,
@@ -9649,6 +10260,34 @@ def farm_ai_handle_pending_action_message(
             "message": result.get(
                 "message",
                 "Tell me more about the sale."
+            ),
+            "result": result
+        }
+
+        # ========================================================
+    # COLLECTING A MULTI-TURN EXPENSE
+    # ========================================================
+
+    if (
+        action_type == "record_expense"
+        and status == "collecting"
+    ):
+
+        result = (
+            farm_ai_continue_expense_draft(
+                text
+            )
+        )
+
+        return {
+            "handled": True,
+            "ok": result.get(
+                "ok",
+                True
+            ),
+            "message": result.get(
+                "message",
+                "Tell me more about the expense."
             ),
             "result": result
         }
@@ -10580,6 +11219,36 @@ label_visibility="collapsed",
         ] = []
 
         st.rerun()
+
+        # ========================================================
+    # NEW MULTI-TURN EXPENSE REQUEST
+    # ========================================================
+
+    if farm_ai_is_expense_request(
+        command
+    ):
+
+        expense_result = (
+            farm_ai_start_expense_draft(
+                command
+            )
+        )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": expense_result.get(
+                    "message",
+                    "Tell me about the expense."
+                )
+            }
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+        st.rerun()
     
     # ========================================================
     # 2. PARSE SMART FARM ACTION
@@ -10632,48 +11301,41 @@ label_visibility="collapsed",
         for phrase in navigation_words
     ):
 
-        navigation_matches = (
-            farm_assistant_find_features(
-                command,
-                limit=1
+        navigation_feature = (
+            farm_ai_find_navigation_destination(
+                command
             )
         )
 
-        if navigation_matches:
+        if navigation_feature:
 
             destination = (
-                navigation_matches[
-                    0
-                ].get(
+                navigation_feature[
                     "destination"
-                )
+                ]
             )
 
             feature_title = (
-                navigation_matches[
-                    0
-                ].get(
-                    "title",
-                    "that feature"
-                )
+                navigation_feature[
+                    "title"
+                ]
             )
 
-            if destination:
+            history.append(
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Opening "
+                        f"{feature_title}."
+                    )
+                }
+            )
 
-                history.append(
-                    {
-                        "role": "assistant",
-                        "content": (
-                            f"Opening "
-                            f"{feature_title}."
-                        )
-                    }
-                )
+            open_smart_farm_feature(
+                destination
+            )
 
-                open_smart_farm_feature(
-                    destination
-                )
-                return
+            return
 
     # ========================================================
     # 3. WRITE ACTION — SALE
@@ -10841,7 +11503,7 @@ label_visibility="collapsed",
         )
 
         suggestions = (
-            farm_assistant_find_features(
+            farm_ai_recommend_navigation_features(
                 command
                 + " "
                 + answer,
@@ -10900,7 +11562,7 @@ label_visibility="collapsed",
     try:
 
         suggested_features = (
-            farm_assistant_find_features(
+            farm_ai_recommend_navigation_features(
                 command
                 + " "
                 + str(
