@@ -6694,7 +6694,8 @@ def farm_action_record_sale(
         "record": new_record
     }
 
-    # ============================================================
+   
+# ============================================================
 # 💳 RECORD EXPENSE — SHARED WITH PRODUCTIVITY
 # ============================================================
 
@@ -6815,10 +6816,24 @@ def farm_action_record_expense(
         ignore_index=True
     )
 
-    _sync_farm_dataset(
-        "expenses",
-        expenses_df
+    saved = (
+        _sync_farm_dataset(
+            "expenses",
+            expenses_df
+        )
     )
+
+    if not saved:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ I prepared the expense record, "
+                "but Smart Farm AI could not save it "
+                "reliably. The expense was not "
+                "confirmed as recorded."
+            )
+        }
 
     return {
         "ok": True,
@@ -6830,7 +6845,6 @@ def farm_action_record_expense(
         ),
         "record": new_record
     }
-
 
 
 
@@ -9216,264 +9230,6 @@ def farm_ai_normalize_sale_unit(
     )
 
 
-def farm_ai_extract_sale_details(
-    text,
-    existing=None
-):
-    """
-    Extract sale information from natural farmer language.
-
-    Examples:
-    - 500 kg maize at 650
-    - 500 kg at 650
-    - maize
-    - total 325000
-    """
-
-    import re
-
-    data = dict(
-        existing
-        or {}
-    )
-
-    raw_text = str(
-        text or ""
-    ).strip()
-
-    clean_text = (
-        raw_text
-        .replace(",", "")
-    )
-
-    # --------------------------------------------------------
-    # QUANTITY + UNIT + PRODUCT + PRICE
-    # Example: 500 kg maize at 650
-    # --------------------------------------------------------
-
-    full_match = re.search(
-        r"(\d+(?:\.\d+)?)"
-        r"\s*"
-        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
-        r"\s+(?:of\s+)?"
-        r"([A-Za-z][A-Za-z\s\-]*?)"
-        r"\s+(?:at|@)\s*"
-        r"(\d+(?:\.\d+)?)",
-        clean_text,
-        re.IGNORECASE
-    )
-
-    if full_match:
-
-        quantity = float(
-            full_match.group(
-                1
-            )
-        )
-
-        unit = (
-            farm_ai_normalize_sale_unit(
-                full_match.group(
-                    2
-                )
-            )
-        )
-
-        product = (
-            full_match.group(
-                3
-            ).strip()
-        )
-
-        unit_price = float(
-            full_match.group(
-                4
-            )
-        )
-
-        data.update(
-            {
-                "quantity":
-                    quantity,
-
-                "unit":
-                    unit,
-
-                "product":
-                    product,
-
-                "unit_price":
-                    unit_price,
-
-                "amount":
-                    quantity
-                    * unit_price
-            }
-        )
-
-        return data
-
-    # --------------------------------------------------------
-    # QUANTITY + UNIT + PRICE
-    # Product may already be known.
-    # Example: 500 kg at 650
-    # --------------------------------------------------------
-
-    quantity_price_match = re.search(
-        r"(\d+(?:\.\d+)?)"
-        r"\s*"
-        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
-        r"\s+(?:at|@)\s*"
-        r"(\d+(?:\.\d+)?)",
-        clean_text,
-        re.IGNORECASE
-    )
-
-    if quantity_price_match:
-
-        quantity = float(
-            quantity_price_match.group(
-                1
-            )
-        )
-
-        unit = (
-            farm_ai_normalize_sale_unit(
-                quantity_price_match.group(
-                    2
-                )
-            )
-        )
-
-        unit_price = float(
-            quantity_price_match.group(
-                3
-            )
-        )
-        data.update(
-            {
-                "quantity":
-                    quantity,
-
-                "unit":
-                    unit,
-
-                "unit_price":
-                    unit_price,
-
-                "amount":
-                    quantity
-                    * unit_price
-            }
-        )
-
-    # --------------------------------------------------------
-    # EXPLICIT TOTAL
-    # Example: total 325000
-    # --------------------------------------------------------
-
-    total_match = re.search(
-        r"(?:total(?:\s+is)?|worth|for)"
-        r"\s*"
-        r"(\d+(?:\.\d+)?)",
-        clean_text,
-        re.IGNORECASE
-    )
-
-    if (
-        total_match
-        and not (
-            data.get(
-                "quantity"
-            )
-            and data.get(
-                "unit_price"
-            )
-        )
-    ):
-
-        data[
-            "amount"
-        ] = float(
-            total_match.group(
-                1
-            )
-        )
-
-    # --------------------------------------------------------
-    # SIMPLE PRODUCT FOLLOW-UP
-    # Example: maize
-    # --------------------------------------------------------
-
-    if not data.get(
-        "product"
-    ):
-
-        contains_number = bool(
-            re.search(
-                r"\d",
-                clean_text
-            )
-        )
-
-        word_count = len(
-            clean_text.split()
-        )
-
-        if (
-            not contains_number
-            and 1 <= word_count <= 3
-        ):
-
-            ignored_words = {
-                "yes",
-                "no",
-                "confirmed",
-                "confirm",
-                "correct",
-                "cancel",
-                "okay",
-                "ok"
-            }
-
-            if (
-                clean_text.lower()
-                not in ignored_words
-            ):
-
-                data[
-                    "product"
-                ] = clean_text.strip()
-
-    # --------------------------------------------------------
-    # ALWAYS TRUST QUANTITY × UNIT PRICE FOR CALCULATED TOTAL
-    # --------------------------------------------------------
-
-    if (
-        data.get(
-            "quantity"
-        )
-        and data.get(
-            "unit_price"
-        )
-    ):
-
-        data[
-            "amount"
-        ] = (
-            float(
-                data[
-                    "quantity"
-                ]
-            )
-            * float(
-                data[
-                    "unit_price"
-                ]
-            )
-        )
-
-    return data
 
 
 def farm_ai_sale_draft_message(
@@ -9707,10 +9463,16 @@ def farm_ai_is_expense_request(
     )
 
 
-def farm_ai_extract_expense_details(
+def farm_ai_extract_sale_details(
     text,
     existing=None
 ):
+    """
+    Extract sale information across one or multiple
+    Copilot messages without treating sale commands
+    as product names.
+    """
+
     import re
 
     data = dict(
@@ -9725,51 +9487,226 @@ def farm_ai_extract_expense_details(
         ""
     ).strip()
 
-    amount_match = re.search(
-        r"(\d+(?:\.\d+)?)",
-        clean_text
-    )
-
-    if amount_match:
-
-        data[
-            "amount"
-        ] = float(
-            amount_match.group(
-                1
-            )
-        )
-
-    category_map = {
-        "fertilizer": "Fertilizer",
-        "pesticide": "Pesticide",
-        "seed": "Seeds",
-        "seeds": "Seeds",
-        "labor": "Labor",
-        "labour": "Labor",
-        "transport": "Transport",
-        "fuel": "Fuel",
-        "irrigation": "Irrigation",
-        "equipment": "Equipment",
-        "maintenance": "Maintenance",
-        "rent": "Rent"
-    }
-
     lower_text = (
         clean_text.lower()
     )
 
-    for keyword, category in category_map.items():
+    # ========================================================
+    # SALE COMMANDS ARE NOT PRODUCT NAMES
+    # ========================================================
 
-        if keyword in lower_text:
+    sale_command_phrases = {
+        "add sale",
+        "add a sale",
+        "add sales",
+        "add sales record",
+        "add sale record",
+        "record sale",
+        "record a sale",
+        "record sales",
+        "record sales record",
+        "record sale record",
+        "sales record",
+        "sale record",
+        "save sale",
+        "save sales",
+        "create sale",
+        "create sales record",
+        "new sale",
+        "new sales record"
+    }
 
-            data[
-                "category"
-            ] = category
+    is_sale_command_only = (
+        lower_text
+        in sale_command_phrases
+    )
 
-            break
+    # ========================================================
+    # FULL SALE
+    # Example: 500 kg maize at 750
+    # ========================================================
+
+    full_match = re.search(
+        r"(\d+(?:\.\d+)?)"
+        r"\s*"
+        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
+        r"\s+(?:of\s+)?"
+        r"([A-Za-z][A-Za-z\s\-]*?)"
+        r"\s+(?:at|@)\s*"
+        r"(\d+(?:\.\d+)?)",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if full_match:
+
+        quantity = float(
+            full_match.group(1)
+        )
+
+        unit = (
+            farm_ai_normalize_sale_unit(
+                full_match.group(2)
+            )
+        )
+
+        product = (
+            full_match.group(3)
+            .strip()
+        )
+
+        unit_price = float(
+            full_match.group(4)
+        )
+
+        data.update(
+            {
+                "quantity": quantity,
+                "unit": unit,
+                "product": product,
+                "unit_price": unit_price,
+                "amount": (
+                    quantity
+                    * unit_price
+                )
+            }
+        )
+
+        return data
+
+    # ========================================================
+    # QUANTITY + UNIT + PRICE
+    # Example: 500 kg at 750
+    # ========================================================
+
+    quantity_price_match = re.search(
+        r"(\d+(?:\.\d+)?)"
+        r"\s*"
+        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
+        r"\s+(?:at|@)\s*"
+        r"(\d+(?:\.\d+)?)",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if quantity_price_match:
+
+        quantity = float(
+            quantity_price_match.group(1)
+        )
+
+        unit = (
+            farm_ai_normalize_sale_unit(
+                quantity_price_match.group(2)
+            )
+        )
+
+        unit_price = float(
+            quantity_price_match.group(3)
+        )
+
+        data.update(
+            {
+                "quantity": quantity,
+                "unit": unit,
+                "unit_price": unit_price,
+                "amount": (
+                    quantity
+                    * unit_price
+                )
+            }
+        )
+
+    # ========================================================
+    # EXPLICIT TOTAL
+    # Example: total 375000
+    # ========================================================
+
+    total_match = re.search(
+        r"(?:total(?:\s+is)?|worth|for)"
+        r"\s*"
+        r"(\d+(?:\.\d+)?)",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if (
+        total_match
+        and not (
+            data.get("quantity")
+            and data.get("unit_price")
+        )
+    ):
+
+        data["amount"] = float(
+            total_match.group(1)
+        )
+        # ========================================================
+    # SIMPLE PRODUCT FOLLOW-UP
+    # Example: Maize
+    # ========================================================
+
+    if (
+        not data.get("product")
+        and not is_sale_command_only
+    ):
+
+        contains_number = bool(
+            re.search(
+                r"\d",
+                clean_text
+            )
+        )
+
+        words = (
+            lower_text.split()
+        )
+
+        blocked_words = {
+            "add",
+            "record",
+            "save",
+            "create",
+            "sale",
+            "sales",
+            "new"
+        }
+
+        contains_command_word = any(
+            word in blocked_words
+            for word in words
+        )
+
+        if (
+            not contains_number
+            and 1 <= len(words) <= 3
+            and not contains_command_word
+        ):
+
+            data["product"] = (
+                clean_text
+            )
+
+    # ========================================================
+    # QUANTITY × UNIT PRICE IS AUTHORITATIVE
+    # ========================================================
+
+    if (
+        data.get("quantity")
+        and data.get("unit_price")
+    ):
+
+        data["amount"] = (
+            float(
+                data["quantity"]
+            )
+            * float(
+                data["unit_price"]
+            )
+        )
 
     return data
+
 
 
 def farm_ai_expense_draft_message(
@@ -10093,14 +10030,18 @@ def farm_ai_prepare_sale_confirmation(
 
 def farm_ai_execute_pending_action():
     """
-    Execute the action currently waiting for confirmation.
-    The Copilot must never claim success unless
-    the underlying Smart Farm AI action succeeds.
+    Execute the farm action currently waiting
+    for farmer confirmation.
     """
 
-    pending = farm_ai_get_pending_action()
+    pending = (
+        farm_ai_get_pending_action()
+    )
 
-    if not pending:
+    if not isinstance(
+        pending,
+        dict
+    ):
 
         return {
             "ok": False,
@@ -10110,18 +10051,110 @@ def farm_ai_execute_pending_action():
             )
         }
 
-    action_type = pending.get(
-        "action_type"
-    )
-
-    data = pending.get(
-        "data",
-        {}
-    )
-
     # --------------------------------------------------------
+    # Support current and older pending formats
+    # --------------------------------------------------------
+
+    action_type = (
+        pending.get(
+            "action_type"
+        )
+        or pending.get(
+            "intent"
+        )
+    )
+
+    data = (
+        pending.get(
+            "data"
+        )
+    )
+
+    if not isinstance(
+        data,
+        dict
+    ):
+
+        data = dict(
+            pending
+        )
+
+    # ========================================================
+    # RECORD SALE
+    # ========================================================
+
+    if action_type == "record_sale":
+
+        farm_ai_update_pending_action(
+            status="executing"
+        )
+
+        try:
+
+            result = (
+                farm_action_record_sale(
+                    amount=data.get(
+                        "amount"
+                    ),
+                    product=data.get(
+                        "product"
+                    ),
+                    quantity=data.get(
+                        "quantity"
+                    ),
+                    unit=data.get(
+                        "unit",
+                        "transaction"
+                    ),
+                    unit_price=data.get(
+                        "unit_price"
+                    ),
+                    buyer=data.get(
+                        "buyer",
+                        ""
+                    ),
+                    notes=data.get(
+                        "notes",
+                        ""
+                    )
+                )
+            )
+
+        except Exception as error:
+
+            result = {
+                "ok": False,
+                "message": (
+                    "❌ Smart Farm AI could not "
+                    "complete the sale record."
+                ),
+                "error": str(
+                    error
+                )
+            }
+
+        st.session_state[
+            "farm_ai_last_action_result"
+        ] = result
+
+        if result.get(
+            "ok",
+            False
+        ):
+
+            farm_ai_clear_pending_action()
+
+        else:
+
+            farm_ai_update_pending_action(
+                status="awaiting_confirmation"
+            )
+
+        return result
+
+    # ========================================================
     # RECORD EXPENSE
-    # --------------------------------------------------------
+    # ========================================================
 
     if action_type == "record_expense":
 
@@ -10139,8 +10172,10 @@ def farm_ai_execute_pending_action():
 
         try:
 
-            result = execute_farm_action(
-                expense_action
+            result = (
+                execute_farm_action(
+                    expense_action
+                )
             )
 
         except Exception as error:
@@ -10161,7 +10196,8 @@ def farm_ai_execute_pending_action():
         ] = result
 
         if result.get(
-            "ok"
+            "ok",
+            False
         ):
 
             farm_ai_clear_pending_action()
@@ -10171,20 +10207,23 @@ def farm_ai_execute_pending_action():
             farm_ai_update_pending_action(
                 status="awaiting_confirmation"
             )
+            return result
 
-        return result
+    # ========================================================
+    # INVALID / OLD PENDING ACTION
+    # ========================================================
 
-    # --------------------------------------------------------
-    # UNKNOWN ACTION
-    # --------------------------------------------------------
+    farm_ai_clear_pending_action()
 
     return {
         "ok": False,
         "message": (
-            "Smart Farm AI does not yet know "
-            "how to execute this pending action."
+            "That unfinished action came from an older "
+            "Copilot session, so I cleared it safely. "
+            "Please send the request again."
         )
     }
+
 
 
 def farm_ai_handle_pending_action_message(
