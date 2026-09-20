@@ -6492,11 +6492,20 @@ def farm_action_record_sale(
     buyer="",
     notes=""
 ):
+    import json
     import pandas as pd
     from datetime import datetime
 
     context = (
         get_farm_action_context()
+        or {}
+    )
+
+    current_farm = (
+        st.session_state.get(
+            "current_farm",
+            {}
+        )
         or {}
     )
 
@@ -6513,14 +6522,49 @@ def farm_action_record_sale(
         or "Farmer"
     )
 
-    product = (
-        product
+    farm_id = (
+        current_farm.get(
+            "farm_id",
+            "main_farm"
+        )
+    )
+
+    farm_name = (
+        current_farm.get(
+            "farm_name"
+        )
+        or context.get(
+            "farm_name"
+        )
+        or "Main Farm"
+    )
+
+    crop_type = (
+        current_farm.get(
+            "crop_type"
+        )
         or context.get(
             "crop"
         )
         or context.get(
             "crop_type"
         )
+        or "Not specified"
+    )
+
+    location = (
+        current_farm.get(
+            "location"
+        )
+        or context.get(
+            "location"
+        )
+        or ""
+    )
+
+    product = (
+        product
+        or crop_type
         or "Farm Produce"
     )
 
@@ -6548,10 +6592,6 @@ def farm_action_record_sale(
         else None
     )
 
-    # --------------------------------------------------------
-    # Calculate total when quantity × unit price was supplied
-    # --------------------------------------------------------
-
     if (
         (
             amount_value is None
@@ -6560,7 +6600,6 @@ def farm_action_record_sale(
         and quantity_value
         and unit_price_value
     ):
-
         amount_value = (
             quantity_value
             * unit_price_value
@@ -6570,7 +6609,6 @@ def farm_action_record_sale(
         amount_value is None
         or amount_value <= 0
     ):
-
         return {
             "ok": False,
             "message": (
@@ -6579,28 +6617,107 @@ def farm_action_record_sale(
             )
         }
 
-    # --------------------------------------------------------
-    # Provide sensible values when only total was given
-    # --------------------------------------------------------
-
     if (
         quantity_value is None
         or quantity_value <= 0
     ):
         quantity_value = 1.0
 
-        if unit == "transaction":
-            unit = "transaction"
-
     if (
         unit_price_value is None
         or unit_price_value <= 0
     ):
-
         unit_price_value = (
             amount_value
             / quantity_value
         )
+
+    # ========================================================
+    # SAVE TO THE SAME FILE PRODUCTIVITY USES
+    # ========================================================
+
+    productivity_record = {
+        "farm_id": farm_id,
+        "farm_name": farm_name,
+        "crop_type": crop_type,
+        "location": location,
+        "item": str(product),
+        "quantity": float(quantity_value),
+        "amount": float(amount_value),
+        "date": datetime.now().strftime(
+            "%Y-%m-%d"
+        ),
+
+        # Extra Copilot details are safe to keep
+        "unit": str(unit),
+        "unit_price": float(
+            unit_price_value
+        ),
+        "buyer": str(
+            buyer or ""
+        ),
+        "notes": str(
+            notes or ""
+        ),
+        "farmer": farmer_name
+    }
+
+    try:
+
+        with open(
+            "sales_records.json",
+            "r"
+        ) as file:
+
+            sales_data = (
+                json.load(
+                    file
+                )
+            )
+
+        if not isinstance(
+            sales_data,
+            list
+        ):
+            sales_data = []
+
+    except (
+        FileNotFoundError,
+        json.JSONDecodeError
+    ):
+
+        sales_data = []
+
+    sales_data.append(
+        productivity_record
+    )
+
+    try:
+       with open(
+            "sales_records.json",
+            "w"
+        ) as file:
+
+            json.dump(
+                sales_data,
+                file,
+                indent=4
+            )
+
+    except Exception:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ Smart Farm AI prepared the sale, "
+                "but could not save it to "
+                "Productivity & Records."
+            )
+        }
+
+    # ========================================================
+    # ALSO KEEP LIVE COPILOT/SESSION DATA UPDATED
+    # ========================================================
 
     columns = [
         "date",
@@ -6621,35 +6738,28 @@ def farm_action_record_sale(
         )
     )
 
-    new_record = {
-        "date":
-            datetime.now().strftime(
-                "%Y-%m-%d"
-            ),
-
-        "farmer":
-            farmer_name,
-
-        "product":
-            str(product),
-
-        "quantity":
-            float(quantity_value),
-
-        "unit":
-            str(unit),
-
-        "unit_price":
-            float(unit_price_value),
-
-        "total":
-            float(amount_value),
-
-        "buyer":
-            str(buyer or ""),
-
-        "notes":
-            str(notes or "")
+    session_record = {
+        "date": productivity_record[
+            "date"
+        ],
+        "farmer": farmer_name,
+        "product": str(product),
+        "quantity": float(
+            quantity_value
+        ),
+        "unit": str(unit),
+        "unit_price": float(
+            unit_price_value
+        ),
+        "total": float(
+            amount_value
+        ),
+        "buyer": str(
+            buyer or ""
+        ),
+        "notes": str(
+            notes or ""
+        )
     }
 
     sales_df = pd.concat(
@@ -6657,30 +6767,16 @@ def farm_action_record_sale(
             sales_df,
             pd.DataFrame(
                 [
-                    new_record
+                    session_record
                 ]
             )
         ],
         ignore_index=True
     )
 
-    saved = _sync_farm_dataset(
-        "sales",
-        sales_df
-    )
-
-    if not saved:
-
-        return {
-            "ok": False,
-            "message": (
-                "❌ I prepared the sale record, "
-                "but Smart Farm AI could not "
-                "save it reliably. "
-                "The sale was not confirmed "
-                "as recorded."
-            )
-        }
+    st.session_state[
+        "sales"
+    ] = sales_df
 
     return {
         "ok": True,
@@ -6691,8 +6787,8 @@ def farm_action_record_sale(
             f"It is now available in "
             f"Productivity & Records."
         ),
-        "record": new_record
-    }
+        "record": productivity_record
+    } 
 
    
 # ============================================================
@@ -6706,11 +6802,20 @@ def farm_action_record_expense(
     payment_method="",
     notes=""
 ):
+    import json
     import pandas as pd
     from datetime import datetime
 
     context = (
         get_farm_action_context()
+        or {}
+    )
+
+    current_farm = (
+        st.session_state.get(
+            "current_farm",
+            {}
+        )
         or {}
     )
 
@@ -6725,6 +6830,46 @@ def farm_action_record_expense(
             "name"
         )
         or "Farmer"
+    )
+
+    farm_id = (
+        current_farm.get(
+            "farm_id",
+            "main_farm"
+        )
+    )
+
+    farm_name = (
+        current_farm.get(
+            "farm_name"
+        )
+        or context.get(
+            "farm_name"
+        )
+        or "Main Farm"
+    )
+
+    crop_type = (
+        current_farm.get(
+            "crop_type"
+        )
+        or context.get(
+            "crop"
+        )
+        or context.get(
+            "crop_type"
+        )
+        or "Not specified"
+    )
+
+    location = (
+        current_farm.get(
+            "location"
+        )
+        or context.get(
+            "location"
+        )
+        or ""
     )
 
     amount_value = (
@@ -6748,6 +6893,102 @@ def farm_action_record_expense(
             )
         }
 
+    # ========================================================
+    # SAVE TO THE SAME FILE PRODUCTIVITY USES
+    # ========================================================
+
+    productivity_record = {
+        "farm_id": farm_id,
+        "farm_name": farm_name,
+        "crop_type": crop_type,
+        "location": location,
+
+        "Date": datetime.now().strftime(
+            "%Y-%m-%d"
+        ),
+
+        "Category": str(
+            category
+            or "Other"
+        ),
+
+        "Amount": float(
+            amount_value
+        ),
+
+        "Description": str(
+            description
+            or ""
+        ),
+
+        "payment_method": str(
+            payment_method
+            or ""
+        ),
+
+        "notes": str(
+            notes or ""
+        )
+    }
+
+    try:
+
+        with open(
+            "expenses.json",
+            "r"
+        ) as file:
+
+            expense_data = (
+                json.load(
+                    file
+                )
+            )
+
+        if not isinstance(
+            expense_data,
+            list
+        ):
+            expense_data = []
+
+    except (
+        FileNotFoundError,
+        json.JSONDecodeError
+    ):
+
+        expense_data = []
+
+    expense_data.append(
+        productivity_record
+    )
+
+    try:
+
+        with open(
+            "expenses.json",
+            "w"
+        ) as file:
+
+            json.dump(
+                expense_data,
+                file,
+                indent=4
+            )
+
+    except Exception:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ Smart Farm AI prepared the expense, "
+                "but could not save it to "
+                "Productivity & Records."
+            )
+        }
+
+    # ========================================================
+    # KEEP LIVE SESSION EXPENSE DATA UPDATED
+    # ========================================================
+
     columns = [
         "date",
         "farmer",
@@ -6764,44 +7005,29 @@ def farm_action_record_expense(
             columns
         )
     )
-
-    new_record = {
-        "date":
-            datetime.now().strftime(
-                "%Y-%m-%d"
-            ),
-
-        "farmer":
-            farmer_name,
-
-        "category":
-            str(
-                category
-                or "Other"
-            ),
-
-        "description":
-            str(
-                description
-                or ""
-            ),
-
-        "amount":
-            float(
-                amount_value
-            ),
-
-        "payment_method":
-            str(
-                payment_method
-                or ""
-            ),
-
-        "notes":
-            str(
-                notes
-                or ""
-            )
+    session_record = {
+        "date": productivity_record[
+            "Date"
+        ],
+        "farmer": farmer_name,
+        "category": str(
+            category
+            or "Other"
+        ),
+        "description": str(
+            description
+            or ""
+        ),
+        "amount": float(
+            amount_value
+        ),
+        "payment_method": str(
+            payment_method
+            or ""
+        ),
+        "notes": str(
+            notes or ""
+        )
     }
 
     expenses_df = pd.concat(
@@ -6809,31 +7035,16 @@ def farm_action_record_expense(
             expenses_df,
             pd.DataFrame(
                 [
-                    new_record
+                    session_record
                 ]
             )
         ],
         ignore_index=True
     )
 
-    saved = (
-        _sync_farm_dataset(
-            "expenses",
-            expenses_df
-        )
-    )
-
-    if not saved:
-
-        return {
-            "ok": False,
-            "message": (
-                "❌ I prepared the expense record, "
-                "but Smart Farm AI could not save it "
-                "reliably. The expense was not "
-                "confirmed as recorded."
-            )
-        }
+    st.session_state[
+        "expenses"
+    ] = expenses_df
 
     return {
         "ok": True,
@@ -6843,7 +7054,7 @@ def farm_action_record_expense(
             f"It is now available in "
             f"Productivity & Records."
         ),
-        "record": new_record
+        "record": productivity_record
     }
 
 
