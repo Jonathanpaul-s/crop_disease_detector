@@ -9046,17 +9046,24 @@ FARM_AI_NAVIGATION_CATALOG = [
     },
     {
         "title": "Irrigation & Soil",
-        "destination": "💧 Irrigation & Soil",
-        "icon": "💧",
-        "description": "Soil moisture, water usage, soil records and irrigation tools.",
-        "keywords": [
-            "irrigation and soil",
-            "soil moisture",
-            "soil health record",
-            "water usage",
-            "irrigation cost",
-            "soil record"
-        ]
+    "destination": "💧 Irrigation & Soil",
+    "icon": "💧",
+    "description": "Soil moisture, water usage, soil records and irrigation tools.",
+    "keywords": [
+        "irrigation and soil",
+        "irrigation soil",
+        "soil health",
+        "soil check",
+        "soil condition",
+        "soil moisture",
+        "soil health record",
+        "water usage",
+        "irrigation cost",
+        "soil record",
+        "soil irrigation",
+        "water management"
+    ]
+
     },
     {
         "title": "Profit & Loss",
@@ -9156,14 +9163,18 @@ FARM_AI_NAVIGATION_CATALOG = [
     },
     {
         "title": "Irrigation Scheduler",
-        "destination": "💦 Irrigation Scheduler",
-        "icon": "💦",
-        "description": "Plan and manage irrigation schedules.",
-        "keywords": [
-            "irrigation scheduler",
-            "irrigation schedule",
-            "schedule irrigation"
-        ]
+    "destination": "💦 Irrigation Scheduler",
+    "icon": "💦",
+    "description": "Plan and manage irrigation schedules.",
+    "keywords": [
+        "irrigation scheduler",
+        "irrigation schedule",
+        "schedule irrigation",
+        "watering schedule",
+        "irrigation timing",
+        "plan irrigation"
+    ]
+
     },
     {
         "title": "Voice Command",
@@ -9283,51 +9294,279 @@ FARM_AI_NAVIGATION_CATALOG = [
 ]
 
 
-def farm_ai_navigation_score(
-    text,
-    feature
+# ============================================================
+# 🧭 SMART FARM AI COPILOT — FORGIVING NAVIGATION ENGINE
+# ============================================================
+
+def farm_ai_normalize_navigation_text(
+    text
 ):
+    """
+    Normalize natural farmer navigation requests.
+    """
+
+    import re
+
     clean_text = str(
         text or ""
     ).strip().lower()
 
+    navigation_phrases = (
+        "open ",
+        "go to ",
+        "take me to ",
+        "show me ",
+        "navigate to ",
+        "bring me to ",
+        "i want to see ",
+        "let me see "
+    )
+
+    for phrase in navigation_phrases:
+
+        clean_text = clean_text.replace(
+            phrase,
+            " "
+        )
+
+    clean_text = re.sub(
+        r"[^a-z0-9\s]",
+        " ",
+        clean_text
+    )
+
+    clean_text = re.sub(
+        r"\s+",
+        " ",
+        clean_text
+    ).strip()
+
+    return clean_text
+
+
+def farm_ai_navigation_score(
+    text,
+    feature
+):
+    """
+    Score a feature using:
+    - exact matching
+    - partial matching
+    - word overlap
+    - typo-tolerant fuzzy matching
+    """
+
+    from difflib import SequenceMatcher
+
+    clean_text = (
+        farm_ai_normalize_navigation_text(
+            text
+        )
+    )
+
+    if not clean_text:
+
+        return 0
+
     score = 0
 
-    for keyword in feature.get(
-        "keywords",
-        []
-    ):
+    feature_title = (
+        farm_ai_normalize_navigation_text(
+            feature.get(
+                "title",
+                ""
+            )
+        )
+    )
 
-        keyword_lower = keyword.lower()
+    keywords = list(
+        feature.get(
+            "keywords",
+            []
+        )
+    )
 
-        if keyword_lower in clean_text:
+    if feature_title:
 
-            score += (
-                10
-                + len(
-                    keyword_lower
+        keywords.append(
+            feature_title
+        )
+
+    request_words = set(
+        clean_text.split()
+    )
+
+    for keyword in keywords:
+
+        keyword_clean = (
+            farm_ai_normalize_navigation_text(
+                keyword
+            )
+        )
+
+        if not keyword_clean:
+            continue
+
+        # ----------------------------------------------------
+        # Exact phrase
+        # ----------------------------------------------------
+
+        if keyword_clean == clean_text:
+
+            score = max(
+                score,
+                100
+            )
+
+            continue
+
+        # ----------------------------------------------------
+        # Keyword exists inside request
+        # ----------------------------------------------------
+
+        if keyword_clean in clean_text:
+
+            score = max(
+                score,
+                85
+                + min(
+                    len(
+                        keyword_clean
+                    ),
+                    14
                 )
             )
 
+        # ----------------------------------------------------
+        # Request exists inside keyword
+        # ----------------------------------------------------
+
+        if (
+            len(clean_text) >= 4
+            and clean_text in keyword_clean
+        ):
+
+            score = max(
+                score,
+                78
+            )
+
+        # ----------------------------------------------------
+        # Word overlap
+        # ----------------------------------------------------
+
+        keyword_words = set(
+            keyword_clean.split()
+        )
+
+        common_words = (
+            request_words
+            & keyword_words
+        )
+
+        if common_words:
+
+            overlap_score = (
+                len(
+                    common_words
+                )
+                / max(
+                    len(
+                        keyword_words
+                    ),
+                    1
+                )
+            )
+
+            score = max(
+                score,
+                int(
+                    overlap_score
+                    * 75
+                )
+            )
+
+        # ----------------------------------------------------
+        # Typo-tolerant comparison
+        # Example: "soi health" → "soil health"
+        # ----------------------------------------------------
+
+        similarity = (
+            SequenceMatcher(
+                None,
+                clean_text,
+                keyword_clean
+            ).ratio()
+        )
+
+        if similarity >= 0.58:
+
+            score = max(
+                score,
+                int(
+                    similarity
+                    * 80
+                )
+            )
+
+        # ----------------------------------------------------
+        # Compare individual words for spelling mistakes
+        # ----------------------------------------------------
+
+        for request_word in request_words:
+
+            if len(
+                request_word
+            ) < 3:
+                continue
+
+            for keyword_word in keyword_words:
+
+                word_similarity = (
+                    SequenceMatcher(
+                        None,
+                        request_word,
+                        keyword_word
+                    ).ratio()
+                )
+
+                if word_similarity >= 0.72:
+
+                    score += 8
+
     return score
+
 
 def farm_ai_find_navigation_destination(
     text
 ):
+    """
+    Find the most relevant existing Smart Farm AI feature.
+    """
+
     best_feature = None
     best_score = 0
 
-    for feature in FARM_AI_NAVIGATION_CATALOG:
+    for feature in (
+        FARM_AI_NAVIGATION_CATALOG
+    ):
 
-        score = farm_ai_navigation_score(
-            text,
-            feature
+        score = (
+            farm_ai_navigation_score(
+                text,
+                feature
+            )
         )
 
         if score > best_score:
 
             best_score = score
             best_feature = feature
+
+    # Avoid opening random features when confidence is poor.
+    if best_score < 30:
+
+        return None
 
     return best_feature
 
@@ -9336,35 +9575,71 @@ def farm_ai_recommend_navigation_features(
     text,
     limit=3
 ):
-    scored = []
+    """
+    Return only the best few relevant tools even though
+    the Copilot knows the wider Smart Farm AI platform.
+    """
 
-    for feature in FARM_AI_NAVIGATION_CATALOG:
+    scored_features = []
 
-        score = farm_ai_navigation_score(
-            text,
-            feature
+    for feature in (
+        FARM_AI_NAVIGATION_CATALOG
+    ):
+
+        score = (
+            farm_ai_navigation_score(
+                text,
+                feature
+            )
         )
 
-        if score > 0:
+        if score >= 25:
 
-            scored.append(
+            scored_features.append(
                 (
                     score,
                     feature
                 )
             )
 
-    scored.sort(
+    scored_features.sort(
         key=lambda item: item[0],
         reverse=True
     )
 
-    return [
-        feature
-        for _, feature in scored[
-            :limit
-        ]
-    ]
+    recommendations = []
+
+    used_destinations = set()
+
+    for score, feature in scored_features:
+
+        destination = feature.get(
+            "destination"
+        )
+
+        if (
+            not destination
+            or destination
+            in used_destinations
+        ):
+            continue
+
+        recommendations.append(
+            feature
+        )
+
+        used_destinations.add(
+            destination
+        )
+
+        if len(
+            recommendations
+        ) >= limit:
+
+            break
+
+    return recommendations
+
 
 # ============================================================
 # 🤖 SMART FARM AI COPILOT — MULTI-TURN SALE INTELLIGENCE
