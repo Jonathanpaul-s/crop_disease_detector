@@ -6480,6 +6480,32 @@ def _sync_farm_dataset(
 
 
 # ============================================================
+# 🔐 SMART FARM AI — RECORD OWNER
+# ============================================================
+
+def farm_record_owner():
+    """
+    Return a stable account identifier for farm records.
+    """
+
+    owner = (
+        st.session_state.get(
+            "current_user"
+        )
+        or st.session_state.get(
+            "registered_email"
+        )
+        or st.session_state.get(
+            "registered_name"
+        )
+        or ""
+    )
+
+    return str(
+        owner
+    ).strip().lower()
+
+# ============================================================
 # 💰 RECORD SALE — SHARED WITH PRODUCTIVITY
 # ============================================================
 
@@ -6637,6 +6663,7 @@ def farm_action_record_sale(
     # ========================================================
 
     productivity_record = {
+        "owner_user": farm_record_owner(),
         "farm_id": farm_id,
         "farm_name": farm_name,
         "crop_type": crop_type,
@@ -9542,7 +9569,67 @@ def farm_ai_find_navigation_destination(
 ):
     """
     Find the most relevant existing Smart Farm AI feature.
+    Includes deterministic aliases for important destinations.
     """
+
+    clean_text = (
+        farm_ai_normalize_navigation_text(
+            text
+        )
+    )
+
+    # --------------------------------------------------------
+    # IMPORTANT DIRECT ALIASES
+    # --------------------------------------------------------
+
+    direct_aliases = {
+        "profit and loss":
+            "📊 Farm Profit & Loss Statement",
+
+        "profit loss":
+            "📊 Farm Profit & Loss Statement",
+
+        "farm profit and loss":
+            "📊 Farm Profit & Loss Statement",
+
+        "profit loss statement":
+            "📊 Farm Profit & Loss Statement",
+
+        "farm records":
+            "📊 Productivity & Records",
+
+        "productivity records":
+            "📊 Productivity & Records",
+
+        "soil health":
+            "💧 Irrigation & Soil",
+
+        "soil moisture":
+            "💧 Irrigation & Soil"
+    }
+
+    for alias, destination in (
+        direct_aliases.items()
+    ):
+
+        if alias in clean_text:
+
+            for feature in (
+                FARM_AI_NAVIGATION_CATALOG
+            ):
+
+                if (
+                    feature.get(
+                        "destination"
+                    )
+                    == destination
+                ):
+
+                    return feature
+
+    # --------------------------------------------------------
+    # NORMAL FUZZY MATCHING
+    # --------------------------------------------------------
 
     best_feature = None
     best_score = 0
@@ -9563,7 +9650,6 @@ def farm_ai_find_navigation_destination(
             best_score = score
             best_feature = feature
 
-    # Avoid opening random features when confidence is poor.
     if best_score < 30:
 
         return None
@@ -24276,6 +24362,7 @@ elif menu_v2 == "📊 Productivity & Records":
         ):
 
             new_record = {
+                "owner_user": farm_record_owner(),
                 "farm_id": current_farm_id,
                 "farm_name": current_farm_name,
                 "crop_type": current_crop,
@@ -24418,6 +24505,7 @@ elif menu_v2 == "📊 Productivity & Records":
         if submit_expense:
 
             new_expense = {
+                "owner_user": farm_record_owner(),
                 "farm_id": current_farm_id,
                 "farm_name": current_farm_name,
                 "crop_type": current_crop,
@@ -24872,15 +24960,28 @@ elif menu_v2 == "📊 Productivity & Records":
                 sales_data = json.load(file)
 
             farm_sales = [
-                entry
-                for entry in sales_data
-                if str(
-                    entry.get(
-                        "farm_id",
-                        "main_farm"
-                    )
-                ) == str(current_farm_id)
-            ]
+    entry
+    for entry in sales_data
+    if (
+        str(
+            entry.get(
+                "owner_user",
+                ""
+            )
+        ).strip().lower()
+        == farm_record_owner()
+        and
+        str(
+            entry.get(
+                "farm_id",
+                ""
+            )
+        )
+        == str(
+            current_farm_id
+        )
+    )
+]
 
         except FileNotFoundError:
             farm_sales = []
@@ -24893,15 +24994,28 @@ elif menu_v2 == "📊 Productivity & Records":
                 expense_data = json.load(file)
 
             farm_expenses = [
-                entry
-                for entry in expense_data
-                if str(
-                    entry.get(
-                        "farm_id",
-                        "main_farm"
-                    )
-                ) == str(current_farm_id)
-            ]
+    entry
+    for entry in expense_data
+    if (
+        str(
+            entry.get(
+                "owner_user",
+                ""
+            )
+        ).strip().lower()
+        == farm_record_owner()
+        and
+        str(
+            entry.get(
+                "farm_id",
+                ""
+            )
+        )
+        == str(
+            current_farm_id
+        )
+    )
+]
 
         except FileNotFoundError:
             farm_expenses = []
@@ -24948,15 +25062,28 @@ elif menu_v2 == "📊 Productivity & Records":
                 sales_data = json.load(file)
 
             farm_sales = [
-                entry
-                for entry in sales_data
-                if str(
-                    entry.get(
-                        "farm_id",
-                        "main_farm"
-                    )
-                ) == str(current_farm_id)
-            ]
+    entry
+    for entry in sales_data
+    if (
+        str(
+            entry.get(
+                "owner_user",
+                ""
+            )
+        ).strip().lower()
+        == farm_record_owner()
+        and
+        str(
+            entry.get(
+                "farm_id",
+                ""
+            )
+        )
+        == str(
+            current_farm_id
+        )
+    )
+]
 
         except (FileNotFoundError, json.JSONDecodeError):
             farm_sales = []
@@ -24969,15 +25096,28 @@ elif menu_v2 == "📊 Productivity & Records":
                 expense_data = json.load(file)
 
             farm_expenses = [
-                entry
-                for entry in expense_data
-                if str(
-                    entry.get(
-                        "farm_id",
-                        "main_farm"
-                    )
-                ) == str(current_farm_id)
-            ]
+    entry
+    for entry in expense_data
+    if (
+        str(
+            entry.get(
+                "owner_user",
+                ""
+            )
+        ).strip().lower()
+        == farm_record_owner()
+        and
+        str(
+            entry.get(
+                "farm_id",
+                ""
+            )
+        )
+        == str(
+            current_farm_id
+        )
+    )
+]
 
         except (FileNotFoundError, json.JSONDecodeError):
             farm_expenses = []
