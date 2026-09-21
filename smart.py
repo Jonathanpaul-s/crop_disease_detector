@@ -10952,10 +10952,261 @@ def farm_ai_handle_pending_action_message(
         "handled": False
     }
 
+# ============================================================
+# 🧠 SMART FARM AI — COPILOT FARM CONTEXT ENGINE
+# ============================================================
+
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+
+def farm_ai_get_farmer_timezone():
+    """
+    Return the farmer's best available timezone.
+
+    Priority:
+    1. Explicit timezone saved in farmer account/session
+    2. Safe country-level timezone where the country has
+       one practical timezone for our current deployment
+    3. UTC fallback
+    """
+
+    saved_timezone = (
+        st.session_state.get("farmer_timezone")
+        or st.session_state.get("timezone")
+    )
+
+    if saved_timezone:
+        try:
+            ZoneInfo(
+                str(saved_timezone)
+            )
+
+            return str(
+                saved_timezone
+            )
+
+        except Exception:
+            pass
+
+    country = str(
+        st.session_state.get(
+            "registered_country",
+            ""
+        )
+        or st.session_state.get(
+            "country",
+            ""
+        )
+    ).strip().lower()
+
+    country_timezones = {
+        "nigeria": "Africa/Lagos",
+        "iran": "Asia/Tehran",
+        "cyprus": "Asia/Nicosia",
+    }
+
+    return country_timezones.get(
+        country,
+        "UTC"
+    )
+
+
+def farm_ai_current_datetime():
+    """
+    Return authoritative current farmer date/time.
+
+    Do not allow the language model to guess today's date.
+    """
+
+    timezone_name = (
+        farm_ai_get_farmer_timezone()
+    )
+
+    try:
+        farmer_tz = ZoneInfo(
+            timezone_name
+        )
+
+        now = datetime.now(
+            farmer_tz
+        )
+
+    except Exception:
+
+        timezone_name = "UTC"
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+    return {
+        "datetime": now,
+        "date": now.strftime(
+            "%Y-%m-%d"
+        ),
+        "date_display": now.strftime(
+            "%A, %d %B %Y"
+        ),
+        "time": now.strftime(
+            "%H:%M"
+        ),
+        "timezone": timezone_name,
+    }
+
+
+def farm_ai_get_copilot_context():
+    """
+    Build the live context Smart Farm AI Copilot should
+    understand before responding to the farmer.
+    """
+
+    current_farm = (
+        st.session_state.get(
+            "current_farm"
+        )
+        or {}
+    )
+
+    time_context = (
+        farm_ai_current_datetime()
+    )
+
+    farmer_name = (
+        st.session_state.get(
+            "registered_name"
+        )
+        or st.session_state.get(
+            "current_user"
+        )
+        or "Farmer"
+    )
+
+    country = (
+        st.session_state.get(
+            "registered_country"
+        )
+        or st.session_state.get(
+            "country"
+        )
+        or ""
+    )
+
+    account_location = (
+        st.session_state.get(
+            "registered_location"
+        )
+        or st.session_state.get(
+            "location"
+        )
+        or ""
+    )
+
+    farm_id = str(
+        current_farm.get(
+            "farm_id",
+            current_farm.get(
+                "id",
+                ""
+            )
+        )
+    )
+
+    farm_name = str(
+        current_farm.get(
+            "farm_name",
+            current_farm.get(
+                "name",
+                "Current Farm"
+            )
+        )
+    )
+
+    crop = str(
+        current_farm.get(
+            "crop_type",
+            current_farm.get(
+                "crop",
+                ""
+            )
+        )
+    )
+
+    farm_location = str(
+        current_farm.get(
+            "location",
+            account_location
+        )
+    )
+
+    farm_type = str(
+        current_farm.get(
+            "farm_type",
+            st.session_state.get(
+                "farm_type",
+                ""
+            )
+        )
+    )
+
+    experience = str(
+        st.session_state.get(
+            "experience",
+            ""
+        )
+        or st.session_state.get(
+            "farmer_experience",
+            ""
+        )
+    )
+
+    return {
+        "farmer_name": str(
+            farmer_name
+        ),
+        "current_user": str(
+            st.session_state.get(
+                "current_user",
+                ""
+            )
+        ),
+
+        "country": str(
+            country
+        ),
+
+        "farm_id": farm_id,
+
+        "farm_name": farm_name,
+
+        "crop": crop,
+
+        "location": farm_location,
+
+        "farm_type": farm_type,
+
+        "experience": experience,
+
+        "date": time_context[
+            "date"
+        ],
+
+        "date_display": time_context[
+            "date_display"
+        ],
+
+        "time": time_context[
+            "time"
+        ],
+
+        "timezone": time_context[
+            "timezone"
+        ],
+    }
 
 
 # ============================================================
-# 🤖 SMART FARM AI FARM COPILOT — FINAL UI
+# 🤖 SMART FARM AI FARM COPILOT — FINAL CHATGPT-STYLE UI
 # ============================================================
 
 def farm_action_chatbot_ui(
@@ -10988,52 +11239,79 @@ def farm_action_chatbot_ui(
     )
 
     # ========================================================
-    # FARMER CONTEXT
+    # LIVE COPILOT CONTEXT
     # ========================================================
 
-    context = (
+    copilot_context = (
+        farm_ai_get_copilot_context()
+    )
+
+    legacy_context = (
         get_farm_action_context()
         or {}
     )
 
     farmer_name = (
-        st.session_state.get(
-            "registered_name"
-        )
-        or st.session_state.get(
-            "current_user"
-        )
-        or context.get(
+        copilot_context.get(
             "farmer_name"
         )
-        or context.get(
+        or legacy_context.get(
+            "farmer_name"
+        )
+        or legacy_context.get(
             "name"
         )
         or "Farmer"
     )
 
     farm_name = (
-        context.get(
+        copilot_context.get(
             "farm_name"
         )
-        or context.get(
+        or legacy_context.get(
+            "farm_name"
+        )
+        or legacy_context.get(
             "name"
         )
         or "Current Farm"
     )
 
     crop_name = (
-        context.get(
+        copilot_context.get(
             "crop"
         )
-        or context.get(
+        or legacy_context.get(
+            "crop"
+        )
+        or legacy_context.get(
             "crop_type"
         )
         or "Crop not set"
     )
 
+    farm_location = (
+        copilot_context.get(
+            "location"
+        )
+        or legacy_context.get(
+            "location"
+        )
+        or "Location not set"
+    )
+
+    current_date = (
+        copilot_context.get(
+            "date_display"
+        )
+        or copilot_context.get(
+            "date"
+        )
+        or ""
+    )
+
     # ========================================================
-    # INITIALIZE COPILOT STATE
+    # INITIALIZE COPILOT
     # ========================================================
 
     farm_ai_initialize_copilot_state()
@@ -11048,10 +11326,10 @@ def farm_action_chatbot_ui(
                 "content": (
                     f"Hello {farmer_name} 👋. "
                     "I am your Smart Farm AI Copilot. "
-                    "Ask me about your farm, ask a farming "
-                    "question, open a feature, check your "
-                    "records, or tell me to perform a farm "
-                    "action."
+                    "Tell me what is happening on your farm, "
+                    "ask me a farming question, open a tool, "
+                    "check your records, or ask me to perform "
+                    "a farm action."
                 )
             }
         ]
@@ -11087,7 +11365,7 @@ def farm_action_chatbot_ui(
     )
 
     # ========================================================
-    # CHATGPT-STYLE COPILOT BOX
+    # MAIN COPILOT CARD
     # ========================================================
 
     with st.container(
@@ -11100,10 +11378,7 @@ def farm_action_chatbot_ui(
 
         title_col, menu_col = (
             st.columns(
-                [
-                    8,
-                    1
-                ]
+                [10, 1]
             )
         )
 
@@ -11113,8 +11388,18 @@ def farm_action_chatbot_ui(
                 "### 🤖 Ask Smart Farm AI"
             )
 
+            context_line = (
+                f"🌱 {farm_name}"
+                f"  •  🌾 {crop_name}"
+            )
+            if farm_location:
+
+                context_line += (
+                    f"  •  📍 {farm_location}"
+                )
+
             st.caption(
-                f"{farm_name} • {crop_name}"
+                context_line
             )
 
         with menu_col:
@@ -11136,7 +11421,8 @@ def farm_action_chatbot_ui(
                 )
 
                 st.rerun()
-                # ====================================================
+
+        # ====================================================
         # COPILOT MENU
         # ====================================================
 
@@ -11148,10 +11434,6 @@ def farm_action_chatbot_ui(
             menu_col_1, menu_col_2, menu_col_3 = (
                 st.columns(3)
             )
-
-            # ------------------------------------------------
-            # HISTORY
-            # ------------------------------------------------
 
             with menu_col_1:
 
@@ -11172,10 +11454,6 @@ def farm_action_chatbot_ui(
                     )
 
                     st.rerun()
-
-            # ------------------------------------------------
-            # NEW CHAT
-            # ------------------------------------------------
 
             with menu_col_2:
 
@@ -11208,8 +11486,8 @@ def farm_action_chatbot_ui(
                             "content": (
                                 f"New conversation started, "
                                 f"{farmer_name}. "
-                                "What would you like to do "
-                                "on your farm?"
+                                "What would you like to work "
+                                "on today?"
                             )
                         }
                     ]
@@ -11225,10 +11503,6 @@ def farm_action_chatbot_ui(
                     ] = False
 
                     st.rerun()
-
-            # ------------------------------------------------
-            # CLEAR CURRENT CHAT
-            # ------------------------------------------------
 
             with menu_col_3:
 
@@ -11249,7 +11523,7 @@ def farm_action_chatbot_ui(
                             "content": (
                                 f"Chat cleared, "
                                 f"{farmer_name}. "
-                                "How can I help with your farm?"
+                                "How can I help your farm?"
                             )
                         }
                     ]
@@ -11265,9 +11539,8 @@ def farm_action_chatbot_ui(
                     ] = False
 
                     st.rerun()
-
-        # ====================================================
-        # ARCHIVED CHAT HISTORY
+                    # ====================================================
+        # ARCHIVED CONVERSATIONS
         # ====================================================
 
         if st.session_state.get(
@@ -11293,13 +11566,17 @@ def farm_action_chatbot_ui(
                 st.markdown(
                     "#### 🕘 Previous Conversations"
                 )
+
                 recent_archives = (
                     archived_chats[
                         -5:
                     ]
                 )
 
-                for chat_index, old_chat in enumerate(
+                for (
+                    chat_index,
+                    old_chat
+                ) in enumerate(
                     reversed(
                         recent_archives
                     ),
@@ -11311,23 +11588,29 @@ def farm_action_chatbot_ui(
                     ):
 
                         for old_message in old_chat[
-                            -8:
+                            -10:
                         ]:
 
-                            old_role = old_message.get(
-                                "role",
-                                "assistant"
+                            old_role = (
+                                old_message.get(
+                                    "role",
+                                    "assistant"
+                                )
                             )
 
-                            old_content = old_message.get(
-                                "content",
-                                ""
+                            old_content = (
+                                old_message.get(
+                                    "content",
+                                    ""
+                                )
                             )
 
                             speaker = (
                                 "You"
-                                if old_role == "user"
-                                else "Smart Farm AI"
+                                if old_role
+                                == "user"
+                                else
+                                "Smart Farm AI"
                             )
 
                             st.markdown(
@@ -11338,34 +11621,49 @@ def farm_action_chatbot_ui(
         st.divider()
 
         # ====================================================
-        # CURRENT CHAT HISTORY
+        # DEEP SCROLLABLE CHAT AREA
         # ====================================================
 
-        chat_messages = (
-            history[
-                -12:
-            ]
+        chat_height = (
+            470
+            if compact
+            else 560
         )
 
-        for message in chat_messages:
+        with st.container(
+            height=chat_height,
+            border=False
+        ):
 
-            role = message.get(
-                "role",
-                "assistant"
+            chat_messages = (
+                history[
+                    -30:
+                ]
             )
 
-            content = message.get(
-                "content",
-                ""
-            )
+            for message in chat_messages:
 
-            with st.chat_message(
-                role
-            ):
-
-                st.markdown(
-                    content
+                role = (
+                    message.get(
+                        "role",
+                        "assistant"
+                    )
                 )
+
+                content = (
+                    message.get(
+                        "content",
+                        ""
+                    )
+                )
+
+                with st.chat_message(
+                    role
+                ):
+
+                    st.markdown(
+                        content
+                    )
 
         # ====================================================
         # PENDING FARM ACTION
@@ -11398,17 +11696,15 @@ def farm_action_chatbot_ui(
                     {}
                 )
             )
-
             if (
                 action_status
                 == "awaiting_confirmation"
             ):
 
-                # ============================================
-                # SALE CONFIRMATION
-                # ============================================
-
-                if action_type == "record_sale":
+                if (
+                    action_type
+                    == "record_sale"
+                ):
 
                     product = (
                         action_data.get(
@@ -11433,7 +11729,7 @@ def farm_action_chatbot_ui(
                     unit = (
                         action_data.get(
                             "unit",
-                            "transaction"
+                            "unit"
                         )
                     )
 
@@ -11475,11 +11771,10 @@ def farm_action_chatbot_ui(
                             f"for {total_text}?"
                         )
 
-                # ============================================
-                # EXPENSE CONFIRMATION
-                # ============================================
-
-                elif action_type == "record_expense":
+                elif (
+                    action_type
+                    == "record_expense"
+                ):
 
                     amount = (
                         action_data.get(
@@ -11515,10 +11810,6 @@ def farm_action_chatbot_ui(
                     st.columns(2)
                 )
 
-                # --------------------------------------------
-                # CONFIRM BUTTON
-                # --------------------------------------------
-
                 with confirm_col:
 
                     if st.button(
@@ -11545,7 +11836,9 @@ def farm_action_chatbot_ui(
                         history.append(
                             {
                                 "role": "assistant",
-                                "content": result_message
+                                "content": (
+                                    result_message
+                                )
                             }
                         )
 
@@ -11554,10 +11847,6 @@ def farm_action_chatbot_ui(
                         ] = []
 
                         st.rerun()
-
-                # --------------------------------------------
-                # CANCEL BUTTON
-                # --------------------------------------------
 
                 with cancel_col:
 
@@ -11576,9 +11865,9 @@ def farm_action_chatbot_ui(
                             {
                                 "role": "assistant",
                                 "content": (
-                                    "Okay. I cancelled that "
-                                    "farm action and nothing "
-                                    "was recorded."
+                                    "Okay. I cancelled "
+                                    "that farm action. "
+                                    "Nothing was recorded."
                                 )
                             }
                         )
@@ -11590,7 +11879,7 @@ def farm_action_chatbot_ui(
                         st.rerun()
 
         # ====================================================
-        # SMART FEATURE SUGGESTIONS
+        # RECOMMENDED TOOLS
         # ====================================================
 
         suggestions = (
@@ -11603,7 +11892,7 @@ def farm_action_chatbot_ui(
 
         if suggestions:
 
-            st.markdown(
+            st.caption(
                 "Recommended tools"
             )
 
@@ -11613,7 +11902,10 @@ def farm_action_chatbot_ui(
                 ]
             )
 
-            for index, feature in enumerate(
+            for (
+                index,
+                feature
+            ) in enumerate(
                 visible_suggestions
             ):
 
@@ -11646,10 +11938,7 @@ def farm_action_chatbot_ui(
 
                 suggestion_col, open_col = (
                     st.columns(
-                        [
-                            3,
-                            1
-                        ]
+                        [4, 1]
                     )
                 )
 
@@ -11660,7 +11949,9 @@ def farm_action_chatbot_ui(
                         f"{feature_title}"
                     )
 
-                    if feature_description:
+                    if (
+                        feature_description
+                    ):
 
                         st.caption(
                             feature_description
@@ -11685,11 +11976,11 @@ def farm_action_chatbot_ui(
                             destination
                         )
 
-        st.divider()
+        # ====================================================
+        # INPUT — INSIDE COPILOT
+        # ====================================================
 
-        # ====================================================
-        # FARMER INPUT — INSIDE COPILOT BOX
-        # ====================================================
+        st.divider()
 
         with st.form(
             key=(
@@ -11702,48 +11993,26 @@ def farm_action_chatbot_ui(
             command = st.text_input(
                 "Ask Smart Farm AI",
                 placeholder=(
-                    "Ask about your farm or tell me what to do..."
+                    "Ask about your farm, describe a "
+                    "problem, record an activity, or "
+                    "open a Smart Farm AI tool..."
                 ),
-
-label_visibility="collapsed",
-                key=(
-                    f"farm_ai_input_"
-                    f"{surface}"
-                )
+                label_visibility="collapsed"
             )
 
-            input_col, send_col = (
-                st.columns(
-                    [
-                        5,
-                        1
-                    ]
+            submitted = (
+                st.form_submit_button(
+                    "Send ➤",
+                    type="primary",
+                    use_container_width=True
                 )
             )
-
-            with input_col:
-
-                st.caption(
-                    "You can ask questions, open features, "
-                    "or record farm actions."
-                )
-
-            with send_col:
-
-                submitted = (
-                    st.form_submit_button(
-                        "➤ Send",
-                        type="primary",
-                        use_container_width=True
-                    )
-                )
 
     # ========================================================
     # STOP IF NOTHING WAS SUBMITTED
     # ========================================================
 
     if not submitted:
-
         return
 
     command = str(
@@ -11751,9 +12020,8 @@ label_visibility="collapsed",
     ).strip()
 
     if not command:
-
         return
-
+       
     # ========================================================
     # SAVE FARMER MESSAGE
     # ========================================================
