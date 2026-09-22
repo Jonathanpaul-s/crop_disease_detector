@@ -27225,6 +27225,79 @@ def farmer_command_centre_ui():
             "No evidence-based priorities are "
             "currently available from connected farm data."
         )
+        # ========================================================
+    # QUICK ACTIONS
+    # ========================================================
+
+    st.divider()
+
+    st.subheader(
+        "⚡ Quick Actions"
+    )
+
+    quick_actions = [
+        {
+            "title": "Live Sensors",
+            "icon": "📡",
+            "destination": "📡 Live Sensor Dashboard"
+        },
+        {
+            "title": "Performance",
+            "icon": "📍",
+            "destination": "📍 Farm Performance Indicators"
+        },
+        {
+            "title": "Crop Calendar",
+            "icon": "🤖",
+            "destination": "🤖 AI Crop Calendar"
+        },
+        {
+            "title": "AI Farm Tips",
+            "icon": "📚",
+            "destination": "📚 AI Farm Tips"
+        }
+    ]
+
+    quick_columns = st.columns(
+        4
+    )
+
+    for index, action in enumerate(
+        quick_actions
+    ):
+
+        with quick_columns[index]:
+
+            st.markdown(
+                f"""
+                <div class="sf-module">
+                    <div class="sf-module-icon">
+                        {action["icon"]}
+                    </div>
+
+                    <div class="sf-module-title">
+                        {action["title"]}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            if st.button(
+                "Open",
+                key=ck(
+                    f"quick_{index}"
+                ),
+                use_container_width=True
+            ):
+
+                open_smart_farm_feature(
+                    action[
+                        "destination"
+                    ]
+                )
+
+                return
 
 
 if menu_v2 == "🏡 Home":
