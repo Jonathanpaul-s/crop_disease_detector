@@ -27274,17 +27274,13 @@ def farmer_command_centre_ui():
                     <div class="sf-module-icon">
                         {action["icon"]}
                     </div>
-
-                    <div class="sf-module-title">
-                        {action["title"]}
-                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
 
             if st.button(
-                "Open",
+                action["title"],
                 key=ck(
                     f"quick_{index}"
                 ),
