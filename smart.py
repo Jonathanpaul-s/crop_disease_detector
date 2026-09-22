@@ -26461,6 +26461,8 @@ def farmer_command_centre_ui():
     # CURRENT FARM SELECTOR
     # ========================================================
 
+    selected_id = farm_id
+
     if active_farms:
 
         farm_by_id = {}
