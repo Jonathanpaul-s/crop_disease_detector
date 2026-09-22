@@ -9783,6 +9783,58 @@ def farm_ai_clear_pending_action():
     ] = {}
 
 
+def farm_ai_is_expense_request(text):
+    text = str(
+        text
+        or ""
+    ).strip().lower()
+
+    if not text:
+        return False
+
+    # Do not confuse navigation with an expense request
+    navigation_starts = (
+        "open ",
+        "go to ",
+        "take me to ",
+        "show ",
+        "show me ",
+        "navigate to ",
+        "view "
+    )
+
+    if text.startswith(
+        navigation_starts
+    ):
+        return False
+
+    expense_phrases = (
+        "record expense",
+        "add expense",
+        "log expense",
+        "record an expense",
+        "add an expense",
+        "log an expense",
+        "expense record",
+        "i spent ",
+        "i paid ",
+        "spent ",
+        "paid ",
+        "record fertilizer expense",
+        "record labour expense",
+        "record labor expense",
+        "record transport expense",
+        "record fuel expense",
+        "record pesticide expense",
+        "record seed expense",
+        "record seeds expense"
+    )
+
+    return any(
+        phrase in text
+        for phrase in expense_phrases
+    )
+
 def farm_ai_is_confirmation(text):
     """
     Detect common farmer confirmation messages.
