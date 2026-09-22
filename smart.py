@@ -14133,52 +14133,52 @@ def farm_action_chatbot_ui(
         st.rerun()
 
     # ========================================================
-# 2. AUTHORITATIVE DATE / TIME QUESTIONS
-# ========================================================
+    # 2. AUTHORITATIVE DATE / TIME QUESTIONS
+    # ========================================================
 
-date_questions = (
-    "what is today's date",
-    "what is todays date",
-    "today's date",
-    "todays date",
-    "what date is it",
-    "what day is today",
-    "what day is it"
-)
-
-if any(
-    phrase
-    in command_lower
-    for phrase
-    in date_questions
-):
-
-    if current_date:
-
-        answer = (
-            f"Today is "
-            f"{current_date}."
-        )
-
-    else:
-
-        answer = (
-            "I could not determine the "
-            "current farm date safely."
-        )
-
-    history.append(
-        {
-            "role": "assistant",
-            "content": answer
-        }
+    date_questions = (
+        "what is today's date",
+        "what is todays date",
+        "today's date",
+        "todays date",
+        "what date is it",
+        "what day is today",
+        "what day is it"
     )
 
-    st.session_state[
-        suggestion_key
-    ] = []
+    if any(
+        phrase
+        in command_lower
+        for phrase
+        in date_questions
+    ):
 
-    st.rerun()
+        if current_date:
+
+            answer = (
+                f"Today is "
+                f"{current_date}."
+            )
+
+        else:
+
+            answer = (
+                "I could not determine the "
+                "current farm date safely."
+            )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+        st.rerun()
 
 
 
