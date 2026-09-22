@@ -6303,6 +6303,14 @@ def _farm_filter_dataframe(
     df,
     context
 ):
+    """
+    Filter farm records by BOTH account owner and farm.
+
+    This prevents two different users with the same
+    farm_id, such as 'main_farm', from seeing each
+    other's records.
+    """
+
     import pandas as pd
 
     if not isinstance(
@@ -6316,29 +6324,80 @@ def _farm_filter_dataframe(
 
     result = df.copy()
 
-    if "farm_id" in result.columns:
-        return result[
-            result["farm_id"]
-            .astype(str)
-            == str(
-                context["farm_id"]
-            )
-        ].copy()
+    owner_user = (
+        farm_record_owner()
+    )
+
+    farm_id = str(
+        context.get(
+            "farm_id",
+            ""
+        )
+        or ""
+    )
+
+    farmer_name = str(
+        context.get(
+            "farmer_name",
+            ""
+        )
+        or ""
+    )
+
+    # ========================================================
+    # FILTER BY ACCOUNT OWNER
+    # ========================================================
 
     if (
-        "farmer" in result.columns
-        and context.get("farmer_name")
+        "owner_user"
+        in result.columns
     ):
-        farmer_filtered = result[
-            result["farmer"]
+
+        result = result[
+            result["owner_user"]
+            .fillna("")
             .astype(str)
-            == str(
-                context["farmer_name"]
-            )
+            .str.strip()
+            .str.lower()
+            == owner_user
         ].copy()
 
-        if not farmer_filtered.empty:
-            return farmer_filtered
+    # --------------------------------------------------------
+    # Legacy fallback for older session records
+    # that do not yet contain owner_user
+    # --------------------------------------------------------
+
+    elif (
+        "farmer"
+        in result.columns
+        and farmer_name
+    ):
+
+        result = result[
+            result["farmer"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            == farmer_name.strip().lower()
+        ].copy()
+
+    # ========================================================
+    # FILTER BY CURRENT FARM
+    # ========================================================
+
+    if (
+        "farm_id"
+        in result.columns
+        and farm_id
+    ):
+
+        result = result[
+            result["farm_id"]
+            .fillna("")
+            .astype(str)
+            == farm_id
+        ].copy()
 
     return result
 
@@ -6518,6 +6577,13 @@ def farm_action_record_sale(
     buyer="",
     notes=""
 ):
+    """
+    Record a confirmed farm sale into the same storage
+    used by Productivity & Records.
+
+    Records are isolated by account owner + farm.
+    """
+
     import json
     import pandas as pd
     from datetime import datetime
@@ -6535,29 +6601,61 @@ def farm_action_record_sale(
         or {}
     )
 
+    # ========================================================
+    # ACCOUNT OWNER
+    # ========================================================
+
+    owner_user = (
+        farm_record_owner()
+    )
+
+    if not owner_user:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ Smart Farm AI could not identify "
+                "the logged-in farmer account, so the "
+                "sale was not saved."
+            )
+        }
+
     farmer_name = (
         st.session_state.get(
+            "registered_name"
+        )
+        or st.session_state.get(
             "current_user"
         )
         or context.get(
             "farmer_name"
         )
-        or context.get(
-            "name"
-        )
         or "Farmer"
     )
 
+    # ========================================================
+    # CURRENT FARM
+    # ========================================================
+
     farm_id = (
         current_farm.get(
-            "farm_id",
-            "main_farm"
+            "farm_id"
         )
+        or current_farm.get(
+            "id"
+        )
+        or context.get(
+            "farm_id"
+        )
+        or "main_farm"
     )
 
     farm_name = (
         current_farm.get(
             "farm_name"
+        )
+        or current_farm.get(
+            "name"
         )
         or context.get(
             "farm_name"
@@ -6569,11 +6667,11 @@ def farm_action_record_sale(
         current_farm.get(
             "crop_type"
         )
-        or context.get(
+        or current_farm.get(
             "crop"
         )
         or context.get(
-            "crop_type"
+            "crop"
         )
         or "Not specified"
     )
@@ -6588,11 +6686,28 @@ def farm_action_record_sale(
         or ""
     )
 
-    product = (
+    # ========================================================
+    # VALIDATE PRODUCT
+    # ========================================================
+
+    product_value = str(
         product
-        or crop_type
-        or "Farm Produce"
-    )
+        or ""
+    ).strip()
+
+    if not product_value:
+
+        return {
+            "ok": False,
+            "message": (
+                "I need to know what was sold "
+                "before I can save this sale."
+            )
+        }
+
+    # ========================================================
+    # VALIDATE NUMBERS
+    # ========================================================
 
     amount_value = (
         _farm_number(
@@ -6623,9 +6738,12 @@ def farm_action_record_sale(
             amount_value is None
             or amount_value <= 0
         )
-        and quantity_value
-        and unit_price_value
+        and quantity_value is not None
+        and quantity_value > 0
+        and unit_price_value is not None
+        and unit_price_value > 0
     ):
+
         amount_value = (
             quantity_value
             * unit_price_value
@@ -6635,6 +6753,7 @@ def farm_action_record_sale(
         amount_value is None
         or amount_value <= 0
     ):
+
         return {
             "ok": False,
             "message": (
@@ -6647,47 +6766,110 @@ def farm_action_record_sale(
         quantity_value is None
         or quantity_value <= 0
     ):
+
         quantity_value = 1.0
 
     if (
         unit_price_value is None
         or unit_price_value <= 0
     ):
+
         unit_price_value = (
             amount_value
             / quantity_value
         )
 
+    unit_value = str(
+        unit
+        or "transaction"
+    ).strip()
+
     # ========================================================
-    # SAVE TO THE SAME FILE PRODUCTIVITY USES
+    # AUTHORITATIVE FARMER DATE
+    # ========================================================
+
+    record_date = (
+        datetime.now().strftime(
+            "%Y-%m-%d"
+        )
+    )
+
+    time_function = globals().get(
+        "farm_ai_current_datetime"
+    )
+
+    if callable(
+        time_function
+    ):
+
+        try:
+
+            time_context = (
+                time_function()
+                or {}
+            )
+
+            if time_context.get(
+                "date"
+            ):
+
+                record_date = str(
+                    time_context[
+                        "date"
+                    ]
+                )
+
+        except Exception:
+            pass
+
+    # ========================================================
+    # PRODUCTIVITY-COMPATIBLE RECORD
     # ========================================================
 
     productivity_record = {
-        "owner_user": farm_record_owner(),
-        "farm_id": farm_id,
-        "farm_name": farm_name,
-        "crop_type": crop_type,
-        "location": location,
-        "item": str(product),
-        "quantity": float(quantity_value),
-        "amount": float(amount_value),
-        "date": datetime.now().strftime(
-            "%Y-%m-%d"
+        "owner_user": owner_user,
+        "farm_id": str(
+            farm_id
         ),
+        "farm_name": str(
+            farm_name
+        ),
+        "crop_type": str(
+            crop_type
+        ),
+        "location": str(
+            location
+        ),
+        "item": product_value,
+        "quantity": float(
+            quantity_value
+        ),
+        "amount": float(
+            amount_value
+        ),
+        "date": record_date,
 
-        # Extra Copilot details are safe to keep
-        "unit": str(unit),
+        # Additional Copilot details
+        "unit": unit_value,
         "unit_price": float(
             unit_price_value
         ),
         "buyer": str(
-            buyer or ""
+            buyer
+            or ""
         ),
         "notes": str(
-            notes or ""
+            notes
+            or ""
         ),
-        "farmer": farmer_name
+        "farmer": str(
+            farmer_name
+        )
     }
+
+    # ========================================================
+    # LOAD EXISTING SALES
+    # ========================================================
 
     try:
 
@@ -6715,12 +6897,28 @@ def farm_action_record_sale(
 
         sales_data = []
 
+    except Exception:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ Smart Farm AI could not read the "
+                "existing sales records, so nothing "
+                "was changed."
+            )
+        }
+
+    # ========================================================
+    # SAVE SALE
+    # ========================================================
+
     sales_data.append(
         productivity_record
     )
 
     try:
-       with open(
+
+        with open(
             "sales_records.json",
             "w"
         ) as file:
@@ -6743,10 +6941,13 @@ def farm_action_record_sale(
         }
 
     # ========================================================
-    # ALSO KEEP LIVE COPILOT/SESSION DATA UPDATED
+    # UPDATE LIVE COPILOT SESSION
     # ========================================================
 
     columns = [
+        "owner_user",
+        "farm_id",
+        "farm_name",
         "date",
         "farmer",
         "product",
@@ -6766,15 +6967,22 @@ def farm_action_record_sale(
     )
 
     session_record = {
-        "date": productivity_record[
-            "date"
-        ],
-        "farmer": farmer_name,
-        "product": str(product),
+        "owner_user": owner_user,
+        "farm_id": str(
+            farm_id
+        ),
+        "farm_name": str(
+            farm_name
+        ),
+        "date": record_date,
+        "farmer": str(
+            farmer_name
+        ),
+        "product": product_value,
         "quantity": float(
             quantity_value
         ),
-        "unit": str(unit),
+        "unit": unit_value,
         "unit_price": float(
             unit_price_value
         ),
@@ -6782,10 +6990,12 @@ def farm_action_record_sale(
             amount_value
         ),
         "buyer": str(
-            buyer or ""
+            buyer
+            or ""
         ),
         "notes": str(
-            notes or ""
+            notes
+            or ""
         )
     }
 
@@ -6805,17 +7015,21 @@ def farm_action_record_sale(
         "sales"
     ] = sales_df
 
+    # ========================================================
+    # SUCCESS
+    # ========================================================
+
     return {
         "ok": True,
         "message": (
             f"✅ Sale recorded successfully: "
-            f"{product} — "
+            f"{product_value} — "
             f"{amount_value:,.2f}. "
-            f"It is now available in "
-            f"Productivity & Records."
+            "It is now available in "
+            "Productivity & Records."
         ),
         "record": productivity_record
-    } 
+    }
 
    
 # ============================================================
@@ -6829,6 +7043,13 @@ def farm_action_record_expense(
     payment_method="",
     notes=""
 ):
+    """
+    Record an expense into the same storage used by
+    Productivity & Records.
+
+    Records are isolated by account owner + farm.
+    """
+
     import json
     import pandas as pd
     from datetime import datetime
@@ -6846,29 +7067,61 @@ def farm_action_record_expense(
         or {}
     )
 
+    # ========================================================
+    # ACCOUNT OWNER
+    # ========================================================
+
+    owner_user = (
+        farm_record_owner()
+    )
+
+    if not owner_user:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ Smart Farm AI could not identify "
+                "the logged-in farmer account, so the "
+                "expense was not saved."
+            )
+        }
+
     farmer_name = (
         st.session_state.get(
+            "registered_name"
+        )
+        or st.session_state.get(
             "current_user"
         )
         or context.get(
             "farmer_name"
         )
-        or context.get(
-            "name"
-        )
         or "Farmer"
     )
 
+    # ========================================================
+    # CURRENT FARM
+    # ========================================================
+
     farm_id = (
         current_farm.get(
-            "farm_id",
-            "main_farm"
+            "farm_id"
         )
+        or current_farm.get(
+            "id"
+        )
+        or context.get(
+            "farm_id"
+        )
+        or "main_farm"
     )
 
     farm_name = (
         current_farm.get(
             "farm_name"
+        )
+        or current_farm.get(
+            "name"
         )
         or context.get(
             "farm_name"
@@ -6880,11 +7133,11 @@ def farm_action_record_expense(
         current_farm.get(
             "crop_type"
         )
-        or context.get(
+        or current_farm.get(
             "crop"
         )
         or context.get(
-            "crop_type"
+            "crop"
         )
         or "Not specified"
     )
@@ -6898,6 +7151,10 @@ def farm_action_record_expense(
         )
         or ""
     )
+
+    # ========================================================
+    # VALIDATE EXPENSE
+    # ========================================================
 
     amount_value = (
         _farm_number(
@@ -6920,24 +7177,74 @@ def farm_action_record_expense(
             )
         }
 
+    category_value = str(
+        category
+        or "Other"
+    ).strip()
+
+    if not category_value:
+        category_value = "Other"
+
     # ========================================================
-    # SAVE TO THE SAME FILE PRODUCTIVITY USES
+    # AUTHORITATIVE DATE
+    # ========================================================
+
+    record_date = (
+        datetime.now().strftime(
+            "%Y-%m-%d"
+        )
+    )
+
+    time_function = globals().get(
+        "farm_ai_current_datetime"
+    )
+
+    if callable(
+        time_function
+    ):
+
+        try:
+
+            time_context = (
+                time_function()
+                or {}
+            )
+
+            if time_context.get(
+                "date"
+            ):
+
+                record_date = str(
+                    time_context[
+                        "date"
+                    ]
+                )
+
+        except Exception:
+            pass
+
+    # ========================================================
+    # PRODUCTIVITY-COMPATIBLE RECORD
     # ========================================================
 
     productivity_record = {
-        "farm_id": farm_id,
-        "farm_name": farm_name,
-        "crop_type": crop_type,
-        "location": location,
-
-        "Date": datetime.now().strftime(
-            "%Y-%m-%d"
+        "owner_user": owner_user,
+        "farm_id": str(
+            farm_id
+        ),
+        "farm_name": str(
+            farm_name
+        ),
+        "crop_type": str(
+            crop_type
+        ),
+        "location": str(
+            location
         ),
 
-        "Category": str(
-            category
-            or "Other"
-        ),
+        "Date": record_date,
+
+        "Category": category_value,
 
         "Amount": float(
             amount_value
@@ -6954,9 +7261,14 @@ def farm_action_record_expense(
         ),
 
         "notes": str(
-            notes or ""
+            notes
+            or ""
         )
     }
+
+    # ========================================================
+    # LOAD EXISTING EXPENSE RECORDS
+    # ========================================================
 
     try:
 
@@ -6983,6 +7295,21 @@ def farm_action_record_expense(
     ):
 
         expense_data = []
+
+    except Exception:
+
+        return {
+            "ok": False,
+            "message": (
+                "❌ Smart Farm AI could not read the "
+                "existing expense records, so nothing "
+                "was changed."
+            )
+        }
+
+    # ========================================================
+    # SAVE EXPENSE
+    # ========================================================
 
     expense_data.append(
         productivity_record
@@ -7013,10 +7340,13 @@ def farm_action_record_expense(
         }
 
     # ========================================================
-    # KEEP LIVE SESSION EXPENSE DATA UPDATED
+    # UPDATE LIVE COPILOT SESSION
     # ========================================================
 
     columns = [
+        "owner_user",
+        "farm_id",
+        "farm_name",
         "date",
         "farmer",
         "category",
@@ -7032,15 +7362,20 @@ def farm_action_record_expense(
             columns
         )
     )
+
     session_record = {
-        "date": productivity_record[
-            "Date"
-        ],
-        "farmer": farmer_name,
-        "category": str(
-            category
-            or "Other"
+        "owner_user": owner_user,
+        "farm_id": str(
+            farm_id
         ),
+        "farm_name": str(
+            farm_name
+        ),
+        "date": record_date,
+        "farmer": str(
+            farmer_name
+        ),
+        "category": category_value,
         "description": str(
             description
             or ""
@@ -7053,7 +7388,8 @@ def farm_action_record_expense(
             or ""
         ),
         "notes": str(
-            notes or ""
+            notes
+            or ""
         )
     }
 
@@ -7073,13 +7409,17 @@ def farm_action_record_expense(
         "expenses"
     ] = expenses_df
 
+    # ========================================================
+    # SUCCESS
+    # ========================================================
+
     return {
         "ok": True,
         "message": (
-            f"✅ {category} expense of "
+            f"✅ {category_value} expense of "
             f"{amount_value:,.2f} was recorded. "
-            f"It is now available in "
-            f"Productivity & Records."
+            "It is now available in "
+            "Productivity & Records."
         ),
         "record": productivity_record
     }
@@ -7091,94 +7431,373 @@ def farm_action_record_expense(
 # ============================================================
 
 def farm_action_calculate_profit():
-    import streamlit as st
+    """
+    Calculate the current farm's financial position
+    from the same persisted records used by
+    Productivity & Records.
+
+    Records are isolated by account owner + farm.
+    """
+
+    import json
     import pandas as pd
 
-    context = get_farm_action_context()
-
-    sales = st.session_state.get(
-        "sales",
-        pd.DataFrame()
+    context = (
+        get_farm_action_context()
+        or {}
     )
 
-    expenses = st.session_state.get(
-        "expenses",
-        pd.DataFrame()
+    owner_user = (
+        farm_record_owner()
     )
 
-    labor = st.session_state.get(
-        "labor",
-        pd.DataFrame()
+    if not owner_user:
+
+        return {
+            "ok": False,
+            "message": (
+                "Smart Farm AI could not identify "
+                "the logged-in farmer account."
+            )
+        }
+
+    # ========================================================
+    # SAFE JSON LOADER
+    # ========================================================
+
+    def _load_financial_records(
+        filename
+    ):
+        try:
+
+            with open(
+                filename,
+                "r"
+            ) as file:
+
+                records = (
+                    json.load(
+                        file
+                    )
+                )
+
+            if not isinstance(
+                records,
+                list
+            ):
+                return []
+
+            return records
+
+        except FileNotFoundError:
+
+            return []
+
+        except json.JSONDecodeError:
+
+            return []
+
+        except Exception:
+
+            return None
+
+    # ========================================================
+    # LOAD PERSISTED SALES
+    # ========================================================
+
+    sales_records = (
+        _load_financial_records(
+            "sales_records.json"
+        )
     )
 
-    sales = _farm_filter_dataframe(
-        sales,
-        context
+    if sales_records is None:
+
+        return {
+            "ok": False,
+            "message": (
+                "Smart Farm AI could not safely read "
+                "the saved sales records."
+            )
+        }
+
+    sales = pd.DataFrame(
+        sales_records
     )
 
-    expenses = _farm_filter_dataframe(
-        expenses,
-        context
+    sales = (
+        _farm_filter_dataframe(
+            sales,
+            context
+        )
     )
 
-    labor = _farm_filter_dataframe(
-        labor,
-        context
+    # ========================================================
+    # LOAD PERSISTED EXPENSES
+    # ========================================================
+
+    expense_records = (
+        _load_financial_records(
+            "expenses.json"
+        )
     )
+
+    if expense_records is None:
+
+        return {
+            "ok": False,
+            "message": (
+                "Smart Farm AI could not safely read "
+                "the saved expense records."
+            )
+        }
+
+    expenses = pd.DataFrame(
+        expense_records
+    )
+
+    expenses = (
+        _farm_filter_dataframe(
+            expenses,
+            context
+        )
+    )
+
+    # ========================================================
+    # CURRENT FARM LABOR RECORDS
+    # ========================================================
+
+    labor = (
+        st.session_state.get(
+            "labor",
+            pd.DataFrame()
+        )
+    )
+
+    labor = (
+        _farm_filter_dataframe(
+            labor,
+            context
+        )
+    )
+
+    # ========================================================
+    # SALES TOTAL
+    # ========================================================
 
     total_sales = 0.0
+
+    if not sales.empty:
+
+        if "amount" in sales.columns:
+
+            total_sales = (
+                pd.to_numeric(
+                    sales["amount"],
+                    errors="coerce"
+                )
+                .fillna(0)
+                .sum()
+            )
+
+        elif "total" in sales.columns:
+
+            total_sales = (
+                pd.to_numeric(
+                    sales["total"],
+                    errors="coerce"
+                )
+                .fillna(0)
+                .sum()
+            )
+
+    # ========================================================
+    # EXPENSE TOTAL
+    # ========================================================
+
     total_expenses = 0.0
-    labor_cost = 0.0
+
+    if not expenses.empty:
+
+        if "Amount" in expenses.columns:
+
+            total_expenses = (
+                pd.to_numeric(
+                    expenses["Amount"],
+                    errors="coerce"
+                )
+                .fillna(0)
+                .sum()
+            )
+
+        elif "amount" in expenses.columns:
+
+            total_expenses = (
+                pd.to_numeric(
+                    expenses["amount"],
+                    errors="coerce"
+                )
+                .fillna(0)
+                .sum()
+            )
+
+    # ========================================================
+    # DETECT WHETHER LABOR IS ALREADY INSIDE EXPENSES
+    # ========================================================
+
+    labor_expense = 0.0
+    labor_is_in_expenses = False
+
+    category_column = None
+
+    if "Category" in expenses.columns:
+
+        category_column = "Category"
+
+    elif "category" in expenses.columns:
+
+        category_column = "category"
 
     if (
-        not sales.empty
-        and "total" in sales.columns
+        category_column
+        and not expenses.empty
     ):
-        total_sales = pd.to_numeric(
-            sales["total"],
-            errors="coerce"
-        ).fillna(0).sum()
 
-    if (
-        not expenses.empty
-        and "amount" in expenses.columns
-    ):
-        total_expenses = pd.to_numeric(
-            expenses["amount"],
-            errors="coerce"
-        ).fillna(0).sum()
+        categories = (
+            expenses[
+                category_column
+            ]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+
+        labor_mask = categories.isin(
+            [
+                "labor",
+                "labour",
+                "wages",
+                "salary"
+            ]
+        )
+
+        if labor_mask.any():
+
+            labor_is_in_expenses = True
+
+            amount_column = (
+                "Amount"
+                if "Amount"
+                in expenses.columns
+                else "amount"
+            )
+
+            labor_expense = (
+                pd.to_numeric(
+                    expenses.loc[
+                        labor_mask,
+                        amount_column
+                    ],
+                    errors="coerce"
+                )
+                .fillna(0)
+                .sum()
+            )
+
+    # ========================================================
+    # SEPARATE LABOR DATASET
+    # ========================================================
+
+    session_labor_cost = 0.0
 
     if (
         not labor.empty
         and "total" in labor.columns
     ):
-        labor_cost = pd.to_numeric(
-            labor["total"],
-            errors="coerce"
-        ).fillna(0).sum()
 
-    net_profit = (
-        float(total_sales)
-        - float(total_expenses)
-        - float(labor_cost)
+        session_labor_cost = (
+            pd.to_numeric(
+                labor["total"],
+                errors="coerce"
+            )
+            .fillna(0)
+            .sum()
+        )
+
+    # --------------------------------------------------------
+    # Avoid counting labor twice.
+    # --------------------------------------------------------
+
+    if labor_is_in_expenses:
+
+        labor_cost = float(
+            labor_expense
+        )
+
+        net_profit = (
+            float(total_sales)
+            - float(total_expenses)
+        )
+
+    else:
+
+        labor_cost = float(
+            session_labor_cost
+        )
+
+        net_profit = (
+            float(total_sales)
+            - float(total_expenses)
+            - labor_cost
+        )
+
+    # ========================================================
+    # CURRENCY
+    # ========================================================
+
+    code, symbol = (
+        get_farm_currency(
+            context.get(
+                "country",
+                ""
+            )
+        )
     )
 
-    code, symbol = get_farm_currency(
-        context["country"]
-    )
+    # ========================================================
+    # FARMER-FRIENDLY RESULT
+    # ========================================================
 
     return {
         "ok": True,
-        "sales": float(total_sales),
-        "expenses": float(total_expenses),
-        "labor": float(labor_cost),
-        "profit": net_profit,
+        "sales": float(
+            total_sales
+        ),
+        "expenses": float(
+            total_expenses
+        ),
+        "labor": float(
+            labor_cost
+        ),
+        "profit": float(
+            net_profit
+        ),
+        "labor_in_expenses": (
+            labor_is_in_expenses
+        ),
         "message": (
-            f"💰 {context['farm_name']} financial summary:\n\n"
-            f"• Sales: {symbol}{total_sales:,.2f}\n"
-            f"• Expenses: {symbol}{total_expenses:,.2f}\n"
-            f"• Labor: {symbol}{labor_cost:,.2f}\n"
-            f"• Net Profit: {symbol}{net_profit:,.2f} {code}"
+            f"💰 {context.get('farm_name', 'Current Farm')} "
+            f"financial summary:\n\n"
+            f"• Sales: "
+            f"{symbol}{total_sales:,.2f}\n"
+            f"• Expenses: "
+            f"{symbol}{total_expenses:,.2f}\n"
+            f"• Labor: "
+            f"{symbol}{labor_cost:,.2f}\n"
+            f"• Net Profit: "
+            f"{symbol}{net_profit:,.2f} "
+            f"{code}"
         )
     }
 
@@ -8606,39 +9225,142 @@ def farm_ai_guidance_answer(
     question,
     conversation=None
 ):
+    """
+    Give practical Smart Farm AI guidance using the
+    farmer's authoritative live context.
+
+    The Copilot must never invent farm measurements,
+    weather, finances, sensor data or completed actions.
+    """
+
+    # ========================================================
+    # AUTHORITATIVE FARM CONTEXT
+    # ========================================================
 
     context = (
-        build_farm_assistant_context()
+        farm_ai_get_copilot_context()
+        or {}
     )
 
-    # --------------------------------------------------------
-    # Prepare relevant Smart Farm features
-    # --------------------------------------------------------
-
-    feature_names = ", ".join(
-        feature["title"]
-        for feature in FARM_ASSISTANT_FEATURES
+    farmer_name = (
+        context.get(
+            "farmer_name"
+        )
+        or "Farmer"
     )
+
+    farm_name = (
+        context.get(
+            "farm_name"
+        )
+        or "Current Farm"
+    )
+
+    crop = (
+        context.get(
+            "crop"
+        )
+        or "Not specified"
+    )
+
+    country = (
+        context.get(
+            "country"
+        )
+        or "Not specified"
+    )
+
+    location = (
+        context.get(
+            "location"
+        )
+        or "Not specified"
+    )
+
+    farm_type = (
+        context.get(
+            "farm_type"
+        )
+        or "Not specified"
+    )
+
+    experience = (
+        context.get(
+            "experience"
+        )
+        or "Not specified"
+    )
+
+    current_date = (
+        context.get(
+            "date_display"
+        )
+        or context.get(
+            "date"
+        )
+        or "Not available"
+    )
+
+    # ========================================================
+    # AVAILABLE SMART FARM AI TOOLS
+    # ========================================================
+
+    feature_names = ""
+
+    try:
+
+        feature_names = ", ".join(
+            str(
+                feature.get(
+                    "title",
+                    ""
+                )
+            )
+            for feature in FARM_ASSISTANT_FEATURES
+            if feature.get(
+                "title"
+            )
+        )
+
+    except Exception:
+
+        feature_names = ""
+
+    # ========================================================
+    # RECENT CONVERSATION
+    # ========================================================
 
     recent_history = ""
 
     if conversation:
 
-        recent_items = conversation[
-            -6:
-        ]
+        try:
 
-        recent_history = "\n".join(
-            (
-                f"{item.get('role', 'user')}: "
-                f"{item.get('content', '')}"
+            recent_items = (
+                conversation[
+                    -8:
+                ]
             )
-            for item in recent_items
-        )
 
-    # --------------------------------------------------------
-    # API key
-    # --------------------------------------------------------
+            recent_history = "\n".join(
+                (
+                    f"{item.get('role', 'user')}: "
+                    f"{item.get('content', '')}"
+                )
+                for item in recent_items
+                if isinstance(
+                    item,
+                    dict
+                )
+            )
+
+        except Exception:
+
+            recent_history = ""
+
+    # ========================================================
+    # API CONNECTION
+    # ========================================================
 
     try:
 
@@ -8654,47 +9376,66 @@ def farm_ai_guidance_answer(
 
         api_key = None
 
-    # --------------------------------------------------------
-    # LOCAL FALLBACK WHEN AI API IS NOT CONNECTED
-    # --------------------------------------------------------
+    # ========================================================
+    # NATIVE SMART FARM AI FALLBACK
+    # ========================================================
 
     if not api_key:
 
-        matches = (
-            farm_assistant_find_features(
-                question,
-                limit=3
+        matches = []
+
+        try:
+
+            matches = (
+                farm_assistant_find_features(
+                    question,
+                    limit=3
+                )
+                or []
             )
-        )
+
+        except Exception:
+
+            matches = []
 
         if matches:
 
             names = ", ".join(
-                feature[
-                    "title"
+                str(
+                    feature.get(
+                        "title",
+                        "Smart Farm Tool"
+                    )
+                )
+                for feature in matches[
+                    :3
                 ]
-                for feature in matches
             )
-
             return (
-                "I can help you with that. "
-                f"Based on your request, the most relevant "
-                f"Smart Farm AI tools are: {names}. "
-                "Use the buttons below to open the one "
-                "you want."
+                f"{farmer_name}, I can help you work "
+                f"through this using your {crop} farm "
+                f"context on {farm_name}. "
+                f"The most relevant Smart Farm AI tools "
+                f"for this request are: {names}. "
+                "If important farm measurements are "
+                "missing, record them first so I can "
+                "support a more reliable decision."
             )
 
         return (
-            "I can perform farm actions, explain how to use "
-            "Smart Farm AI and recommend features. "
-            "The open-ended agricultural AI service is not "
-            "connected yet, so connect the AI API to enable "
-            "full conversational farming guidance."
+            f"{farmer_name}, I can still help manage "
+            f"{farm_name}, guide you to the correct "
+            "Smart Farm AI tools, record farm actions "
+            "and use available farm information. "
+            "For a reliable farm-specific recommendation, "
+            "I may ask you for missing information such "
+            "as soil condition, crop stage, recent weather, "
+            "irrigation status or field observations."
         )
 
-    # --------------------------------------------------------
-    # OPENAI AI FALLBACK
-    # --------------------------------------------------------
+    # ========================================================
+    # EXTERNAL CONVERSATIONAL INTELLIGENCE
+    # ========================================================
 
     try:
 
@@ -8706,9 +9447,9 @@ def farm_ai_guidance_answer(
                 st.secrets[
                     "openai"
                 ].get(
-                    "model",
-                    "gpt-5.6-luna"
+                    "model"
                 )
+                or "gpt-5.6-luna"
             )
 
         except Exception:
@@ -8722,75 +9463,207 @@ def farm_ai_guidance_answer(
         )
 
         instructions = f"""
-You are Smart Farm AI, an intelligent agricultural copilot.
+You are Smart Farm AI Copilot.
 
-Your job is to help farmers understand their farm,
-make better agricultural decisions and use Smart Farm AI.
+You are the conversational intelligence layer of a farm
+management and agricultural decision-support platform.
 
-Current farm context:
-Farmer: {context['farmer_name']}
-Crop: {context['crop']}
-Country: {context['country']}
-Location: {context['location']}
-Farm type: {context['farm_type']}
-Experience: {context['experience']}
+CURRENT FARM CONTEXT
 
-Smart Farm AI features available:
+Farmer: {farmer_name}
+Farm: {farm_name}
+Crop: {crop}
+Country: {country}
+Location: {location}
+Farm type: {farm_type}
+Farmer experience: {experience}
+Current date: {current_date}
+
+AVAILABLE SMART FARM AI TOOLS
+
 {feature_names}
 
-Rules:
-- Give practical and understandable farming guidance.
-- Adapt explanations to the farmer's crop and experience.
-- Do not invent live sensor readings, weather values,
-  disease results or financial records.
-- Clearly say when real measurements or inspection are needed.
-- Explain WHAT to do, WHY it matters and the NEXT action.
-- When relevant, recommend up to three Smart Farm AI features
-  using their exact feature names.
-- Do not claim that you saved, deleted or changed a record.
-  Actual app actions are handled separately by the action engine.
-- For potentially dangerous chemical or pesticide decisions,
-tell the farmer to follow product labels and local agricultural
-  guidance and avoid guessing application rates.
-- Keep responses useful and reasonably concise.
+YOUR PURPOSE
+
+Help the farmer understand what is happening on the farm,
+make safer and more useful agricultural decisions, understand
+Smart Farm AI, and identify the correct next action.
+
+GUIDANCE RULES
+
+1. Use simple, practical language that a farmer with little
+technical knowledge can understand.
+
+2. Adapt explanations to the farmer's crop, location,
+experience level and available farm information.
+
+3. Explain:
+- WHAT the farmer should consider doing,
+- WHY it matters,
+- WHAT information supports the recommendation,
+- and the NEXT practical step.
+
+4. Never invent:
+- live weather,
+- sensor values,
+- soil measurements,
+- financial records,
+- disease detection results,
+- yield values,
+- farm history,
+- or actions that the application has not actually executed.
+
+5. If important information is missing, clearly identify
+what information is missing and explain how collecting it
+would improve the recommendation.
+
+6. Distinguish general agricultural guidance from advice
+based on actual farm data.
+
+7. Never claim that you saved, changed, deleted, irrigated,
+sprayed, purchased or controlled anything.
+The application action engine performs real actions.
+
+8. Recommend no more than three relevant Smart Farm AI
+tools when a tool would help the farmer.
+
+9. Use the exact Smart Farm AI feature name when recommending
+a feature.
+
+10. For pesticides, fertilizers or other potentially harmful
+inputs, do not invent application rates. Tell the farmer to
+follow the product label and appropriate local agricultural
+guidance.
+
+11. If symptoms could have multiple causes, do not pretend
+to know the diagnosis. Ask for the most useful missing
+observations or recommend the relevant diagnostic tool.
+
+12. Do not overwhelm the farmer with technical terminology.
+Explain technical concepts before expecting the farmer to
+act on them.
+
+13. Do not promise that Smart Farm AI will increase yield or
+profit. Explain the decision support it can provide.
+
+14. Keep the answer focused and reasonably concise.
+
+15. When the farmer reports the result of earlier advice,
+acknowledge the result and explain what it means, but do not
+claim that the AI has retrained itself automatically.
 """
 
         user_input = f"""
-Recent conversation:
+RECENT CONVERSATION
+
 {recent_history}
 
-Farmer question:
+CURRENT FARMER MESSAGE
+
 {question}
 """
 
-        response = (
-            client.responses.create(
-                model=model_name,
-                reasoning={
-                    "effort": "low"
-                },
-                instructions=instructions,
-                input=user_input
-            )
-        )
+        # ====================================================
+        # FIRST ATTEMPT
+        # ====================================================
 
-        answer = (
-            response.output_text
+        try:
+
+            response = (
+                client.responses.create(
+                    model=model_name,
+                    reasoning={
+                        "effort": "low"
+                    },
+                    instructions=instructions,
+                    input=user_input
+                )
+            )
+
+        except Exception:
+
+            # Some configured models/providers may not use
+            # the reasoning argument. Retry without it.
+
+            response = (
+                client.responses.create(
+                    model=model_name,
+                    instructions=instructions,
+                    input=user_input
+                )
+            )
+
+        answer = str(
+            getattr(
+                response,
+                "output_text",
+                ""
+            )
             or ""
         ).strip()
 
         if answer:
+
             return answer
+
+    except Exception as error:
+
+        # Keep diagnostic information internally.
+        # Do not expose technical errors or secrets
+        # to the farmer.
+
+        st.session_state[
+            "farm_ai_last_guidance_error"
+        ] = str(
+            error
+        )
+
+    # ========================================================
+    # SAFE SERVICE-FAILURE FALLBACK
+    # ========================================================
+
+    matches = []
+
+    try:
+
+        matches = (
+            farm_assistant_find_features(
+                question,
+                limit=3
+            )
+            or []
+        )
 
     except Exception:
 
-        pass
+        matches = []
+
+    if matches:
+
+        names = ", ".join(
+            str(
+                feature.get(
+                    "title",
+                    "Smart Farm Tool"
+                )
+            )
+            for feature in matches[
+                :3
+            ]
+        )
+
+        return (
+            "The conversational farming service is "
+            "temporarily unavailable, but Smart Farm AI's "
+            "core tools are still available. "
+            f"For this request, try: {names}."
+        )
 
     return (
-        "I could not reach the agricultural AI service "
-        "right now. You can still ask me to record sales "
-        "or expenses, calculate profit, check alerts, "
-        "show priorities, or open Smart Farm AI features."
+        "The conversational farming service is temporarily "
+        "unavailable. You can still record sales or expenses, "
+        "check farm records, calculate profit, open Smart Farm "
+        "AI tools and use the available farm management features."
     )
 
 
@@ -9094,7 +9967,7 @@ FARM_AI_NAVIGATION_CATALOG = [
     },
     {
         "title": "Profit & Loss",
-        "destination": "📊 Farm Profit & Loss Statement",
+        "destination": "📊 Farm Profit & loss Statement",
         "icon": "💰",
         "description": "Review farm income, expenses and financial position.",
         "keywords": [
@@ -9662,9 +10535,43 @@ def farm_ai_recommend_navigation_features(
     limit=3
 ):
     """
-    Return only the best few relevant tools even though
-    the Copilot knows the wider Smart Farm AI platform.
+    Return the most relevant existing Smart Farm AI tools.
+
+    The Copilot may understand the entire platform,
+    but only the best three tools are shown to avoid
+    overwhelming the farmer.
     """
+
+    clean_text = str(
+        text
+        or ""
+    ).strip()
+
+    if not clean_text:
+        return []
+
+    # ========================================================
+    # NEVER SHOW MORE THAN THREE TOOLS
+    # ========================================================
+
+    try:
+        limit = int(
+            limit
+        )
+    except Exception:
+        limit = 3
+
+    limit = max(
+        1,
+        min(
+            limit,
+            3
+        )
+    )
+
+    # ========================================================
+    # SCORE AVAILABLE FEATURES
+    # ========================================================
 
     scored_features = []
 
@@ -9672,12 +10579,33 @@ def farm_ai_recommend_navigation_features(
         FARM_AI_NAVIGATION_CATALOG
     ):
 
-        score = (
-            farm_ai_navigation_score(
-                text,
-                feature
+        if not isinstance(
+            feature,
+            dict
+        ):
+            continue
+
+        destination = (
+            feature.get(
+                "destination"
             )
         )
+
+        if not destination:
+            continue
+
+        try:
+
+            score = (
+                farm_ai_navigation_score(
+                    clean_text,
+                    feature
+                )
+            )
+
+        except Exception:
+
+            continue
 
         if score >= 25:
 
@@ -9688,20 +10616,26 @@ def farm_ai_recommend_navigation_features(
                 )
             )
 
+    # ========================================================
+    # BEST MATCHES FIRST
+    # ========================================================
+
     scored_features.sort(
         key=lambda item: item[0],
         reverse=True
     )
 
     recommendations = []
-
     used_destinations = set()
 
     for score, feature in scored_features:
 
-        destination = feature.get(
-            "destination"
-        )
+        destination = str(
+            feature.get(
+                "destination",
+                ""
+            )
+        ).strip()
 
         if (
             not destination
@@ -9718,10 +10652,12 @@ def farm_ai_recommend_navigation_features(
             destination
         )
 
-        if len(
-            recommendations
-        ) >= limit:
-
+        if (
+            len(
+                recommendations
+            )
+            >= limit
+        ):
             break
 
     return recommendations
@@ -9735,24 +10671,54 @@ def farm_ai_is_sale_request(
     text
 ):
     """
-    Detect when the farmer wants to create a sale record.
+    Return True only when the farmer is clearly asking
+    Smart Farm AI to record or begin recording a sale.
     """
 
     clean_text = str(
         text or ""
     ).strip().lower()
 
+    if not clean_text:
+        return False
+
+    # ========================================================
+    # NAVIGATION COMMANDS ARE NOT SALE ACTIONS
+    # ========================================================
+
+    navigation_starts = (
+        "open ",
+        "go to ",
+        "take me to ",
+        "show ",
+        "show me ",
+        "navigate to "
+    )
+
+    if clean_text.startswith(
+        navigation_starts
+    ):
+        return False
+
+    # ========================================================
+    # EXPLICIT SALE RECORDING REQUESTS
+    # ========================================================
+
     sale_phrases = (
         "record sale",
         "record a sale",
+        "record my sale",
+        "record sales",
         "add sale",
         "add a sale",
         "add sales record",
         "add sale record",
         "sales record",
+        "new sale",
         "save sale",
-        "record my sale",
-        "i sold",
+        "log sale",
+        "log a sale",
+        "i sold ",
         "sold "
     )
 
@@ -9850,7 +10816,6 @@ def farm_ai_sale_draft_message(
         "before I can prepare this sale."
     )
 
-
 def farm_ai_start_sale_draft(
     initial_text=""
 ):
@@ -9865,18 +10830,35 @@ def farm_ai_start_sale_draft(
         )
     )
 
-    # --------------------------------------------------------
-    # COMPLETE SALE ALREADY PROVIDED
-    # --------------------------------------------------------
-
-    if (
+    product = (
         data.get(
             "product"
         )
-        and data.get(
-            "amount"
+    )
+
+    amount = (
+        _farm_number(
+            data.get(
+                "amount"
+            )
         )
+    )
+
+    # ========================================================
+    # COMPLETE SALE ALREADY PROVIDED
+    # ========================================================
+
+    if (
+        product
+        and amount is not None
+        and amount > 0
     ):
+
+        data[
+            "amount"
+        ] = float(
+            amount
+        )
 
         return (
             farm_ai_prepare_sale_confirmation(
@@ -9899,9 +10881,9 @@ def farm_ai_start_sale_draft(
             )
         )
 
-    # --------------------------------------------------------
-    # OTHERWISE REMEMBER INCOMPLETE SALE
-    # --------------------------------------------------------
+    # ========================================================
+    # REMEMBER INCOMPLETE SALE
+    # ========================================================
 
     farm_ai_set_pending_action(
         action_type="record_sale",
@@ -9918,7 +10900,6 @@ def farm_ai_start_sale_draft(
             )
         )
     }
-
 
 def farm_ai_continue_sale_draft(
     text
@@ -9939,6 +10920,12 @@ def farm_ai_continue_sale_draft(
         )
     )
 
+    if not isinstance(
+        current_data,
+        dict
+    ):
+        current_data = {}
+
     data = (
         farm_ai_extract_sale_details(
             text,
@@ -9946,18 +10933,35 @@ def farm_ai_continue_sale_draft(
         )
     )
 
-    # --------------------------------------------------------
-    # SALE NOW HAS ENOUGH INFORMATION
-    # --------------------------------------------------------
-
-    if (
+    product = (
         data.get(
             "product"
         )
-        and data.get(
-            "amount"
+    )
+
+    amount = (
+        _farm_number(
+            data.get(
+                "amount"
+            )
         )
+    )
+
+    # ========================================================
+    # SALE NOW HAS ENOUGH INFORMATION
+    # ========================================================
+
+    if (
+        product
+        and amount is not None
+        and amount > 0
     ):
+
+        data[
+            "amount"
+        ] = float(
+            amount
+        )
 
         return (
             farm_ai_prepare_sale_confirmation(
@@ -9988,9 +10992,9 @@ def farm_ai_continue_sale_draft(
             )
         )
 
-    # --------------------------------------------------------
+    # ========================================================
     # STILL INCOMPLETE
-    # --------------------------------------------------------
+    # ========================================================
 
     farm_ai_update_pending_action(
         data=data,
@@ -10011,28 +11015,117 @@ def farm_ai_continue_sale_draft(
 # 💰 SMART FARM AI COPILOT — MULTI-TURN EXPENSES
 # ============================================================
 
-def farm_ai_is_expense_request(
-    text
+def farm_ai_prepare_expense_confirmation(
+    data
 ):
-    clean_text = str(
-        text or ""
-    ).strip().lower()
+    """
+    Validate an expense draft and move it to
+    final confirmation only when required data exists.
+    """
 
-    phrases = (
-        "record expense",
-        "record an expense",
-        "add expense",
-        "add an expense",
-        "expense record",
-        "save expense",
-        "i spent",
-        "spent "
+    if not isinstance(
+        data,
+        dict
+    ):
+        data = {}
+
+    amount = (
+        _farm_number(
+            data.get(
+                "amount"
+            )
+        )
     )
 
-    return any(
-        phrase in clean_text
-        for phrase in phrases
+    category = str(
+        data.get(
+            "category"
+        )
+        or ""
+    ).strip()
+
+    # ========================================================
+    # REQUIRE CATEGORY
+    # ========================================================
+
+    if not category:
+
+        farm_ai_set_pending_action(
+            action_type="record_expense",
+            data=data,
+            status="collecting"
+        )
+
+        return {
+            "ok": True,
+            "collecting": True,
+            "message": (
+                "What was the expense for? "
+                "For example: fertilizer, labor, "
+                "transport or equipment."
+            )
+        }
+
+    # ========================================================
+    # REQUIRE VALID AMOUNT
+    # ========================================================
+
+    if (
+        amount is None
+        or amount <= 0
+    ):
+
+        farm_ai_set_pending_action(
+            action_type="record_expense",
+            data=data,
+            status="collecting"
+        )
+
+        return {
+            "ok": True,
+            "collecting": True,
+            "message": (
+                f"Okay, {category}. "
+                "How much did you spend?"
+            )
+        }
+
+    # ========================================================
+    # NORMALIZE FINAL DATA
+    # ========================================================
+
+    data = dict(
+        data
     )
+
+    data[
+        "category"
+    ] = category
+
+    data[
+        "amount"
+    ] = float(
+        amount
+    )
+
+    # ========================================================
+    # WAIT FOR FARMER CONFIRMATION
+    # ========================================================
+
+    farm_ai_set_pending_action(
+        action_type="record_expense",
+        data=data,
+        status="awaiting_confirmation"
+    )
+
+    return {
+        "ok": True,
+        "awaiting_confirmation": True,
+        "message": (
+            f"Record {category} expense of "
+            f"{farm_ai_format_money(amount)}?"
+        )
+    }
 
 
 def farm_ai_extract_sale_details(
@@ -10040,9 +11133,19 @@ def farm_ai_extract_sale_details(
     existing=None
 ):
     """
-    Extract sale information across one or multiple
-    Copilot messages without treating sale commands
-    as product names.
+    Extract sale information from one or multiple
+    farmer messages.
+
+    Supports examples such as:
+    - Rice
+    - 500 kg at 650
+    - 500 kg 650
+    - 500 kg rice at 650
+    - 500 kg rice 650
+    - rice 500 kg at 650
+    - rice 500 kg 650
+    - sold rice for 325000
+    - total 325000
     """
 
     import re
@@ -10052,16 +11155,23 @@ def farm_ai_extract_sale_details(
         or {}
     )
 
-    clean_text = str(
-        text or ""
-    ).replace(
-        ",",
-        ""
+    raw_text = str(
+        text
+        or ""
     ).strip()
+
+    clean_text = (
+        raw_text
+        .replace(",", "")
+        .strip()
+    )
 
     lower_text = (
         clean_text.lower()
     )
+
+    if not clean_text:
+        return data
 
     # ========================================================
     # SALE COMMANDS ARE NOT PRODUCT NAMES
@@ -10085,7 +11195,9 @@ def farm_ai_extract_sale_details(
         "create sale",
         "create sales record",
         "new sale",
-        "new sales record"
+        "new sales record",
+        "log sale",
+        "log a sale"
     }
 
     is_sale_command_only = (
@@ -10094,18 +11206,33 @@ def farm_ai_extract_sale_details(
     )
 
     # ========================================================
-    # FULL SALE
-    # Example: 500 kg maize at 750
+    # COMMON UNIT PATTERN
+    # ========================================================
+
+    unit_pattern = (
+        r"(kg|kgs|kilograms?|"
+        r"bags?|tons?|tonnes?|"
+        r"crates?|units?)"
+    )
+
+    # ========================================================
+    # 1. QUANTITY + UNIT + PRODUCT + PRICE
+    #
+    # Examples:
+    # 500 kg rice at 650
+    # 500 kg of rice @ 650
+    # 500 kg rice 650
     # ========================================================
 
     full_match = re.search(
         r"(\d+(?:\.\d+)?)"
         r"\s*"
-        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
-        r"\s+(?:of\s+)?"
+        + unit_pattern
+        + r"\s+(?:of\s+)?"
         r"([A-Za-z][A-Za-z\s\-]*?)"
-        r"\s+(?:at|@)\s*"
-        r"(\d+(?:\.\d+)?)",
+        r"\s+(?:(?:at|@)\s*)?"
+        r"(\d+(?:\.\d+)?)"
+        r"\s*$",
         clean_text,
         re.IGNORECASE
     )
@@ -10133,9 +11260,9 @@ def farm_ai_extract_sale_details(
 
         data.update(
             {
+                "product": product,
                 "quantity": quantity,
                 "unit": unit,
-                "product": product,
                 "unit_price": unit_price,
                 "amount": (
                     quantity
@@ -10147,16 +11274,80 @@ def farm_ai_extract_sale_details(
         return data
 
     # ========================================================
-    # QUANTITY + UNIT + PRICE
-    # Example: 500 kg at 750
+    # 2. PRODUCT + QUANTITY + UNIT + PRICE
+    #
+    # Examples:
+    # rice 500 kg at 650
+    # cassava 20 bags 30000
+    # ========================================================
+
+    product_first_match = re.search(
+        r"^"
+        r"([A-Za-z][A-Za-z\s\-]*?)"
+        r"\s+"
+        r"(\d+(?:\.\d+)?)"
+        r"\s*"
+        + unit_pattern
+        + r"\s+(?:(?:at|@)\s*)?"
+        r"(\d+(?:\.\d+)?)"
+        r"\s*$",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if product_first_match:
+
+        product = (
+            product_first_match.group(1)
+            .strip()
+        )
+
+        quantity = float(
+            product_first_match.group(2)
+        )
+
+        unit = (
+            farm_ai_normalize_sale_unit(
+                product_first_match.group(3)
+            )
+        )
+
+        unit_price = float(
+            product_first_match.group(4)
+        )
+
+        data.update(
+            {
+                "product": product,
+                "quantity": quantity,
+                "unit": unit,
+                "unit_price": unit_price,
+                "amount": (
+                    quantity
+                    * unit_price
+                )
+            }
+        )
+
+        return data
+
+    # ========================================================
+    # 3. QUANTITY + UNIT + PRICE
+    #
+    # Used when product was already collected.
+    #
+    # Examples:
+    # 500 kg at 650
+    # 500 kg 650
     # ========================================================
 
     quantity_price_match = re.search(
         r"(\d+(?:\.\d+)?)"
         r"\s*"
-        r"(kg|kgs|kilograms?|bags?|tons?|tonnes?|crates?|units?)"
-        r"\s+(?:at|@)\s*"
-        r"(\d+(?:\.\d+)?)",
+        + unit_pattern
+        + r"\s+(?:(?:at|@)\s*)?"
+        r"(\d+(?:\.\d+)?)"
+        r"\s*$",
         clean_text,
         re.IGNORECASE
     )
@@ -10189,13 +11380,58 @@ def farm_ai_extract_sale_details(
             }
         )
 
+        return data
+
     # ========================================================
-    # EXPLICIT TOTAL
-    # Example: total 375000
+    # 4. PRODUCT SOLD FOR TOTAL AMOUNT
+    #
+    # Examples:
+    # sold rice for 325000
+    # rice for 325000
+    # ========================================================
+
+    product_total_match = re.search(
+        r"^(?:i\s+)?(?:sold\s+)?"
+        r"([A-Za-z][A-Za-z\s\-]*?)"
+        r"\s+for\s+"
+        r"(\d+(?:\.\d+)?)"
+        r"\s*$",
+        clean_text,
+        re.IGNORECASE
+    )
+
+    if product_total_match:
+
+        product = (
+            product_total_match.group(1)
+            .strip()
+        )
+
+        amount = float(
+            product_total_match.group(2)
+        )
+
+        if product:
+
+            data[
+                "product"
+            ] = product
+
+        data[
+            "amount"
+        ] = amount
+
+    # ========================================================
+    # 5. EXPLICIT TOTAL
+    #
+    # Examples:
+    # total 325000
+    # total is 325000
+    # worth 325000
     # ========================================================
 
     total_match = re.search(
-        r"(?:total(?:\s+is)?|worth|for)"
+        r"(?:total(?:\s+is)?|worth)"
         r"\s*"
         r"(\d+(?:\.\d+)?)",
         clean_text,
@@ -10205,21 +11441,34 @@ def farm_ai_extract_sale_details(
     if (
         total_match
         and not (
-            data.get("quantity")
-            and data.get("unit_price")
+            data.get(
+                "quantity"
+            )
+            and data.get(
+                "unit_price"
+            )
         )
     ):
 
-        data["amount"] = float(
+        data[
+            "amount"
+        ] = float(
             total_match.group(1)
         )
-        # ========================================================
-    # SIMPLE PRODUCT FOLLOW-UP
-    # Example: Maize
+
+    # ========================================================
+    # 6. SIMPLE PRODUCT FOLLOW-UP
+    #
+    # Examples:
+    # Rice
+    # Cassava
+    # Sweet Potato
     # ========================================================
 
     if (
-        not data.get("product")
+        not data.get(
+            "product"
+        )
         and not is_sale_command_only
     ):
 
@@ -10239,6 +11488,7 @@ def farm_ai_extract_sale_details(
             "record",
             "save",
             "create",
+            "log",
             "sale",
             "sales",
             "new"
@@ -10251,35 +11501,356 @@ def farm_ai_extract_sale_details(
 
         if (
             not contains_number
-            and 1 <= len(words) <= 3
+            and 1 <= len(words) <= 4
             and not contains_command_word
         ):
 
-            data["product"] = (
-                clean_text
+            product_candidate = (
+                clean_text.strip(
+                    " .,-"
+                )
             )
+
+            if product_candidate:
+                data[
+                    "product"
+                ] = product_candidate
 
     # ========================================================
     # QUANTITY × UNIT PRICE IS AUTHORITATIVE
     # ========================================================
 
     if (
-        data.get("quantity")
-        and data.get("unit_price")
+        data.get(
+            "quantity"
+        )
+        and data.get(
+            "unit_price"
+        )
     ):
 
-        data["amount"] = (
-            float(
-                data["quantity"]
+        try:
+
+            data[
+                "amount"
+            ] = (
+                float(
+                    data["quantity"]
+                )
+                * float(
+                    data["unit_price"]
+                )
             )
-            * float(
-                data["unit_price"]
-            )
-        )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+            pass
 
     return data
 
 
+def farm_ai_extract_expense_details(
+    text,
+    existing_data=None
+):
+    """
+    Extract expense information from natural farmer messages
+    and merge it with information already collected.
+
+    Examples supported:
+    - fertilizer
+    - 5000
+    - fertilizer 5000
+    - spent 5000 on fertilizer
+    - I paid 20000 for labor
+    - transport cost 7500
+    """
+
+    import re
+
+    data = dict(
+        existing_data
+        or {}
+    )
+
+    raw_text = str(
+        text
+        or ""
+    ).strip()
+
+    clean_text = (
+        raw_text
+        .lower()
+        .strip()
+    )
+
+    if not clean_text:
+        return data
+
+    # ========================================================
+    # COMMAND-ONLY PHRASES ARE NOT EXPENSE CATEGORIES
+    # ========================================================
+
+    expense_command_phrases = {
+        "add expense",
+        "add expense record",
+        "record expense",
+        "record an expense",
+        "expense record",
+        "new expense",
+        "add expenses",
+        "record expenses"
+    }
+
+    is_command_only = (
+        clean_text
+        in expense_command_phrases
+    )
+
+    # ========================================================
+    # EXTRACT AMOUNT
+    # ========================================================
+
+    number_matches = re.findall(
+        r"(?<!\w)"
+        r"(?:₦|\$|€|£|irr\s*)?"
+        r"(\d+(?:,\d{3})*(?:\.\d+)?)",
+        clean_text,
+        flags=re.IGNORECASE
+    )
+
+    if number_matches:
+
+        amount_value = (
+            _farm_number(
+                number_matches[-1]
+            )
+        )
+
+        if (
+            amount_value is not None
+            and amount_value > 0
+        ):
+            data[
+                "amount"
+            ] = float(
+                amount_value
+            )
+
+    # ========================================================
+    # RECOGNIZED EXPENSE CATEGORIES
+    # ========================================================
+
+    category_aliases = {
+        "fertilizer": "Fertilizer",
+        "fertiliser": "Fertilizer",
+        "manure": "Fertilizer",
+
+        "labor": "Labor",
+        "labour": "Labor",
+        "worker": "Labor",
+        "workers": "Labor",
+        "wages": "Labor",
+        "salary": "Labor",
+
+        "transport": "Transport",
+        "transportation": "Transport",
+        "delivery": "Transport",
+        "fuel": "Fuel",
+        "diesel": "Fuel",
+        "petrol": "Fuel",
+
+        "equipment": "Equipment",
+        "machine": "Equipment",
+        "machinery": "Equipment",
+        "tool": "Equipment",
+        "tools": "Equipment",
+
+        "pesticide": "Pesticide",
+        "pesticides": "Pesticide",
+        "herbicide": "Pesticide",
+        "herbicides": "Pesticide",
+        "insecticide": "Pesticide",
+        "insecticides": "Pesticide",
+
+        "seed": "Seeds",
+        "seeds": "Seeds",
+        "seedling": "Seeds",
+        "seedlings": "Seeds",
+
+        "irrigation": "Irrigation",
+        "water": "Irrigation",
+
+        "rent": "Rent",
+        "land rent": "Rent",
+
+        "electricity": "Utilities",
+        "power": "Utilities",
+        "utilities": "Utilities",
+
+        "maintenance": "Maintenance",
+        "repair": "Maintenance",
+        "repairs": "Maintenance"
+    }
+
+    detected_category = None
+
+    for alias, category in (
+        category_aliases.items()
+    ):
+
+        if re.search(
+            r"\b"
+            + re.escape(alias)
+            + r"\b",
+            clean_text
+        ):
+
+            detected_category = (
+                category
+            )
+
+            break
+
+    if detected_category:
+
+        data[
+            "category"
+        ] = detected_category
+
+    # ========================================================
+    # ACCEPT A SIMPLE FARMER-WRITTEN CATEGORY
+    # ========================================================
+
+    elif (
+        not data.get(
+            "category"
+        )
+        and not is_command_only
+    ):
+
+        category_candidate = (
+            re.sub(
+                r"(?:₦|\$|€|£)?"
+                r"\d+(?:,\d{3})*(?:\.\d+)?",
+
+"",
+                raw_text,
+                flags=re.IGNORECASE
+            )
+        )
+
+        removable_phrases = [
+            "i spent",
+            "i paid",
+            "spent",
+            "paid",
+            "expense",
+            "cost",
+            "cost me",
+            "for",
+            "on",
+            "was",
+            "is"
+        ]
+
+        candidate_lower = (
+            category_candidate.lower()
+        )
+
+        for phrase in removable_phrases:
+
+            candidate_lower = re.sub(
+                r"\b"
+                + re.escape(phrase)
+                + r"\b",
+                " ",
+                candidate_lower
+            )
+
+        candidate_lower = re.sub(
+            r"\s+",
+            " ",
+            candidate_lower
+        ).strip(
+            " .,-"
+        )
+
+        blocked_categories = {
+            "",
+            "add",
+            "record",
+            "new",
+            "expense",
+            "expenses",
+            "record expense",
+            "add expense"
+        }
+
+        if (
+            candidate_lower
+            not in blocked_categories
+            and len(
+                candidate_lower
+            ) <= 60
+        ):
+
+            data[
+                "category"
+            ] = (
+                candidate_lower
+                .title()
+            )
+
+    # ========================================================
+    # KEEP ORIGINAL DESCRIPTION WHEN USEFUL
+    # ========================================================
+
+    if (
+        raw_text
+        and not is_command_only
+        and (
+            data.get(
+                "category"
+            )
+            or data.get(
+                "amount"
+            )
+        )
+    ):
+
+        previous_description = str(
+            data.get(
+                "description",
+                ""
+            )
+            or ""
+        ).strip()
+
+        if (
+            raw_text.lower()
+            not in previous_description.lower()
+        ):
+
+            if previous_description:
+
+                data[
+                    "description"
+                ] = (
+                    previous_description
+                    + " | "
+                    + raw_text
+                )
+
+            else:
+
+                data[
+                    "description"
+                ] = raw_text
+
+    return data
 
 def farm_ai_expense_draft_message(
     data
@@ -10316,14 +11887,99 @@ def farm_ai_expense_draft_message(
 def farm_ai_prepare_expense_confirmation(
     data
 ):
-    amount = data.get(
-        "amount"
+    """
+    Validate an expense draft and move it to
+    final confirmation only when required data exists.
+    """
+
+    if not isinstance(
+        data,
+        dict
+    ):
+        data = {}
+
+    amount = (
+        _farm_number(
+            data.get(
+                "amount"
+            )
+        )
     )
 
-    category = data.get(
-        "category",
-        "Other"
+    category = str(
+        data.get(
+            "category"
+        )
+        or ""
+    ).strip()
+
+    # ========================================================
+    # REQUIRE CATEGORY
+    # ========================================================
+
+    if not category:
+
+        farm_ai_set_pending_action(
+            action_type="record_expense",
+            data=data,
+            status="collecting"
+        )
+
+        return {
+            "ok": True,
+            "collecting": True,
+            "message": (
+                "What was the expense for? "
+                "For example: fertilizer, labor, "
+                "transport or equipment."
+            )
+        }
+
+    # ========================================================
+    # REQUIRE VALID AMOUNT
+    # ========================================================
+
+    if (
+        amount is None
+        or amount <= 0
+    ):
+
+        farm_ai_set_pending_action(
+            action_type="record_expense",
+            data=data,
+            status="collecting"
+        )
+
+        return {
+            "ok": True,
+            "collecting": True,
+            "message": (
+                f"Okay, {category}. "
+                "How much did you spend?"
+            )
+        }
+
+    # ========================================================
+    # NORMALIZE FINAL DATA
+    # ========================================================
+
+    data = dict(
+        data
     )
+
+    data[
+        "category"
+    ] = category
+
+    data[
+        "amount"
+    ] = float(
+        amount
+    )
+
+    # ========================================================
+    # WAIT FOR FARMER CONFIRMATION
+    # ========================================================
 
     farm_ai_set_pending_action(
         action_type="record_expense",
@@ -10446,27 +12102,15 @@ def farm_ai_prepare_sale_confirmation(
     notes=""
 ):
     """
-    Prepare a sale but DO NOT save it yet.
+    Validate and prepare a sale for farmer confirmation.
 
-    The sale remains pending until the farmer
-    explicitly confirms it.
+    Nothing is saved until the farmer explicitly confirms.
     """
 
-    context = (
-        get_farm_action_context()
-        or {}
-    )
-
-    product_value = (
+    product_value = str(
         product
-        or context.get(
-            "crop"
-        )
-        or context.get(
-            "crop_type"
-        )
-        or "Farm Produce"
-    )
+        or ""
+    ).strip()
 
     amount_value = (
         _farm_number(
@@ -10492,17 +12136,39 @@ def farm_ai_prepare_sale_confirmation(
         else None
     )
 
-    # --------------------------------------------------------
-    # Calculate total from quantity × unit price
-    # --------------------------------------------------------
+    unit_value = str(
+        unit
+        or "transaction"
+    ).strip()
+
+    # ========================================================
+    # REQUIRE PRODUCT
+    # ========================================================
+
+    if not product_value:
+
+        return {
+            "ok": True,
+            "needs_input": True,
+            "message": (
+                "What did you sell? "
+                "For example: maize, cassava or rice."
+            )
+        }
+
+    # ========================================================
+    # CALCULATE TOTAL WHEN POSSIBLE
+    # ========================================================
 
     if (
         (
             amount_value is None
             or amount_value <= 0
         )
-        and quantity_value
-        and unit_price_value
+        and quantity_value is not None
+        and quantity_value > 0
+        and unit_price_value is not None
+        and unit_price_value > 0
     ):
 
         amount_value = (
@@ -10510,9 +12176,9 @@ def farm_ai_prepare_sale_confirmation(
             * unit_price_value
         )
 
-    # --------------------------------------------------------
-    # We still need enough information
-    # --------------------------------------------------------
+    # ========================================================
+    # REQUIRE VALID SALE VALUE
+    # ========================================================
 
     if (
         amount_value is None
@@ -10520,36 +12186,60 @@ def farm_ai_prepare_sale_confirmation(
     ):
 
         return {
-            "ok": False,
+            "ok": True,
             "needs_input": True,
             "message": (
-                "I still need the sale amount, "
-                "or the quantity and unit price."
+                f"Okay, {product_value}. "
+                "Tell me the quantity and selling price, "
+                "for example: 500 kg at 650."
             )
         }
 
+    # ========================================================
+    # NORMALIZE FINAL SALE DATA
+    # ========================================================
+
     sale_data = {
-        "amount":
-            amount_value,
+        "amount": float(
+            amount_value
+        ),
 
-        "product":
-            product_value,
+        "product": product_value,
 
-        "quantity":
-            quantity_value,
+        "quantity": (
+            float(quantity_value)
+            if (
+                quantity_value is not None
+                and quantity_value > 0
+            )
+            else None
+        ),
 
-        "unit":
-            unit or "transaction",
+        "unit": unit_value,
 
-        "unit_price":
-            unit_price_value,
+        "unit_price": (
+            float(unit_price_value)
+            if (
+                unit_price_value is not None
+                and unit_price_value > 0
+            )
+            else None
+        ),
 
-        "buyer":
-            buyer or "",
+        "buyer": str(
+            buyer
+            or ""
+        ).strip(),
 
-        "notes":
-            notes or ""
+        "notes": str(
+            notes
+            or ""
+        ).strip()
     }
+
+    # ========================================================
+    # WAIT FOR EXPLICIT CONFIRMATION
+    # ========================================================
 
     farm_ai_set_pending_action(
         action_type="record_sale",
@@ -10557,31 +12247,37 @@ def farm_ai_prepare_sale_confirmation(
         status="awaiting_confirmation"
     )
 
-    # --------------------------------------------------------
-    # Build farmer-friendly confirmation
-    # --------------------------------------------------------
+    # ========================================================
+    # FARMER-FRIENDLY CONFIRMATION MESSAGE
+    # ========================================================
 
-    money_total = farm_ai_format_money(
-        amount_value
+    money_total = (
+        farm_ai_format_money(
+            amount_value
+        )
     )
 
     if (
-        quantity_value
-        and unit_price_value
+        sale_data["quantity"]
+        and sale_data["unit_price"]
     ):
 
-        unit_price_text = farm_ai_format_money(
-            unit_price_value
+        unit_price_text = (
+            farm_ai_format_money(
+                sale_data[
+                    "unit_price"
+                ]
+            )
         )
-
         message = (
             f"I have a sale of "
-            f"{quantity_value:g} "
-            f"{unit} of "
+            f"{sale_data['quantity']:g} "
+            f"{unit_value} of "
             f"{product_value} at "
-            f"{unit_price_text} per {unit}. "
+            f"{unit_price_text} per "
+            f"{unit_value}. "
             f"Total: {money_total}. "
-            f"Should I record this sale?"
+            "Should I record this sale?"
         )
 
     else:
@@ -10589,7 +12285,7 @@ def farm_ai_prepare_sale_confirmation(
         message = (
             f"I have a {product_value} sale "
             f"worth {money_total}. "
-            f"Should I record this sale?"
+            "Should I record this sale?"
         )
 
     return {
@@ -10598,7 +12294,6 @@ def farm_ai_prepare_sale_confirmation(
         "message": message,
         "data": sale_data
     }
-
 
 def farm_ai_execute_pending_action():
     """
@@ -10734,19 +12429,29 @@ def farm_ai_execute_pending_action():
             status="executing"
         )
 
-        expense_action = dict(
-            data
-        )
-
-        expense_action[
-            "intent"
-        ] = "record_expense"
-
         try:
 
             result = (
-                execute_farm_action(
-                    expense_action
+                farm_action_record_expense(
+                    amount=data.get(
+                        "amount"
+                    ),
+                    category=data.get(
+                        "category",
+                        "Other"
+                    ),
+                    description=data.get(
+                        "description",
+                        ""
+                    ),
+                    payment_method=data.get(
+                        "payment_method",
+                        ""
+                    ),
+                    notes=data.get(
+                        "notes",
+                        ""
+                    )
                 )
             )
 
@@ -10762,8 +12467,7 @@ def farm_ai_execute_pending_action():
                     error
                 )
             }
-
-        st.session_state[
+            st.session_state[
             "farm_ai_last_action_result"
         ] = result
 
@@ -10779,7 +12483,8 @@ def farm_ai_execute_pending_action():
             farm_ai_update_pending_action(
                 status="awaiting_confirmation"
             )
-            return result
+
+        return result
 
     # ========================================================
     # INVALID / OLD PENDING ACTION
@@ -10797,20 +12502,22 @@ def farm_ai_execute_pending_action():
     }
 
 
-
 def farm_ai_handle_pending_action_message(
     text
 ):
     """
     Handle an unfinished or confirmation-stage farm action
-    BEFORE the normal parser or external AI receives it.
+    BEFORE navigation, normal parsing, or external AI.
     """
 
     pending = (
         farm_ai_get_pending_action()
     )
 
-    if not pending:
+    if not isinstance(
+        pending,
+        dict
+    ):
 
         return {
             "handled": False
@@ -10819,6 +12526,9 @@ def farm_ai_handle_pending_action_message(
     action_type = (
         pending.get(
             "action_type"
+        )
+        or pending.get(
+            "intent"
         )
     )
 
@@ -10829,7 +12539,7 @@ def farm_ai_handle_pending_action_message(
     )
 
     # ========================================================
-    # CANCELLATION — WORKS AT ANY STAGE
+    # CANCEL AT ANY STAGE
     # ========================================================
 
     if farm_ai_is_cancellation(
@@ -10848,7 +12558,7 @@ def farm_ai_handle_pending_action_message(
         }
 
     # ========================================================
-    # COLLECTING A MULTI-TURN SALE
+    # CONTINUE MULTI-TURN SALE
     # ========================================================
 
     if (
@@ -10875,8 +12585,8 @@ def farm_ai_handle_pending_action_message(
             "result": result
         }
 
-        # ========================================================
-    # COLLECTING A MULTI-TURN EXPENSE
+    # ========================================================
+    # CONTINUE MULTI-TURN EXPENSE
     # ========================================================
 
     if (
@@ -10904,7 +12614,7 @@ def farm_ai_handle_pending_action_message(
         }
 
     # ========================================================
-    # WAITING FOR FINAL CONFIRMATION
+    # FINAL CONFIRMATION
     # ========================================================
 
     if (
@@ -10933,24 +12643,32 @@ def farm_ai_handle_pending_action_message(
                 "result": result
             }
 
-        # ----------------------------------------------------
-        # Do not send random follow-up text to general AI
-        # while a financial action is waiting.
-        # ----------------------------------------------------
-
         return {
             "handled": True,
             "ok": True,
             "message": (
                 "This action is waiting for confirmation. "
-                "Reply Yes/Confirmed to save it, "
+                "Reply Yes or Confirmed to save it, "
                 "or Cancel to discard it."
             )
         }
 
+    # ========================================================
+    # INVALID / STALE PENDING STATE
+    # ========================================================
+
+    farm_ai_clear_pending_action()
+
     return {
-        "handled": False
+        "handled": True,
+        "ok": False,
+        "message": (
+            "I cleared an unfinished farm action "
+            "because its state was no longer valid. "
+            "Please send the request again."
+        )
     }
+
 
 # ============================================================
 # 🧠 SMART FARM AI — COPILOT FARM CONTEXT ENGINE
@@ -11057,8 +12775,11 @@ def farm_ai_current_datetime():
 
 def farm_ai_get_copilot_context():
     """
-    Build the live context Smart Farm AI Copilot should
-    understand before responding to the farmer.
+    Build the authoritative live context Smart Farm AI
+    Copilot should understand before responding.
+
+    This context is based on the logged-in farmer,
+    currently selected farm, and current farmer time.
     """
 
     current_farm = (
@@ -11068,9 +12789,38 @@ def farm_ai_get_copilot_context():
         or {}
     )
 
-    time_context = (
-        farm_ai_current_datetime()
+    farmer_profile = (
+        st.session_state.get(
+            "farmer_profile"
+        )
+        or {}
     )
+
+    personalized_profile = (
+        st.session_state.get(
+            "personalized_profile"
+        )
+        or {}
+    )
+
+    # ========================================================
+    # AUTHORITATIVE FARMER DATE / TIME
+    # ========================================================
+
+    try:
+
+        time_context = (
+            farm_ai_current_datetime()
+            or {}
+        )
+
+    except Exception:
+
+        time_context = {}
+
+    # ========================================================
+    # FARMER IDENTITY
+    # ========================================================
 
     farmer_name = (
         st.session_state.get(
@@ -11079,18 +12829,51 @@ def farm_ai_get_copilot_context():
         or st.session_state.get(
             "current_user"
         )
+        or farmer_profile.get(
+            "name"
+        )
+        or farmer_profile.get(
+            "farmer_name"
+        )
+        or personalized_profile.get(
+            "name"
+        )
         or "Farmer"
     )
 
-    country = (
+    current_user = str(
         st.session_state.get(
+            "current_user"
+        )
+        or ""
+    ).strip()
+
+    # ========================================================
+    # COUNTRY
+    # ========================================================
+
+    country = (
+        current_farm.get(
+            "country"
+        )
+        or st.session_state.get(
             "registered_country"
         )
         or st.session_state.get(
             "country"
         )
+        or personalized_profile.get(
+            "country"
+        )
+        or farmer_profile.get(
+            "country"
+        )
         or ""
     )
+
+    # ========================================================
+    # ACCOUNT LOCATION
+    # ========================================================
 
     account_location = (
         st.session_state.get(
@@ -11099,81 +12882,117 @@ def farm_ai_get_copilot_context():
         or st.session_state.get(
             "location"
         )
+        or personalized_profile.get(
+            "location"
+        )
+        or farmer_profile.get(
+            "location"
+        )
         or ""
     )
 
+    # ========================================================
+    # CURRENT FARM
+    # ========================================================
+
     farm_id = str(
         current_farm.get(
-            "farm_id",
-            current_farm.get(
-                "id",
-                ""
-            )
+            "farm_id"
         )
-    )
+        or current_farm.get(
+            "id"
+        )
+        or st.session_state.get(
+            "current_farm_id"
+        )
+        or personalized_profile.get(
+            "current_farm_id"
+        )
+        or "main_farm"
+    ).strip()
 
     farm_name = str(
         current_farm.get(
-            "farm_name",
-            current_farm.get(
-                "name",
-                "Current Farm"
-            )
+            "farm_name"
         )
-    )
+        or current_farm.get(
+            "name"
+        )
+        or personalized_profile.get(
+            "current_farm_name"
+        )
+        or "Main Farm"
+    ).strip()
 
     crop = str(
         current_farm.get(
-            "crop_type",
-            current_farm.get(
-                "crop",
-                ""
-            )
+            "crop_type"
         )
-    )
+        or current_farm.get(
+            "crop"
+        )
+        or personalized_profile.get(
+            "current_crop"
+        )
+        or personalized_profile.get(
+            "crop_type"
+        )
+        or ""
+    ).strip()
 
     farm_location = str(
         current_farm.get(
-            "location",
-            account_location
+            "location"
         )
-    )
+        or personalized_profile.get(
+            "current_location"
+        )
+        or account_location
+        or ""
+    ).strip()
 
     farm_type = str(
         current_farm.get(
-            "farm_type",
-            st.session_state.get(
-                "farm_type",
-                ""
-            )
-        )
-    )
-
-    experience = str(
-        st.session_state.get(
-            "experience",
-            ""
+            "farm_type"
         )
         or st.session_state.get(
-            "farmer_experience",
-            ""
+            "farm_type"
         )
-    )
+        or personalized_profile.get(
+            "farm_type"
+        )
+        or ""
+    ).strip()
+    experience = str(
+        st.session_state.get(
+            "experience"
+        )
+        or st.session_state.get(
+            "farmer_experience"
+        )
+        or farmer_profile.get(
+            "experience"
+        )
+        or personalized_profile.get(
+            "experience"
+        )
+        or ""
+    ).strip()
+
+    # ========================================================
+    # FINAL COPILOT CONTEXT
+    # ========================================================
 
     return {
         "farmer_name": str(
             farmer_name
-        ),
-        "current_user": str(
-            st.session_state.get(
-                "current_user",
-                ""
-            )
-        ),
+        ).strip(),
+
+        "current_user": current_user,
 
         "country": str(
             country
-        ),
+        ).strip(),
 
         "farm_id": farm_id,
 
@@ -11187,23 +13006,38 @@ def farm_ai_get_copilot_context():
 
         "experience": experience,
 
-        "date": time_context[
-            "date"
-        ],
+        "date": str(
+            time_context.get(
+                "date",
+                ""
+            )
+            or ""
+        ),
 
-        "date_display": time_context[
-            "date_display"
-        ],
+        "date_display": str(
+            time_context.get(
+                "date_display",
+                ""
+            )
+            or ""
+        ),
 
-        "time": time_context[
-            "time"
-        ],
+        "time": str(
+            time_context.get(
+                "time",
+                ""
+            )
+            or ""
+        ),
 
-        "timezone": time_context[
-            "timezone"
-        ],
+        "timezone": str(
+            time_context.get(
+                "timezone",
+                "UTC"
+            )
+            or "UTC"
+        )
     }
-
 
 # ============================================================
 # 🤖 SMART FARM AI FARM COPILOT — FINAL CHATGPT-STYLE UI
@@ -11213,53 +13047,39 @@ def farm_action_chatbot_ui(
     surface="dashboard",
     compact=True
 ):
+    """
+    Final Phase-1 Smart Farm AI Copilot.
+
+    Responsibilities:
+    - Conversational farm guidance
+    - Current farmer/farm context
+    - Authoritative date/time answers
+    - Farm feature navigation
+    - Sale and expense actions
+    - Pending-action confirmation
+    - Read-only farm actions
+    - Relevant feature recommendations
+    - Conversation history
+    - RTL-ready Persian message rendering
+
+    Real farm actions remain controlled by Python action
+    functions rather than the conversational AI model.
+    """
+
+    import html
 
     # ========================================================
-    # SESSION KEYS
-    # ========================================================
-
-    history_key = (
-        f"farm_ai_history_{surface}"
-    )
-
-    suggestion_key = (
-        f"farm_ai_suggestions_{surface}"
-    )
-
-    archive_key = (
-        f"farm_ai_archived_chats_{surface}"
-    )
-
-    menu_key = (
-        f"farm_ai_menu_open_{surface}"
-    )
-
-    history_view_key = (
-        f"farm_ai_history_view_{surface}"
-    )
-
-    # ========================================================
-    # LIVE COPILOT CONTEXT
+    # AUTHORITATIVE COPILOT CONTEXT
     # ========================================================
 
     copilot_context = (
         farm_ai_get_copilot_context()
-    )
-
-    legacy_context = (
-        get_farm_action_context()
         or {}
     )
 
     farmer_name = (
         copilot_context.get(
             "farmer_name"
-        )
-        or legacy_context.get(
-            "farmer_name"
-        )
-        or legacy_context.get(
-            "name"
         )
         or "Farmer"
     )
@@ -11268,24 +13088,12 @@ def farm_action_chatbot_ui(
         copilot_context.get(
             "farm_name"
         )
-        or legacy_context.get(
-            "farm_name"
-        )
-        or legacy_context.get(
-            "name"
-        )
-        or "Current Farm"
+        or "Main Farm"
     )
 
     crop_name = (
         copilot_context.get(
             "crop"
-        )
-        or legacy_context.get(
-            "crop"
-        )
-        or legacy_context.get(
-            "crop_type"
         )
         or "Crop not set"
     )
@@ -11294,10 +13102,7 @@ def farm_action_chatbot_ui(
         copilot_context.get(
             "location"
         )
-        or legacy_context.get(
-            "location"
-        )
-        or "Location not set"
+        or ""
     )
 
     current_date = (
@@ -11310,13 +13115,103 @@ def farm_action_chatbot_ui(
         or ""
     )
 
+    current_time = (
+        copilot_context.get(
+            "time"
+        )
+        or ""
+    )
+
+    current_timezone = (
+        copilot_context.get(
+            "timezone"
+        )
+        or "UTC"
+    )
+
     # ========================================================
-    # INITIALIZE COPILOT
+    # ACCOUNT-SCOPED COPILOT STATE
+    # ========================================================
+
+    account_scope = (
+        farm_record_owner()
+        or copilot_context.get(
+            "current_user"
+        )
+        or farmer_name
+        or "farmer"
+    )
+
+    account_scope = str(
+        account_scope
+    ).strip().lower()
+
+    history_key = (
+        f"farm_ai_history_"
+        f"{surface}_"
+        f"{account_scope}"
+    )
+
+    suggestion_key = (
+        f"farm_ai_suggestions_"
+        f"{surface}_"
+        f"{account_scope}"
+    )
+
+    archive_key = (
+        f"farm_ai_archived_chats_"
+        f"{surface}_"
+        f"{account_scope}"
+    )
+
+    menu_key = (
+        f"farm_ai_menu_open_"
+        f"{surface}_"
+        f"{account_scope}"
+    )
+
+    history_view_key = (
+        f"farm_ai_history_view_"
+        f"{surface}_"
+        f"{account_scope}"
+    )
+
+    # ========================================================
+    # PREVENT PENDING ACTIONS CROSSING ACCOUNTS
+    # ========================================================
+
+    pending_owner_key = (
+        "farm_ai_pending_action_owner"
+    )
+
+    previous_pending_owner = (
+        st.session_state.get(
+            pending_owner_key
+        )
+    )
+
+    if (
+        previous_pending_owner
+        and previous_pending_owner
+        != account_scope
+    ):
+
+        farm_ai_clear_pending_action()
+
+    st.session_state[
+        pending_owner_key
+    ] = account_scope
+
+    # ========================================================
+    # COPILOT STATE
     # ========================================================
 
     farm_ai_initialize_copilot_state()
 
-    if history_key not in st.session_state:
+    if (
+        history_key
+        not in st.session_state
+    ):
 
         st.session_state[
             history_key
@@ -11334,25 +13229,37 @@ def farm_action_chatbot_ui(
             }
         ]
 
-    if suggestion_key not in st.session_state:
+    if (
+        suggestion_key
+        not in st.session_state
+    ):
 
         st.session_state[
             suggestion_key
         ] = []
 
-    if archive_key not in st.session_state:
+    if (
+        archive_key
+        not in st.session_state
+    ):
 
         st.session_state[
             archive_key
         ] = []
 
-    if menu_key not in st.session_state:
+    if (
+        menu_key
+        not in st.session_state
+    ):
 
         st.session_state[
             menu_key
         ] = False
 
-    if history_view_key not in st.session_state:
+    if (
+        history_view_key
+        not in st.session_state
+    ):
 
         st.session_state[
             history_view_key
@@ -11365,7 +13272,84 @@ def farm_action_chatbot_ui(
     )
 
     # ========================================================
-    # MAIN COPILOT CARD
+    # CLEAN PROFESSIONAL FONT
+    # ========================================================
+
+    st.markdown(
+        """
+        <style>
+        .stApp,
+        .stApp button,
+        .stApp input,
+        .stApp textarea {
+            font-family:
+                Inter,
+                "Segoe UI",
+                Arial,
+                sans-serif;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # ========================================================
+    # RTL-AWARE MESSAGE RENDERER
+    # ========================================================
+
+    def _render_copilot_message(
+        content
+    ):
+
+        content = str(
+            content
+            or ""
+        )
+
+        is_rtl = any(
+            (
+                "\u0600"
+                <= character
+                <= "\u06FF"
+            )
+            for character
+            in content
+        )
+
+        if is_rtl:
+
+            safe_content = (
+                html.escape(
+                    content
+                )
+                .replace(
+                    "\n",
+                    "<br>"
+                )
+            )
+
+            st.markdown(
+                (
+                    '<div dir="rtl" '
+                    'style="'
+                    'text-align:right; '
+                    'line-height:1.8; '
+                    'unicode-bidi:plaintext;'
+                    '">'
+                    f"{safe_content}"
+                    "</div>"
+                ),
+                unsafe_allow_html=True
+            )
+
+        else:
+
+            st.markdown(
+                content
+            )
+
+    # ========================================================
+    # MAIN CHATGPT-STYLE COPILOT CARD
     # ========================================================
 
     with st.container(
@@ -11378,7 +13362,10 @@ def farm_action_chatbot_ui(
 
         title_col, menu_col = (
             st.columns(
-                [10, 1]
+                [
+                    10,
+                    1
+                ]
             )
         )
 
@@ -11392,6 +13379,7 @@ def farm_action_chatbot_ui(
                 f"🌱 {farm_name}"
                 f"  •  🌾 {crop_name}"
             )
+
             if farm_location:
 
                 context_line += (
@@ -11408,7 +13396,8 @@ def farm_action_chatbot_ui(
                 "⋮",
                 key=(
                     f"farm_ai_menu_button_"
-                    f"{surface}"
+                    f"{surface}_"
+                    f"{account_scope}"
                 ),
                 help="Copilot options"
             ):
@@ -11431,9 +13420,15 @@ def farm_action_chatbot_ui(
             False
         ):
 
-            menu_col_1, menu_col_2, menu_col_3 = (
-                st.columns(3)
-            )
+            (
+                menu_col_1,
+                menu_col_2,
+                menu_col_3
+            ) = st.columns(3)
+
+            # ------------------------------------------------
+            # HISTORY
+            # ------------------------------------------------
 
             with menu_col_1:
 
@@ -11441,7 +13436,8 @@ def farm_action_chatbot_ui(
                     "🕘 History",
                     key=(
                         f"farm_ai_history_button_"
-                        f"{surface}"
+                        f"{surface}_"
+                        f"{account_scope}"
                     ),
                     use_container_width=True
                 ):
@@ -11455,13 +13451,18 @@ def farm_action_chatbot_ui(
 
                     st.rerun()
 
+            # ------------------------------------------------
+            # NEW CHAT
+            # ------------------------------------------------
+
             with menu_col_2:
 
                 if st.button(
                     "➕ New Chat",
                     key=(
                         f"farm_ai_new_chat_"
-                        f"{surface}"
+                        f"{surface}_"
+                        f"{account_scope}"
                     ),
                     use_container_width=True
                 ):
@@ -11504,13 +13505,18 @@ def farm_action_chatbot_ui(
 
                     st.rerun()
 
+            # ------------------------------------------------
+            # CLEAR CHAT
+            # ------------------------------------------------
+
             with menu_col_3:
 
                 if st.button(
                     "🗑 Clear",
                     key=(
                         f"farm_ai_clear_chat_"
-                        f"{surface}"
+                        f"{surface}_"
+                        f"{account_scope}"
                     ),
                     use_container_width=True
                 ):
@@ -11533,13 +13539,13 @@ def farm_action_chatbot_ui(
                     ] = []
 
                     farm_ai_clear_pending_action()
-
                     st.session_state[
                         menu_key
                     ] = False
 
                     st.rerun()
-                    # ====================================================
+
+        # ====================================================
         # ARCHIVED CONVERSATIONS
         # ====================================================
 
@@ -11614,8 +13620,11 @@ def farm_action_chatbot_ui(
                             )
 
                             st.markdown(
-                                f"{speaker}: "
-                                f"{old_content}"
+                                f"{speaker}"
+                            )
+
+                            _render_copilot_message(
+                                old_content
                             )
 
         st.divider()
@@ -11625,9 +13634,9 @@ def farm_action_chatbot_ui(
         # ====================================================
 
         chat_height = (
-            470
+            520
             if compact
-            else 560
+            else 620
         )
 
         with st.container(
@@ -11661,7 +13670,7 @@ def farm_action_chatbot_ui(
                     role
                 ):
 
-                    st.markdown(
+                    _render_copilot_message(
                         content
                     )
 
@@ -11682,8 +13691,10 @@ def farm_action_chatbot_ui(
                 pending_action.get(
                     "action_type"
                 )
+                or pending_action.get(
+                    "intent"
+                )
             )
-
             action_status = (
                 pending_action.get(
                     "status"
@@ -11696,10 +13707,22 @@ def farm_action_chatbot_ui(
                     {}
                 )
             )
+
+            if not isinstance(
+                action_data,
+                dict
+            ):
+
+                action_data = {}
+
             if (
                 action_status
                 == "awaiting_confirmation"
             ):
+
+                # ============================================
+                # SALE CONFIRMATION
+                # ============================================
 
                 if (
                     action_type
@@ -11708,16 +13731,16 @@ def farm_action_chatbot_ui(
 
                     product = (
                         action_data.get(
-                            "product",
-                            "Farm Produce"
+                            "product"
                         )
+                        or "Farm Produce"
                     )
 
                     amount = (
                         action_data.get(
-                            "amount",
-                            0
+                            "amount"
                         )
+                        or 0
                     )
 
                     quantity = (
@@ -11728,9 +13751,9 @@ def farm_action_chatbot_ui(
 
                     unit = (
                         action_data.get(
-                            "unit",
                             "unit"
                         )
+                        or "unit"
                     )
 
                     unit_price = (
@@ -11757,19 +13780,28 @@ def farm_action_chatbot_ui(
                         )
 
                         confirmation_text = (
-                            f"Record {quantity:g} "
-                            f"{unit} of {product} "
-                            f"at {price_text} "
+                            f"Record "
+                            f"{quantity:g} "
+                            f"{unit} of "
+                            f"{product} at "
+                            f"{price_text} "
                             f"per {unit}? "
-                            f"Total: {total_text}"
+                            f"Total: "
+                            f"{total_text}"
                         )
 
                     else:
 
                         confirmation_text = (
-                            f"Record {product} sale "
-                            f"for {total_text}?"
+                            f"Record "
+                            f"{product} sale "
+                            f"for "
+                            f"{total_text}?"
                         )
+
+                # ============================================
+                # EXPENSE CONFIRMATION
+                # ============================================
 
                 elif (
                     action_type
@@ -11778,20 +13810,21 @@ def farm_action_chatbot_ui(
 
                     amount = (
                         action_data.get(
-                            "amount",
-                            0
+                            "amount"
                         )
+                        or 0
                     )
 
                     category = (
                         action_data.get(
-                            "category",
-                            "Other"
+                            "category"
                         )
+                        or "Other"
                     )
 
                     confirmation_text = (
-                        f"Record {category} expense "
+                        f"Record "
+                        f"{category} expense "
                         f"of "
                         f"{farm_ai_format_money(amount)}?"
                     )
@@ -11806,9 +13839,14 @@ def farm_action_chatbot_ui(
                     confirmation_text
                 )
 
-                confirm_col, cancel_col = (
-                    st.columns(2)
-                )
+                (
+                    confirm_col,
+                    cancel_col
+                ) = st.columns(2)
+
+                # --------------------------------------------
+                # CONFIRM
+                # --------------------------------------------
 
                 with confirm_col:
 
@@ -11816,7 +13854,8 @@ def farm_action_chatbot_ui(
                         "✅ Confirm Action",
                         key=(
                             f"confirm_farm_ai_"
-                            f"{surface}"
+                            f"{surface}_"
+                            f"{account_scope}"
                         ),
                         type="primary",
                         use_container_width=True
@@ -11848,13 +13887,18 @@ def farm_action_chatbot_ui(
 
                         st.rerun()
 
+                # --------------------------------------------
+                # CANCEL
+                # --------------------------------------------
+
                 with cancel_col:
 
                     if st.button(
                         "❌ Cancel",
                         key=(
                             f"cancel_farm_ai_"
-                            f"{surface}"
+                            f"{surface}_"
+                            f"{account_scope}"
                         ),
                         use_container_width=True
                     ):
@@ -11909,25 +13953,31 @@ def farm_action_chatbot_ui(
                 visible_suggestions
             ):
 
+                if not isinstance(
+                    feature,
+                    dict
+                ):
+                    continue
+
                 feature_title = (
                     feature.get(
-                        "title",
-                        "Smart Farm Tool"
+                        "title"
                     )
+                    or "Smart Farm Tool"
                 )
 
                 feature_icon = (
                     feature.get(
-                        "icon",
-                        "🌱"
+                        "icon"
                     )
+                    or "🌱"
                 )
 
                 feature_description = (
                     feature.get(
-                        "description",
-                        ""
+                        "description"
                     )
+                    or ""
                 )
 
                 destination = (
@@ -11936,10 +13986,14 @@ def farm_action_chatbot_ui(
                     )
                 )
 
-                suggestion_col, open_col = (
-                    st.columns(
-                        [4, 1]
-                    )
+                (
+                    suggestion_col,
+                    open_col
+                ) = st.columns(
+                    [
+                        4,
+                        1
+                    ]
                 )
 
                 with suggestion_col:
@@ -11949,9 +14003,7 @@ def farm_action_chatbot_ui(
                         f"{feature_title}"
                     )
 
-                    if (
-                        feature_description
-                    ):
+                    if feature_description:
 
                         st.caption(
                             feature_description
@@ -11966,6 +14018,7 @@ def farm_action_chatbot_ui(
                             key=(
                                 f"farm_ai_open_"
                                 f"{surface}_"
+                                f"{account_scope}_"
                                 f"{index}"
                             ),
                             use_container_width=True
@@ -11975,7 +14028,6 @@ def farm_action_chatbot_ui(
                         open_smart_farm_feature(
                             destination
                         )
-
         # ====================================================
         # INPUT — INSIDE COPILOT
         # ====================================================
@@ -11985,19 +14037,24 @@ def farm_action_chatbot_ui(
         with st.form(
             key=(
                 f"farm_ai_input_form_"
-                f"{surface}"
+                f"{surface}_"
+                f"{account_scope}"
             ),
             clear_on_submit=True
         ):
 
-            command = st.text_input(
-                "Ask Smart Farm AI",
-                placeholder=(
-                    "Ask about your farm, describe a "
-                    "problem, record an activity, or "
-                    "open a Smart Farm AI tool..."
-                ),
-                label_visibility="collapsed"
+            command = (
+                st.text_input(
+                    "Ask Smart Farm AI",
+                    placeholder=(
+                        "Ask about your farm, describe a "
+                        "problem, record an activity, or "
+                        "open a Smart Farm AI tool..."
+                    ),
+                    label_visibility=(
+                        "collapsed"
+                    )
+                )
             )
 
             submitted = (
@@ -12009,19 +14066,20 @@ def farm_action_chatbot_ui(
             )
 
     # ========================================================
-    # STOP IF NOTHING WAS SUBMITTED
+    # NOTHING SUBMITTED
     # ========================================================
 
     if not submitted:
         return
 
     command = str(
-        command or ""
+        command
+        or ""
     ).strip()
 
     if not command:
         return
-       
+
     # ========================================================
     # SAVE FARMER MESSAGE
     # ========================================================
@@ -12033,8 +14091,14 @@ def farm_action_chatbot_ui(
         }
     )
 
+    command_lower = (
+        command
+        .strip()
+        .lower()
+    )
+
     # ========================================================
-    # 1. PENDING ACTION INTERCEPT
+    # 1. PENDING ACTION HAS PRIORITY
     # ========================================================
 
     pending_response = (
@@ -12050,9 +14114,9 @@ def farm_action_chatbot_ui(
 
         response_message = (
             pending_response.get(
-                "message",
-                "Farm action processed."
+                "message"
             )
+            or "Farm action processed."
         )
 
         history.append(
@@ -12068,9 +14132,310 @@ def farm_action_chatbot_ui(
 
         st.rerun()
 
-    
     # ========================================================
-    # NEW MULTI-TURN SALE REQUEST
+# 2. AUTHORITATIVE DATE / TIME QUESTIONS
+# ========================================================
+
+date_questions = (
+    "what is today's date",
+    "what is todays date",
+    "today's date",
+    "todays date",
+    "what date is it",
+    "what day is today",
+    "what day is it"
+)
+
+if any(
+    phrase
+    in command_lower
+    for phrase
+    in date_questions
+):
+
+    if current_date:
+
+        answer = (
+            f"Today is "
+            f"{current_date}."
+        )
+
+    else:
+
+        answer = (
+            "I could not determine the "
+            "current farm date safely."
+        )
+
+    history.append(
+        {
+            "role": "assistant",
+            "content": answer
+        }
+    )
+
+    st.session_state[
+        suggestion_key
+    ] = []
+
+    st.rerun()
+
+
+
+    time_questions = (
+        "what time is it",
+        "current time",
+        "what is the time"
+    )
+
+    if any(
+        phrase
+        in command_lower
+        for phrase
+        in time_questions
+    ):
+
+        if current_time:
+
+            answer = (
+                f"The current farm time is "
+                f"{current_time} "
+                f"({current_timezone})."
+            )
+
+        else:
+
+            answer = (
+                "I could not determine the "
+                "current farm time safely."
+            )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+        st.rerun()
+
+    # ========================================================
+    # 3. DIRECT CURRENT-FARM QUESTIONS
+    # ========================================================
+
+    farm_questions = (
+        "which farm am i managing",
+        "what farm am i managing",
+        "which farm is active",
+        "what is my current farm",
+        "current farm"
+    )
+
+    if any(
+        phrase
+        in command_lower
+        for phrase
+        in farm_questions
+    ):
+
+        answer = (
+            f"You are currently managing "
+            f"{farm_name}."
+        )
+
+        if crop_name != "Crop not set":
+
+            answer += (
+                f" The current crop is "
+                f"{crop_name}."
+            )
+
+        if farm_location:
+
+            answer += (
+                f" The farm location is "
+                f"{farm_location}."
+            )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+        st.rerun()
+
+    crop_questions = (
+        "what crop am i farming",
+        "what crop am i currently farming",
+        "what is my crop",
+        "which crop am i growing",
+        "what am i growing"
+    )
+
+    if any(
+        phrase
+        in command_lower
+        for phrase
+        in crop_questions
+    ):
+
+        if (
+            crop_name
+            and crop_name
+            != "Crop not set"
+        ):
+
+            answer = (
+                f"Your current crop on "
+                f"{farm_name} is "
+                f"{crop_name}."
+            )
+
+        else:
+
+            answer = (
+                "Your current crop has not "
+                "been recorded yet."
+            )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+        st.rerun()
+
+    location_questions = (
+        "where is my farm",
+        "what is my farm location",
+        "farm location"
+    )
+
+    if any(
+        phrase
+        in command_lower
+        for phrase
+        in location_questions
+    ):
+
+        if farm_location:
+
+            answer = (
+                f"{farm_name} is recorded "
+                f"at {farm_location}."
+            )
+
+        else:
+
+            answer = (
+                "I do not have a location "
+                "recorded for the current farm yet."
+            )
+
+        history.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
+
+        st.session_state[
+            suggestion_key
+        ] = []
+
+        st.rerun()
+
+    # ========================================================
+    # 4. FEATURE NAVIGATION
+    #
+    # IMPORTANT:
+    # Navigation is checked BEFORE new sale/expense parsing.
+    # This prevents:
+    # "Open profit and loss"
+    # from becoming an expense action.
+    # ========================================================
+
+    navigation_words = (
+        "open ",
+        "go to ",
+        "take me to ",
+        "show ",
+        "show me ",
+        "navigate to ",
+        "view "
+    )
+
+    is_navigation_request = any(
+        command_lower.startswith(
+            phrase
+        )
+        for phrase
+        in navigation_words
+    )
+
+    if is_navigation_request:
+
+        navigation_feature = (
+            farm_ai_find_navigation_destination(
+                command
+            )
+        )
+
+        if navigation_feature:
+
+            destination = (
+                navigation_feature.get(
+                    "destination"
+                )
+            )
+
+            feature_title = (
+                navigation_feature.get(
+                    "title"
+                )
+                or "Smart Farm AI feature"
+            )
+
+            if destination:
+
+                history.append(
+                    {
+                        "role": "assistant",
+                        "content": (
+                            f"Opening "
+                            f"{feature_title}."
+                        )
+                    }
+                )
+
+                st.session_state[
+                    suggestion_key
+                ] = []
+
+                open_smart_farm_feature(
+                    destination
+                )
+
+                
+
+    # ========================================================
+    # 5. NEW MULTI-TURN SALE
     # ========================================================
 
     if farm_ai_is_sale_request(
@@ -12086,9 +14451,11 @@ def farm_action_chatbot_ui(
         history.append(
             {
                 "role": "assistant",
-                "content": sale_result.get(
-                    "message",
-                    "Tell me about the sale."
+                "content": (
+                    sale_result.get(
+                        "message"
+                    )
+                    or "Tell me about the sale."
                 )
             }
         )
@@ -12099,8 +14466,8 @@ def farm_action_chatbot_ui(
 
         st.rerun()
 
-        # ========================================================
-    # NEW MULTI-TURN EXPENSE REQUEST
+    # ========================================================
+    # 6. NEW MULTI-TURN EXPENSE
     # ========================================================
 
     if farm_ai_is_expense_request(
@@ -12116,10 +14483,12 @@ def farm_action_chatbot_ui(
         history.append(
             {
                 "role": "assistant",
-                "content": expense_result.get(
-                    "message",
-                    "Tell me about the expense."
-                )
+                "content": (
+                    expense_result.get(
+                        "message"
+                    )
+                    or "Tell me about the expense."
+                    )
             }
         )
 
@@ -12128,9 +14497,9 @@ def farm_action_chatbot_ui(
         ] = []
 
         st.rerun()
-    
+
     # ========================================================
-    # 2. PARSE SMART FARM ACTION
+    # 7. PARSE OTHER SMART FARM ACTIONS
     # ========================================================
 
     try:
@@ -12141,7 +14510,13 @@ def farm_action_chatbot_ui(
             )
         )
 
-    except Exception:
+    except Exception as error:
+
+        st.session_state[
+            "farm_ai_last_parser_error"
+        ] = str(
+            error
+        )
 
         action = {}
 
@@ -12152,72 +14527,15 @@ def farm_action_chatbot_ui(
 
         action = {}
 
-    intent = (
+    intent = str(
         action.get(
-            "intent",
-            ""
+            "intent"
         )
-    )
+        or ""
+    ).strip()
 
     # ========================================================
-    # FEATURE NAVIGATION
-    # ========================================================
-
-    navigation_words = (
-        "open ",
-        "go to ",
-        "take me to ",
-        "show me ",
-        "navigate to "
-    )
-
-    command_lower = (
-        command.lower()
-    )
-
-    if any(
-        phrase in command_lower
-        for phrase in navigation_words
-    ):
-
-        navigation_feature = (
-            farm_ai_find_navigation_destination(
-                command
-            )
-        )
-
-        if navigation_feature:
-
-            destination = (
-                navigation_feature[
-                    "destination"
-                ]
-            )
-
-            feature_title = (
-                navigation_feature[
-                    "title"
-                ]
-            )
-
-            history.append(
-                {
-                    "role": "assistant",
-                    "content": (
-                        f"Opening "
-                        f"{feature_title}."
-                    )
-                }
-            )
-
-            open_smart_farm_feature(
-                destination
-            )
-
-            return
-
-    # ========================================================
-    # 3. WRITE ACTION — SALE
+    # 8. PARSER-DETECTED SALE
     # ========================================================
 
     if (
@@ -12225,7 +14543,8 @@ def farm_action_chatbot_ui(
             "requires_confirmation",
             False
         )
-        and intent == "record_sale"
+        and intent
+        == "record_sale"
     ):
 
         prepared = (
@@ -12260,17 +14579,23 @@ def farm_action_chatbot_ui(
         history.append(
             {
                 "role": "assistant",
-                "content": prepared.get(
-                    "message",
-                    "Please confirm the sale."
+                "content": (
+                    prepared.get(
+                        "message"
+                    )
+                    or "Please confirm the sale."
                 )
             }
         )
 
+        st.session_state[
+            suggestion_key
+        ] = []
+
         st.rerun()
 
     # ========================================================
-    # 4. WRITE ACTION — EXPENSE
+    # 9. PARSER-DETECTED EXPENSE
     # ========================================================
 
     if (
@@ -12278,26 +14603,13 @@ def farm_action_chatbot_ui(
             "requires_confirmation",
             False
         )
-        and intent == "record_expense"
+        and intent
+        == "record_expense"
     ):
 
-        farm_ai_set_pending_action(
-            action_type="record_expense",
-            data=action,
-            status="awaiting_confirmation"
-        )
-
-        amount = (
-            action.get(
-                "amount",
-                0
-            )
-        )
-
-        category = (
-            action.get(
-                "category",
-                "Other"
+        prepared = (
+            farm_ai_prepare_expense_confirmation(
+                action
             )
         )
 
@@ -12305,18 +14617,22 @@ def farm_action_chatbot_ui(
             {
                 "role": "assistant",
                 "content": (
-                    f"I have a {category} "
-                    f"expense of "
-                    f"{farm_ai_format_money(amount)}. "
-                    "Should I record this expense?"
+                    prepared.get(
+                        "message"
+                    )
+                    or "Please confirm the expense."
                 )
             }
         )
 
+        st.session_state[
+            suggestion_key
+        ] = []
+
         st.rerun()
 
     # ========================================================
-    # 5. NEED MORE INFORMATION
+    # 10. NEED MORE INFORMATION
     # ========================================================
 
     if intent == "need_more_info":
@@ -12324,9 +14640,11 @@ def farm_action_chatbot_ui(
         history.append(
             {
                 "role": "assistant",
-                "content": action.get(
-                    "message",
-                    (
+                "content": (
+                    action.get(
+                        "message"
+                    )
+                    or (
                         "I need a little more "
                         "information before I can "
                         "complete that action."
@@ -12335,10 +14653,14 @@ def farm_action_chatbot_ui(
             }
         )
 
+        st.session_state[
+            suggestion_key
+        ] = []
+
         st.rerun()
 
     # ========================================================
-    # 6. READ-ONLY FARM ACTIONS
+    # 11. READ-ONLY FARM ACTIONS
     # ========================================================
 
     if intent in (
@@ -12350,14 +14672,19 @@ def farm_action_chatbot_ui(
     ):
 
         try:
-
             result = (
                 execute_farm_action(
                     action
                 )
             )
 
-        except Exception:
+        except Exception as error:
+
+            st.session_state[
+                "farm_ai_last_action_error"
+            ] = str(
+                error
+            )
 
             result = {
                 "ok": False,
@@ -12369,9 +14696,9 @@ def farm_action_chatbot_ui(
 
         answer = (
             result.get(
-                "message",
-                "Done."
+                "message"
             )
+            or "Done."
         )
 
         history.append(
@@ -12381,22 +14708,36 @@ def farm_action_chatbot_ui(
             }
         )
 
-        suggestions = (
-            farm_ai_recommend_navigation_features(
-                command
-                + " "
-                + answer,
-                limit=3
+        try:
+
+            suggestions = (
+                farm_ai_recommend_navigation_features(
+                    (
+                        command
+                        + " "
+                        + str(
+                            answer
+                        )
+                    ),
+                    limit=3
+                )
             )
-        )
+
+        except Exception:
+
+            suggestions = []
+
         st.session_state[
             suggestion_key
-        ] = suggestions
+        ] = (
+            suggestions
+            or []
+        )
 
         st.rerun()
 
     # ========================================================
-    # 7. OPEN FARMING / APP INTELLIGENCE
+    # 12. OPEN FARMING / APP INTELLIGENCE
     # ========================================================
 
     try:
@@ -12408,14 +14749,21 @@ def farm_action_chatbot_ui(
             )
         )
 
-    except Exception:
+    except Exception as error:
+
+        st.session_state[
+            "farm_ai_last_guidance_error"
+        ] = str(
+            error
+        )
 
         answer = (
-            "I understood your question, but my broader "
-            "guidance service is temporarily unavailable. "
-            "You can still use farm records, alerts, "
-            "irrigation guidance, feature navigation, "
-            "and other Smart Farm AI actions."
+            "I understood your question, but my "
+            "broader farming guidance service is "
+            "temporarily unavailable. You can still "
+            "use farm records, alerts, irrigation "
+            "guidance, feature navigation and other "
+            "Smart Farm AI actions."
         )
 
     if not answer:
@@ -12435,17 +14783,19 @@ def farm_action_chatbot_ui(
     )
 
     # ========================================================
-    # RELEVANT SMART FARM AI TOOLS
+    # 13. RELEVANT SMART FARM AI TOOLS
     # ========================================================
 
     try:
 
         suggested_features = (
             farm_ai_recommend_navigation_features(
-                command
-                + " "
-                + str(
-                    answer
+                (
+                    command
+                    + " "
+                    + str(
+                        answer
+                    )
                 ),
                 limit=3
             )
@@ -12463,7 +14813,6 @@ def farm_action_chatbot_ui(
     )
 
     st.rerun()
-
 def smart_tutor_voice():
     import os
     import io
