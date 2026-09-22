@@ -25284,67 +25284,95 @@ key=k2("main_menu_option")
 )
 
 
-
-
 # ============================================================
 # 🏡 SMART FARM AI — FARMER COMMAND CENTRE
+# FINAL PHASE-1 INTEGRATION
 # ============================================================
 
 def farmer_command_centre_ui():
+
     import streamlit as st
     import html
-    from datetime import datetime
 
     # ========================================================
     # CURRENT FARM / USER CONTEXT
     # ========================================================
-    farmer_profile = st.session_state.get(
-        "farmer_profile",
-        {}
-    ) or {}
 
-    personalized_profile = st.session_state.get(
-        "personalized_profile",
-        {}
-    ) or {}
-
-    current_farm = st.session_state.get(
-        "current_farm",
-        {}
-    ) or {}
-
-    current_farm_id = st.session_state.get(
-        "current_farm_id"
+    farmer_profile = (
+        st.session_state.get(
+            "farmer_profile",
+            {}
+        )
+        or {}
     )
 
-    farms = farmer_profile.get(
-        "farms",
-        []
+    personalized_profile = (
+        st.session_state.get(
+            "personalized_profile",
+            {}
+        )
+        or {}
     )
 
-    if not isinstance(farms, list):
+    current_farm = (
+        st.session_state.get(
+            "current_farm",
+            {}
+        )
+        or {}
+    )
+
+    current_farm_id = (
+        st.session_state.get(
+            "current_farm_id"
+        )
+    )
+
+    farms = (
+        farmer_profile.get(
+            "farms",
+            []
+        )
+        or []
+    )
+
+    if not isinstance(
+        farms,
+        list
+    ):
         farms = []
 
     # ========================================================
     # RECOVER CURRENT FARM
     # ========================================================
-    if not current_farm and current_farm_id:
+
+    if (
+        not current_farm
+        and current_farm_id
+    ):
 
         for farm in farms:
 
+            if not isinstance(
+                farm,
+                dict
+            ):
+                continue
+
             candidate_id = str(
                 farm.get(
-                    "farm_id",
-                    farm.get(
-                        "id",
-                        ""
-                    )
+                    "farm_id"
                 )
+                or farm.get(
+                    "id"
+                )
+                or ""
             )
 
             if candidate_id == str(
                 current_farm_id
             ):
+
                 current_farm = farm
 
                 st.session_state[
@@ -25353,26 +25381,41 @@ def farmer_command_centre_ui():
 
                 break
 
-    # If no current farm is selected,
-    # use the first active farm when available.
-    if not current_farm and farms:
+    # ========================================================
+    # FALL BACK TO FIRST ACTIVE FARM
+    # ========================================================
+
+    if (
+        not current_farm
+        and farms
+    ):
 
         for farm in farms:
+
+            if not isinstance(
+                farm,
+                dict
+            ):
+                continue
 
             status = str(
                 farm.get(
                     "status",
                     "active"
                 )
-            ).lower()
+            ).strip().lower()
 
             if status == "active":
 
                 current_farm = farm
 
                 current_farm_id = (
-                    farm.get("farm_id")
-                    or farm.get("id")
+                    farm.get(
+                        "farm_id"
+                    )
+                    or farm.get(
+                        "id"
+                    )
                 )
 
                 st.session_state[
@@ -25388,16 +25431,37 @@ def farmer_command_centre_ui():
     # ========================================================
     # CURRENT FARM DETAILS
     # ========================================================
-    farm_id = str(
+
+    resolved_farm_id = (
         current_farm_id
         or current_farm.get(
             "farm_id"
+        )
+        or current_farm.get(
+            "id"
         )
         or personalized_profile.get(
             "current_farm_id"
         )
         or "main_farm"
     )
+
+    farm_id = str(
+        resolved_farm_id
+    )
+
+    if (
+        current_farm
+        and not current_farm_id
+    ):
+
+        current_farm_id = (
+            resolved_farm_id
+        )
+
+        st.session_state[
+            "current_farm_id"
+        ] = current_farm_id
 
     farm_name = (
         current_farm.get(
@@ -25469,6 +25533,7 @@ def farmer_command_centre_ui():
         )
         or "Not specified"
     )
+
     farm_size = (
         current_farm.get(
             "farm_size"
@@ -25505,18 +25570,23 @@ def farmer_command_centre_ui():
     )
 
     # ========================================================
-    # FARM-SPECIFIC KEYS
+    # FARM-SPECIFIC STREAMLIT KEY
     # ========================================================
+
     def ck(name):
+
         return (
             f"command_centre_"
-            f"{farm_id}_{name}"
+            f"{farm_id}_"
+            f"{name}"
         )
 
     # ========================================================
     # DISPLAY HELPERS
     # ========================================================
+
     def safe(value):
+
         return html.escape(
             str(
                 value
@@ -25526,25 +25596,38 @@ def farmer_command_centre_ui():
         )
 
     def display_number(value):
+
         if value in (
             None,
             "",
             "None"
         ):
-            return "Pending"
+            return "Awaiting data"
 
         try:
-            number = float(value)
+
+            number = float(
+                value
+            )
 
             if number.is_integer():
-                return f"{int(number):,}"
 
-            return f"{number:,.2f}"
+                return (
+                    f"{int(number):,}"
+                )
+
+            return (
+                f"{number:,.2f}"
+            )
 
         except Exception:
-            return str(value)
+
+            return str(
+                value
+            )
 
     def format_farm_size(value):
+
         if value in (
             None,
             "",
@@ -25552,7 +25635,9 @@ def farmer_command_centre_ui():
         ):
             return "Not specified"
 
-        text = str(value).strip()
+        text = str(
+            value
+        ).strip()
 
         if (
             "ha" in text.lower()
@@ -25561,53 +25646,185 @@ def farmer_command_centre_ui():
             return text
 
         try:
+
             return (
                 f"{float(value):,.2f} ha"
             )
 
         except Exception:
+
             return text
+
+    def format_money(value):
+
+        if value in (
+            None,
+            "",
+            "None"
+        ):
+            return "No records"
+
+        try:
+
+            return (
+                farm_ai_format_money(
+                    value
+                )
+            )
+
+        except Exception:
+
+            return display_number(
+                value
+            )
+
+    def percentage_value(
+        value,
+        missing="Not connected"
+    ):
+
+        if value in (
+            None,
+            "",
+            "None"
+        ):
+            return missing
+
+        try:
+
+            return (
+                f"{float(value):.1f}%"
+            )
+
+        except Exception:
+
+            return (
+                f"{value}%"
+            )
+
+    # ========================================================
+    # ACTIVE FARMS
+    # ========================================================
+
+    active_farms = []
+
+    for farm in farms:
+
+        if not isinstance(
+            farm,
+            dict
+        ):
+            continue
+
+        status = str(
+            farm.get(
+                "status",
+                "active"
+            )
+        ).strip().lower()
+
+        if status == "active":
+
+            active_farms.append(
+                farm
+            )
 
     # ========================================================
     # FARM INTELLIGENCE ENGINES
+    # Prefer farm-scoped results first
     # ========================================================
-    pa_analysis = st.session_state.get(
-        "pa_analysis",
-        {}
-    ) or {}
 
-    cig_analysis = st.session_state.get(
-        "cig_analysis",
-        {}
-    ) or {}
+    pa_analysis = (
+        st.session_state.get(
+            f"pa_analysis_{farm_id}"
+        )
+        or st.session_state.get(
+            "pa_analysis"
+        )
+        or {}
+    )
 
-    csa_analysis = st.session_state.get(
-        "csa_analysis",
-        {}
-    ) or {}
+    cig_analysis = (
+        st.session_state.get(
+            f"cig_analysis_{farm_id}"
+        )
+        or st.session_state.get(
+            "cig_analysis"
+        )
+        or {}
+    )
+
+    csa_analysis = (
+        st.session_state.get(
+            f"csa_analysis_{farm_id}"
+        )
+        or st.session_state.get(
+            "csa_analysis"
+        )
+        or {}
+    )
+
+    if not isinstance(
+        pa_analysis,
+        dict
+    ):
+        pa_analysis = {}
+
+    if not isinstance(
+        cig_analysis,
+        dict
+    ):
+        cig_analysis = {}
+
+    if not isinstance(
+        csa_analysis,
+        dict
+    ):
+        csa_analysis = {}
 
     # ========================================================
     # PERSONALIZED RECOMMENDATIONS
     # ========================================================
+
     recommended_features = (
         st.session_state.get(
-            "recommended_features",
+            f"recommended_features_{farm_id}"
+        )
+        or st.session_state.get(
+            "recommended_features"
+        )
+        or []
+    )
+
+    if not isinstance(
+        recommended_features,
+        list
+    ):
+        recommended_features = []
+
+    # ========================================================
+    # SMART FARM ALERTS
+    # ========================================================
+
+    alert_log_key = (
+        f"smart_alerts_"
+        f"{farm_id}_"
+        f"alert_log"
+    )
+
+    alert_log = (
+        st.session_state.get(
+            alert_log_key,
             []
         )
         or []
     )
 
-    # ========================================================
-    # SMART FARM ALERTS
-    # ========================================================
-    alert_log_key = (
-        f"smart_alerts_{farm_id}_alert_log"
-    )
-
-    alert_log = st.session_state.get(
-        alert_log_key,
-        []
-    ) or []
+    if not isinstance(
+        alert_log,
+        list
+    ):
+        alert_log = []
 
     recent_alerts = (
         alert_log[-10:][::-1]
@@ -25618,21 +25835,39 @@ def farmer_command_centre_ui():
     # ========================================================
     # STOCK / INVENTORY
     # ========================================================
+
     stock_key = (
         f"smart_fert_pest_"
-        f"{farm_id}_stock_items"
+        f"{farm_id}_"
+        f"stock_items"
     )
 
-    stock_items = st.session_state.get(
-        stock_key,
-        []
-    ) or []
+    stock_items = (
+        st.session_state.get(
+            stock_key,
+            []
+        )
+        or []
+    )
+
+    if not isinstance(
+        stock_items,
+        list
+    ):
+        stock_items = []
 
     low_stock_items = []
 
     for item in stock_items:
 
+        if not isinstance(
+            item,
+            dict
+        ):
+            continue
+
         try:
+
             quantity = float(
                 item.get(
                     "qty",
@@ -25648,18 +25883,27 @@ def farmer_command_centre_ui():
             )
 
             if quantity <= minimum:
+
                 low_stock_items.append(
                     item
                 )
 
         except Exception:
+
             pass
 
     # ========================================================
-    # WEATHER DATA
+    # WEATHER
     # ========================================================
+
     weather_data = (
         st.session_state.get(
+            f"weather_data_{farm_id}"
+        )
+        or st.session_state.get(
+            f"current_weather_{farm_id}"
+        )
+        or st.session_state.get(
             "weather_data"
         )
         or st.session_state.get(
@@ -25674,23 +25918,36 @@ def farmer_command_centre_ui():
     ):
         weather_data = {}
 
-    temperature = weather_data.get(
-        "temperature"
+    temperature = (
+        weather_data.get(
+            "temperature"
+        )
     )
 
-    humidity = weather_data.get(
-        "humidity"
+    humidity = (
+        weather_data.get(
+            "humidity"
+        )
     )
 
-    rainfall = weather_data.get(
-        "rainfall"
+    rainfall = (
+        weather_data.get(
+            "rainfall"
+        )
     )
 
     # ========================================================
     # SENSOR DATA
     # ========================================================
+
     sensor_data = (
         st.session_state.get(
+            f"latest_sensor_data_{farm_id}"
+        )
+        or st.session_state.get(
+            f"sensor_data_{farm_id}"
+        )
+        or st.session_state.get(
             "latest_sensor_data"
         )
         or st.session_state.get(
@@ -25705,20 +25962,28 @@ def farmer_command_centre_ui():
     ):
         sensor_data = {}
 
-    soil_moisture = sensor_data.get(
-        "soil_moisture"
+    soil_moisture = (
+        sensor_data.get(
+            "soil_moisture"
+        )
     )
 
-    sensor_temperature = sensor_data.get(
-        "temperature"
+    sensor_temperature = (
+        sensor_data.get(
+            "temperature"
+        )
     )
 
-    sensor_humidity = sensor_data.get(
-        "humidity"
+    sensor_humidity = (
+        sensor_data.get(
+            "humidity"
+        )
     )
 
-    water_level = sensor_data.get(
-        "water_level"
+    water_level = (
+        sensor_data.get(
+            "water_level"
+        )
     )
 
     if temperature is None:
@@ -25728,45 +25993,9 @@ def farmer_command_centre_ui():
         humidity = sensor_humidity
 
     # ========================================================
-    # PRIMARY METRICS
+    # PA / CSA / CIG OUTPUTS
     # ========================================================
-    estimated_yield = (
-        current_farm.get(
-            "estimated_yield"
-        )
-        or pa_analysis.get(
-            "estimated_yield"
-        )
-    )
 
-    farm_health = (
-        current_farm.get(
-            "farm_health"
-        )
-        or current_farm.get(
-            "health_status"
-        )
-        or cig_analysis.get(
-            "status"
-        )
-        or "Pending"
-    )
-
-    net_profit = (
-        current_farm.get(
-            "net_profit"
-        )
-        or current_farm.get(
-            "profit"
-        )
-        or st.session_state.get(
-            f"net_profit_{farm_id}"
-        )
-    )
-
-    # ========================================================
-    # PA / CSA DATA
-    # ========================================================
     pa_recommendations = (
         pa_analysis.get(
             "recommendations",
@@ -25823,63 +26052,366 @@ def farmer_command_centre_ui():
         or []
     )
 
-    cig_value = cig_analysis.get(
-        "cig"
+    cig_value = (
+        cig_analysis.get(
+            "cig"
+        )
     )
 
     # ========================================================
-    # ACTIVE FARMS
+    # REAL FINANCIAL POSITION
+    # Uses the same owner + farm scoped engine as Copilot
     # ========================================================
-    active_farms = [
-        farm
-        for farm in farms
-        if str(
-            farm.get(
-                "status",
-                "active"
+
+    financial_result = {}
+
+    try:
+
+        financial_result = (
+            farm_action_calculate_profit()
+        )
+
+    except Exception as error:
+
+        st.session_state[
+            "command_centre_financial_error"
+        ] = str(
+            error
+        )
+
+        financial_result = {}
+
+    if not isinstance(
+        financial_result,
+        dict
+    ):
+        financial_result = {}
+
+    financial_data = (
+        financial_result.get(
+            "data"
+        )
+        if isinstance(
+            financial_result.get(
+                "data"
+            ),
+            dict
+        )
+        else {}
+    )
+
+    total_sales = (
+        financial_result.get(
+            "total_sales"
+        )
+    )
+
+    if total_sales is None:
+
+        total_sales = (
+            financial_result.get(
+                "sales"
             )
-        ).lower()
-        == "active"
-    ]
+        )
+
+    if total_sales is None:
+
+        total_sales = (
+            financial_data.get(
+                "total_sales"
+            )
+        )
+
+    if total_sales is None:
+
+        total_sales = (
+            financial_data.get(
+                "sales"
+            )
+        )
+
+    total_expenses = (
+        financial_result.get(
+            "total_expenses"
+        )
+    )
+    if total_expenses is None:
+
+        total_expenses = (
+            financial_result.get(
+                "expenses"
+            )
+        )
+
+    if total_expenses is None:
+
+        total_expenses = (
+            financial_data.get(
+                "total_expenses"
+            )
+        )
+
+    if total_expenses is None:
+
+        total_expenses = (
+            financial_data.get(
+                "expenses"
+            )
+        )
+
+    net_profit = (
+        financial_result.get(
+            "net_profit"
+        )
+    )
+
+    if net_profit is None:
+
+        net_profit = (
+            financial_result.get(
+                "profit"
+            )
+        )
+
+    if net_profit is None:
+
+        net_profit = (
+            financial_data.get(
+                "net_profit"
+            )
+        )
+
+    if net_profit is None:
+
+        net_profit = (
+            financial_data.get(
+                "profit"
+            )
+        )
+
+    if net_profit is None:
+
+        net_profit = (
+            current_farm.get(
+                "net_profit"
+            )
+        )
+
+    if net_profit is None:
+
+        net_profit = (
+            current_farm.get(
+                "profit"
+            )
+        )
 
     # ========================================================
+    # ESTIMATED YIELD
+    # Only use real existing output
+    # ========================================================
+
+    estimated_yield = (
+        current_farm.get(
+            "estimated_yield"
+        )
+    )
+
+    if estimated_yield is None:
+
+        estimated_yield = (
+            pa_analysis.get(
+                "estimated_yield"
+            )
+        )
+
+    # ========================================================
+    # FARM HEALTH
+    # Uses best available evidence
+    # ========================================================
+
+    farm_health = (
+        current_farm.get(
+            "farm_health"
+        )
+        or current_farm.get(
+            "health_status"
+        )
+        or cig_analysis.get(
+            "status"
+        )
+        or pa_analysis.get(
+            "health_status"
+        )
+        or pa_analysis.get(
+            "status"
+        )
+    )
+
+    if not farm_health:
+
+        warning_found = False
+
+        for row in recent_alerts:
+
+            if not isinstance(
+                row,
+                dict
+            ):
+                continue
+
+            level = str(
+                row.get(
+                    "level",
+                    ""
+                )
+            ).lower()
+
+            if level in (
+                "warning",
+                "error",
+                "critical"
+            ):
+
+                warning_found = True
+                break
+
+        if (
+            warning_found
+            or pa_alerts
+            or cig_alerts
+        ):
+
+            farm_health = (
+                "Needs attention"
+            )
+
+        elif (
+            sensor_data
+            or weather_data
+            or pa_analysis
+            or csa_analysis
+        ):
+
+            farm_health = (
+                "Monitoring"
+            )
+
+        else:
+
+            farm_health = (
+                "Awaiting data"
+            )
+
+    # ========================================================
+    # ACTIVE ALERT COUNT
+    # ========================================================
+
+    if recent_alerts:
+
+        active_alert_count = len(
+            recent_alerts
+        )
+
+    else:
+
+        active_alert_count = (
+            len(pa_alerts)
+            + len(cig_alerts)
+        )
+
+    # ========================================================
+    # WATER STATUS
+    # ========================================================
+
+    if soil_moisture is not None:
+
+        water_status = (
+            percentage_value(
+                soil_moisture
+            )
+            + " soil moisture"
+        )
+
+    elif water_level is not None:
+
+        water_status = (
+            percentage_value(
+                water_level
+            )
+            + " water level"
+        )
+
+    else:
+
+        water_status = (
+            "Awaiting data"
+        )
+        # ========================================================
     # COMMAND CENTRE STYLE
     # ========================================================
+
     st.markdown(
         """
-<style>
-.sf-hero {
-    padding: 24px 26px;
-    border-radius: 18px;
-    background: linear-gradient(
-        110deg,
-        rgba(4,96,58,0.97),
-        rgba(16,145,85,0.91)
-    );
-    color: white;
-    margin-bottom: 18px;
-}
+        <style>
 
-.sf-hero h2 {
-    margin: 0;
-    padding: 0;
-    color: white;
-}
+        .sf-hero {
+            padding: 24px 26px;
+            border-radius: 18px;
+            background: linear-gradient(
+                110deg,
+                rgba(4,96,58,0.97),
+                rgba(16,145,85,0.91)
+            );
+            color: white;
+            margin-bottom: 16px;
+        }
 
-.sf-hero p {
-    margin-top: 8px;
-    margin-bottom: 0;
-    color: white;
-}
+        .sf-hero h2 {
+            margin: 0;
+            padding: 0;
+            color: white;
+        }
 
-.sf-priority {
-    padding: 13px 15px;
-    border-radius: 12px;
-    border-left: 5px solid #149457;
-    background: rgba(20,148,87,0.08);
-    margin-bottom: 10px;
-}
-</style>
+        .sf-hero p {
+            margin-top: 8px;
+            margin-bottom: 0;
+            color: white;
+        }
+
+        .sf-priority {
+            padding: 13px 15px;
+            border-radius: 12px;
+            border-left: 5px solid #149457;
+            background: rgba(20,148,87,0.08);
+            margin-bottom: 10px;
+        }
+
+        .sf-module {
+            border: 1px solid rgba(120,120,120,0.20);
+            border-radius: 16px;
+            padding: 16px 13px;
+            min-height: 112px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .sf-module-icon {
+            font-size: 30px;
+            margin-bottom: 6px;
+        }
+
+        .sf-module-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .sf-module-text {
+            font-size: 12px;
+            opacity: 0.78;
+        }
+
+        </style>
         """,
         unsafe_allow_html=True
     )
@@ -25887,14 +26419,18 @@ def farmer_command_centre_ui():
     # ========================================================
     # HERO / WELCOME
     # ========================================================
+
     location_line = safe(
         farm_location
     )
 
     if country:
+
         location_line += (
             ", "
-            + safe(country)
+            + safe(
+                country
+            )
         )
 
     hero_html = (
@@ -25924,27 +26460,12 @@ def farmer_command_centre_ui():
     # ========================================================
     # CURRENT FARM SELECTOR
     # ========================================================
+
     if active_farms:
 
-        farm_labels = []
-
-        for farm in active_farms:
-
-            label = (
-                farm.get(
-                    "farm_name"
-                )
-                or farm.get(
-                    "name"
-                )
-                or "Unnamed Farm"
-            )
-
-            farm_labels.append(
-                label
-            )
-
-        current_index = 0
+        farm_by_id = {}
+        farm_option_ids = []
+        farm_label_map = {}
 
         for index, farm in enumerate(
             active_farms
@@ -25952,50 +26473,90 @@ def farmer_command_centre_ui():
 
             candidate_id = str(
                 farm.get(
-                    "farm_id",
-                    farm.get(
-                        "id",
-                        ""
-                    )
+                    "farm_id"
                 )
+                or farm.get(
+                    "id"
+                )
+                or f"farm_{index + 1}"
             )
 
-            if candidate_id == farm_id:
-                current_index = index
-                break
+            candidate_name = (
+                farm.get(
+                    "farm_name"
+                )
+                or farm.get(
+                    "name"
+                )
+                or f"Farm {index + 1}"
+            )
 
-        selected_farm_name = st.selectbox(
+            candidate_crop = (
+                farm.get(
+                    "crop_type"
+                )
+                or farm.get(
+                    "crop"
+                )
+                or ""
+            )
+
+            label = str(
+                candidate_name
+            )
+
+            if candidate_crop:
+
+                label += (
+                    f" — {candidate_crop}"
+                )
+
+            farm_by_id[
+                candidate_id
+            ] = farm
+
+            farm_label_map[
+                candidate_id
+            ] = label
+
+            farm_option_ids.append(
+                candidate_id
+            )
+
+        current_index = 0
+
+        if farm_id in farm_option_ids:
+
+            current_index = (
+                farm_option_ids.index(
+                    farm_id
+                )
+            )
+            selected_id = st.selectbox(
             "🌾 Current Farm",
-            farm_labels,
+            farm_option_ids,
             index=current_index,
+            format_func=lambda option: (
+                farm_label_map.get(
+                    option,
+                    option
+                )
+            ),
             key=ck(
                 "farm_selector"
             )
         )
 
-        selected_index = (
-            farm_labels.index(
-                selected_farm_name
-            )
-        )
-
         selected_farm = (
-            active_farms[
-                selected_index
-            ]
-        )
-
-        selected_id = str(
-            selected_farm.get(
-                "farm_id",
-                selected_farm.get(
-                    "id",
-                    "main_farm"
-                )
+            farm_by_id.get(
+                selected_id
             )
         )
 
-        if selected_id != farm_id:
+        if (
+            selected_farm
+            and selected_id != farm_id
+        ):
 
             st.session_state[
                 "current_farm_id"
@@ -26005,7 +26566,46 @@ def farmer_command_centre_ui():
                 "current_farm"
             ] = selected_farm
 
-            # Update personalized profile
+            selected_name = (
+                selected_farm.get(
+                    "farm_name"
+                )
+                or selected_farm.get(
+                    "name"
+                )
+                or "Main Farm"
+            )
+
+            selected_crop = (
+                selected_farm.get(
+                    "crop_type"
+                )
+                or selected_farm.get(
+                    "crop"
+                )
+            )
+
+            selected_location = (
+                selected_farm.get(
+                    "location"
+                )
+            )
+
+            selected_type = (
+                selected_farm.get(
+                    "farm_type"
+                )
+            )
+
+            selected_size = (
+                selected_farm.get(
+                    "farm_size"
+                )
+                or selected_farm.get(
+                    "size"
+                )
+            )
+
             updated_profile = dict(
                 personalized_profile
             )
@@ -26016,49 +26616,31 @@ def farmer_command_centre_ui():
                         selected_id,
 
                     "current_farm_name":
-                        selected_farm.get(
-                            "farm_name"
-                        ),
+                        selected_name,
 
                     "current_crop":
-                        selected_farm.get(
-                            "crop_type"
-                        ),
+                        selected_crop,
 
                     "current_location":
-                        selected_farm.get(
-                            "location"
-                        ),
+                        selected_location,
 
                     "current_farm_type":
-                        selected_farm.get(
-                            "farm_type"
-                        ),
+                        selected_type,
 
                     "current_farm_size":
-                        selected_farm.get(
-                            "farm_size"
-                        ),
+                        selected_size,
 
                     "crop_type":
-                    selected_farm.get(
-                            "crop_type"
-                        ),
+                        selected_crop,
 
                     "location":
-                        selected_farm.get(
-                            "location"
-                        ),
+                        selected_location,
 
                     "farm_type":
-                        selected_farm.get(
-                            "farm_type"
-                        ),
+                        selected_type,
 
                     "farm_size":
-                        selected_farm.get(
-                            "farm_size"
-                        )
+                        selected_size
                 }
             )
 
@@ -26066,48 +26648,102 @@ def farmer_command_centre_ui():
                 "personalized_profile"
             ] = updated_profile
 
-            # Recalculate recommendations
             try:
-                st.session_state[
-                    "recommended_features"
-                ] = recommend_features(
-                    SMART_FARM_FEATURES,
-                    updated_profile
+
+                new_recommendations = (
+                    recommend_features(
+                        SMART_FARM_FEATURES,
+                        updated_profile
+                    )
                 )
 
+                st.session_state[
+                    "recommended_features"
+                ] = new_recommendations
+
+                st.session_state[
+                    f"recommended_features_{selected_id}"
+                ] = new_recommendations
+
             except Exception:
+
                 pass
 
             st.rerun()
 
+# ========================================================
+    # COMPACT FARM STATUS ROW
     # ========================================================
+
+    status_1, status_2, status_3, status_4 = (
+        st.columns(4)
+    )
+
+    with status_1:
+
+        st.metric(
+            "🌿 Farm Status",
+            str(
+                farm_health
+            )
+        )
+
+    with status_2:
+
+        st.metric(
+            "🚨 Alerts",
+            active_alert_count
+        )
+
+    with status_3:
+
+        st.metric(
+            "💧 Water",
+            water_status
+        )
+
+    with status_4:
+
+        st.metric(
+            "💰 Financial Snapshot",
+            format_money(
+                net_profit
+            )
+        )
+        # ========================================================
     # DAILY FARM BRIEFING
     # ========================================================
+
     briefing_parts = []
 
-    if recent_alerts:
+    if active_alert_count:
+
         briefing_parts.append(
-            f"{len(recent_alerts)} recent alert(s)"
+            f"{active_alert_count} active alert(s)"
         )
 
     if low_stock_items:
+
         briefing_parts.append(
             f"{len(low_stock_items)} low-stock input(s)"
         )
 
     if pa_priority_actions:
+
         briefing_parts.append(
-            f"{len(pa_priority_actions)} priority farm action(s)"
+            f"{len(pa_priority_actions)} precision action(s)"
         )
 
     if climate_risks:
+
         briefing_parts.append(
             f"{len(climate_risks)} climate risk(s)"
         )
 
     if soil_moisture is not None:
+
         briefing_parts.append(
-            "live soil data connected"
+            "soil data available"
         )
 
     if briefing_parts:
@@ -26124,23 +26760,28 @@ def farmer_command_centre_ui():
         st.info(
             "🧠 Today's Farm Briefing: "
             "Smart Farm AI is waiting for more farm data "
-            "to generate today's priorities."
+            "before generating evidence-based priorities."
         )
 
     # ========================================================
-    # FARM METRICS
+    # PRIMARY FARM METRICS
     # ========================================================
-    m1, m2, m3, m4 = st.columns(4)
+
+    m1, m2, m3, m4 = (
+        st.columns(4)
+    )
 
     with m1:
+
         st.metric(
             "🌿 Farm Health",
-            display_number(
+            str(
                 farm_health
             )
         )
 
     with m2:
+
         st.metric(
             "🚜 Farm Size",
             format_farm_size(
@@ -26149,6 +26790,7 @@ def farmer_command_centre_ui():
         )
 
     with m3:
+
         st.metric(
             "📈 Estimated Yield",
             display_number(
@@ -26157,24 +26799,19 @@ def farmer_command_centre_ui():
         )
 
     with m4:
+
         st.metric(
             "💰 Financial Position",
-            (
-                display_number(
-                    net_profit
-                )
-                if net_profit not in (
-                    None,
-                    ""
-                )
-                else "Pending"
+            format_money(
+                net_profit
             )
         )
 
     st.divider()
 
     # ========================================================
-    # FARM ACTION CHATBOT
+    # SMART FARM AI COPILOT
+    # FROZEN WORKING VERSION
     # ========================================================
 
     farm_action_chatbot_ui(
@@ -26187,15 +26824,21 @@ def farmer_command_centre_ui():
     # ========================================================
     # WEATHER / CROP HEALTH / ALERTS
     # ========================================================
+
     weather_col, health_col, alert_col = (
         st.columns(
-            [1.1, 1, 1]
+            [
+                1.1,
+                1,
+                1
+            ]
         )
     )
 
     # --------------------------------------------------------
-    # WEATHER
+    # WEATHER & CLIMATE
     # --------------------------------------------------------
+
     with weather_col:
 
         st.subheader(
@@ -26219,16 +26862,17 @@ def farmer_command_centre_ui():
             )
         )
 
-        w1, w2 = st.columns(2)
+        w1, w2 = (
+            st.columns(2)
+        )
 
         with w1:
 
             st.metric(
                 "Humidity",
-                (
-                    f"{humidity}%"
-                    if humidity is not None
-                    else "Pending"
+                percentage_value(
+                    humidity,
+                    "Awaiting data"
                 )
             )
 
@@ -26237,9 +26881,11 @@ def farmer_command_centre_ui():
             st.metric(
                 "Rainfall",
                 (
-                    str(rainfall)
+                    str(
+                        rainfall
+                    )
                     if rainfall is not None
-                    else "Pending"
+                    else "Awaiting data"
                 )
             )
 
@@ -26252,16 +26898,23 @@ def farmer_command_centre_ui():
                 )
             )
 
-        else:
+        elif csa_analysis:
 
             st.caption(
-                "CSA climate information "
-                "will appear here."
+                "No current climate-risk output "
+                "is available from the CSA engine."
+            )
+
+        else:
+            st.caption(
+                "CSA climate intelligence "
+                "is awaiting farm data."
             )
 
     # --------------------------------------------------------
     # CROP HEALTH
     # --------------------------------------------------------
+
     with health_col:
 
         st.subheader(
@@ -26269,7 +26922,9 @@ def farmer_command_centre_ui():
         )
 
         st.write(
-            f"{crop_name}"
+            str(
+                crop_name
+            )
         )
 
         if cig_value is not None:
@@ -26285,7 +26940,9 @@ def farmer_command_centre_ui():
 
                 st.metric(
                     "Green Chlorophyll Index",
-                    str(cig_value)
+                    str(
+                        cig_value
+                    )
                 )
 
         else:
@@ -26297,17 +26954,18 @@ def farmer_command_centre_ui():
 
         st.metric(
             "Health Status",
-            display_number(
+            str(
                 farm_health
             )
         )
 
-        if soil_moisture is not None:
-
-            st.metric(
-                "Soil Moisture",
-                f"{soil_moisture}%"
+        st.metric(
+            "Soil Moisture",
+            percentage_value(
+                soil_moisture,
+                "Not connected"
             )
+        )
 
         if cig_alerts:
 
@@ -26320,6 +26978,7 @@ def farmer_command_centre_ui():
     # --------------------------------------------------------
     # ALERTS
     # --------------------------------------------------------
+
     with alert_col:
 
         st.subheader(
@@ -26328,12 +26987,29 @@ def farmer_command_centre_ui():
 
         if recent_alerts:
 
-            for row in recent_alerts[:3]:
+            for row in recent_alerts[
+                :3
+            ]:
 
-                level = row.get(
-                    "level",
-                    "info"
-                )
+                if not isinstance(
+                    row,
+                    dict
+                ):
+
+                    st.info(
+                        str(
+                            row
+                        )
+                    )
+
+                    continue
+
+                level = str(
+                    row.get(
+                        "level",
+                        "info"
+                    )
+                ).lower()
 
                 message = str(
                     row.get(
@@ -26342,7 +27018,10 @@ def farmer_command_centre_ui():
                     )
                 )
 
-                if level == "error":
+                if level in (
+                    "error",
+                    "critical"
+                ):
 
                     st.error(
                         message
@@ -26362,16 +27041,33 @@ def farmer_command_centre_ui():
 
         elif pa_alerts:
 
-            for alert in pa_alerts[:3]:
+            for alert in pa_alerts[
+                :3
+            ]:
 
                 st.warning(
-                    str(alert)
+                    str(
+                        alert
+                    )
+                )
+
+        elif cig_alerts:
+
+            for alert in cig_alerts[
+                :3
+            ]:
+
+                st.warning(
+                    str(
+                        alert
+                    )
                 )
 
         else:
 
             st.success(
-                "No recent farm alerts."
+                "No current farm alerts "
+                "from connected data."
             )
 
     # ========================================================
@@ -26384,23 +27080,124 @@ def farmer_command_centre_ui():
         "🎯 Today's Farm Priorities"
     )
 
-    priority_result = (
-        farm_action_get_priorities()
+    priority_result = {}
+
+    try:
+
+        priority_result = (
+            farm_action_get_priorities()
+        )
+
+    except Exception as error:
+
+        st.session_state[
+            "command_centre_priority_error"
+        ] = str(
+            error
+        )
+
+        priority_result = {}
+
+    if not isinstance(
+        priority_result,
+        dict
+    ):
+
+        priority_result = {}
+
+    priorities = (
+        priority_result.get(
+            "priorities",
+            []
+        )
+        or []
     )
 
-    priorities = priority_result.get(
-        "priorities",
-        []
-    )
+    if not isinstance(
+        priorities,
+        list
+    ):
+
+        priorities = []
+
+    # Use real PA priorities if the main priority
+    # engine has not generated anything yet.
+    if not priorities:
+
+        priorities.extend(
+            pa_priority_actions[
+                :3
+            ]
+        )
+
+    # Add CSA adaptation only when available.
+    if (
+        len(priorities) < 4
+        and adaptation_actions
+    ):
+
+        for action in adaptation_actions:
+
+            if (
+                action not in priorities
+                and len(priorities) < 4
+            ):
+
+                priorities.append(
+                    action
+                )
+
+    # Add real low-stock issue when relevant.
+    if (
+        len(priorities) < 4
+        and low_stock_items
+    ):
+
+        for item in low_stock_items:
+
+            item_name = (
+                item.get(
+                    "name"
+                )
+                or item.get(
+                    "item"
+                )
+                or item.get(
+                    "product"
+                )
+                or "farm input"
+            )
+
+            stock_priority = (
+                f"Review low stock for "
+                f"{item_name}."
+            )
+
+            if (
+                stock_priority
+                not in priorities
+            ):
+
+                priorities.append(
+                    stock_priority
+                )
+            
+            if len(
+                priorities
+            ) >= 4:
+
+                break
 
     if priorities:
 
-        priority_columns = st.columns(
-            2
+        priority_columns = (
+            st.columns(2)
         )
 
         for index, priority in enumerate(
-            priorities
+            priorities[
+                :4
+            ]
         ):
 
             with priority_columns[
@@ -26423,460 +27220,10 @@ def farmer_command_centre_ui():
     else:
 
         st.info(
-            "No urgent priorities are currently "
-            "available from connected farm data."
+            "No evidence-based priorities are "
+            "currently available from connected farm data."
         )
 
-    # ========================================================
-    # PERSONALIZED RECOMMENDATIONS
-    # ========================================================
-    st.divider()
-
-    st.subheader(
-        "⭐ Personalized Recommendations"
-    )
-
-    if recommended_features:
-
-        rec_columns = st.columns(
-            3
-        )
-
-        for index, feature in enumerate(
-            recommended_features[:6]
-        ):
-
-            if isinstance(
-                feature,
-                dict
-            ):
-
-                feature_name = (
-                    feature.get(
-                        "name"
-                    )
-                    or feature.get(
-                        "Name"
-                    )
-                    or "Farm Tool"
-                )
-
-            else:
-
-                feature_name = str(
-                    feature
-                )
-
-            with rec_columns[
-                index % 3
-            ]:
-
-                st.info(
-                    f"🌿 {feature_name}"
-                )
-
-    else:
-
-        st.info(
-            "Complete the farm profile to receive "
-            "personalized recommendations."
-        )
-
-    # ========================================================
-    # FARM BUSINESS SNAPSHOT
-    # ========================================================
-    st.divider()
-
-    st.subheader(
-        "💼 Farm Business Snapshot"
-    )
-
-    b1, b2, b3, b4 = st.columns(
-        4
-    )
-
-    with b1:
-
-        st.metric(
-            "Net Profit",
-            (
-                display_number(
-                    net_profit
-                )
-                if net_profit not in (
-                    None,
-                    ""
-                )
-                else "Pending"
-            )
-        )
-
-    with b2:
-
-        st.metric(
-            "Low Stock Inputs",
-            len(
-                low_stock_items
-            )
-        )
-
-    with b3:
-
-        st.metric(
-            "Recent Alerts",
-            len(
-                recent_alerts
-            )
-        )
-
-    with b4:
-
-        st.metric(
-            "PA Priorities",
-            len(
-                pa_priority_actions
-            )
-        )
-
-    # ========================================================
-    # LIVE FARM SENSOR SNAPSHOT
-    # ========================================================
-    st.divider()
-
-    st.subheader(
-        "📡 Live Farm Conditions"
-    )
-
-    s1, s2, s3, s4 = st.columns(
-        4
-    )
-
-    with s1:
-
-        st.metric(
-            "Soil Moisture",
-            (
-                f"{soil_moisture}%"
-                if soil_moisture is not None
-                else "Not connected"
-            )
-        )
-
-    with s2:
-
-        st.metric(
-            "Temperature",
-            (
-                f"{sensor_temperature}°C"
-                if sensor_temperature is not None
-                else "Not connected"
-            )
-        )
-
-    with s3:
-
-        st.metric(
-            "Humidity",
-            (
-                f"{sensor_humidity}%"
-                if sensor_humidity is not None
-                else "Not connected"
-            )
-        )
-
-    with s4:
-
-        st.metric(
-            "Water Level",
-            (
-                f"{water_level}%"
-                if water_level is not None
-                else "Not connected"
-            )
-        )
-        
-        # ========================================================
-    # QUICK ACTIONS
-    # ========================================================
-
-    st.subheader(
-        "⚡ Quick Actions"
-    )
-
-    quick_actions = [
-        {
-            "title":
-                "Live Sensors",
-
-            "icon":
-                "📡",
-
-            "destination":
-                "📡 Live Sensor Dashboard"
-        },
-
-        {
-            "title":
-                "Performance",
-
-            "icon":
-                "📍",
-
-            "destination":
-                "📍 Farm Performance Indicators"
-        },
-
-        {
-            "title":
-                "Crop Calendar",
-
-            "icon":
-                "🤖",
-
-            "destination":
-                "🤖 AI Crop Calendar"
-        },
-
-        {
-            "title":
-                "AI Farm Tips",
-
-            "icon":
-                "📚",
-
-            "destination":
-                "📚 AI Farm Tips"
-        }
-    ]
-
-    quick_columns = st.columns(
-        4
-    )
-
-    for index, action in enumerate(
-        quick_actions
-    ):
-
-        with quick_columns[
-            index
-        ]:
-
-            st.markdown(
-                f"""
-                <div style="
-                    border: 1px solid rgba(120,120,120,0.18);
-                    border-radius: 16px;
-                    padding: 13px;
-                    text-align: center;
-                    min-height: 78px;
-                    margin-bottom: 7px;
-                ">
-                    <div style="
-                        font-size: 26px;
-                        margin-bottom: 4px;
-                    ">
-                        {action['icon']}
-                    </div>
-
-                    <div style="
-                        font-size: 14px;
-                        font-weight: 700;
-                    ">
-                        {action['title']}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            if st.button(
-                "Open",
-                key=(
-                    f"dashboard_quick_"
-                    f"{index}"
-                ),
-                use_container_width=True
-            ):
-
-                st.session_state[
-                    "dashboard_pending_navigation"
-                ] = action[
-                    "destination"
-                ]
-
-                st.rerun() 
-        
-
-
-
-
-   
-
-    # ========================================================
-    # FARM INTELLIGENCE SUMMARY
-    # ========================================================
-    st.divider()
-
-    st.subheader(
-        "🧠 Farm Intelligence"
-    )
-
-    i1, i2, i3 = st.columns(
-        3
-    )
-
-    with i1:
-
-        st.markdown(
-            "### 🎯 Precision Agriculture"
-        )
-
-        if pa_analysis:
-
-            st.write(
-                f"{len(pa_recommendations)} "
-                "active recommendation(s)"
-            )
-
-            if pa_recommendations:
-
-                st.caption(
-                    str(
-                        pa_recommendations[0]
-                    )
-                )
-
-        else:
-
-            st.caption(
-                "Waiting for farm data."
-            )
-
-    with i2:
-
-        st.markdown(
-            "### 🌿 CIG"
-        )
-
-        if cig_analysis:
-
-            st.write(
-                str(
-                    cig_analysis.get(
-                        "status",
-                        "Ready"
-                    )
-                )
-            )
-
-            st.caption(
-                "Multispectral crop-health "
-                "intelligence."
-            )
-
-        else:
-
-            st.caption(
-                "Awaiting multispectral data."
-            )
-
-    with i3:
-
-        st.markdown(
-            "### 🌍 Climate-Smart Agriculture"
-        )
-
-        if csa_analysis:
-
-            st.write(
-                f"{len(climate_risks)} "
-                "climate risk(s) monitored"
-            )
-
-            if climate_risks:
-
-                st.caption(
-                    str(
-                        climate_risks[0]
-                    )
-                )
-
-        else:
-
-            st.caption(
-                "Waiting for climate data."
-            )
-
-    # ========================================================
-    # 56 CORE FEATURES
-    # ========================================================
-    st.divider()
-    st.subheader(
-        "🧩 56 Core Features"
-    )
-
-    st.caption(
-        "Smart Farm AI modules organized around "
-        "your Current Farm."
-    )
-
-    f1, f2, f3, f4 = st.columns(
-        4
-    )
-
-    with f1:
-
-        st.info(
-            "🌿 Farm Management\n\n"
-            "Farms, lots and operations"
-        )
-
-        st.info(
-            "📊 Productivity & Finance\n\n"
-            "Sales, expenses and records"
-        )
-
-    with f2:
-
-        st.info(
-            "💧 Irrigation & Soil\n\n"
-            "Water and soil intelligence"
-        )
-
-        st.info(
-            "📅 Calendar & Seasons\n\n"
-            "Planting and harvest planning"
-        )
-
-    with f3:
-
-        st.info(
-            "🧪 AI Intelligence\n\n"
-            "Predictions and decisions"
-        )
-
-        st.info(
-            "📡 Monitoring\n\n"
-            "Sensors, alerts, PA, CIG and CSA"
-        )
-
-    with f4:
-
-        st.info(
-            "📈 Markets & Economics\n\n"
-            "Prices, ROI and economic tools"
-        )
-
-        st.info(
-            "📚 Learning & Support\n\n"
-            "Tutor, community and help"
-        )
-
-    st.caption(
-        "Smart Farm AI connects farm management, records, "
-        "finance, sensors, PA, CIG, CSA, alerts and AI "
-        "decision support around the selected Current Farm."
-    )
 
 if menu_v2 == "🏡 Home":
     farmer_command_centre_ui()
