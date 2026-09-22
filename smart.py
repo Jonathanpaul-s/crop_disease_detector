@@ -10017,12 +10017,13 @@ FARM_AI_NAVIGATION_CATALOG = [
     ]
 
     },
-    {
-        "title": "Profit & Loss",
-        "destination": "📊 Farm Profit & loss Statement",
-        "icon": "💰",
-        "description": "Review farm income, expenses and financial position.",
-        "keywords": [
+    
+        {
+            "title": "Profit & Loss",
+            "destination": "📊 farm profit & loss statement",
+            "icon": "💰",
+            "description": "Review farm income, expenses and financial position.",
+            "keywords": [
             "profit and loss",
             "profit loss",
             "p&l",
@@ -10509,16 +10510,16 @@ def farm_ai_find_navigation_destination(
 
     direct_aliases = {
         "profit and loss":
-            "📊 Farm Profit & Loss Statement",
+            "📊 farm profit & loss statement",
 
         "profit loss":
-            "📊 Farm Profit & Loss Statement",
+            "📊 farm profit & loss statement",
 
         "farm profit and loss":
-            "📊 Farm Profit & Loss Statement",
+            "📊 farm profit & loss statement",
 
         "profit loss statement":
-            "📊 Farm Profit & Loss Statement",
+            "📊 farm profit & loss statement",
 
         "farm records":
             "📊 Productivity & Records",
