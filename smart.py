@@ -844,37 +844,6 @@ recommended_features = recommend_features(
 
 
 
-# ------------------------------------------------------------
-# 8. Personalization summary
-# ------------------------------------------------------------
-
-with st.expander("⭐ My Personalized Farm Recommendations", expanded=False):
-
-    if recommended_features:
-
-        st.write(
-            "Smart Farm AI has selected the tools most relevant to your "
-            "current farm and farming situation."
-        )
-
-        for feature in recommended_features[:20]:
-
-            if isinstance(feature, dict):
-                feature_name = feature.get(
-                    "name",
-                    feature.get("Name", "Feature")
-                )
-            else:
-                feature_name = str(feature)
-
-            st.markdown(f"⭐ {feature_name}")
-
-    else:
-        st.info(
-            "Complete your farmer profile and current farm information "
-            "to receive personalized recommendations."
-        )
-
 
     # ============================================================
 # SMART FARM AI — CURRENT FARM SELECTOR
