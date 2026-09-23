@@ -27264,6 +27264,200 @@ def farmer_command_centre_ui():
 
                 return
 
+                # ========================================================
+    # FARM INTELLIGENCE SUMMARY
+    # ========================================================
+
+    st.divider()
+
+    st.subheader(
+        "🧠 Farm Intelligence"
+    )
+
+    i1, i2, i3 = st.columns(3)
+
+    # --------------------------------------------------------
+    # PRECISION AGRICULTURE
+    # --------------------------------------------------------
+
+    with i1:
+
+        st.markdown(
+            "### 🎯 Precision Agriculture"
+        )
+
+        if pa_analysis:
+
+            if pa_recommendations:
+
+                st.write(
+                    f"{len(pa_recommendations)} "
+                    "active recommendation(s)"
+                )
+
+                st.caption(
+                    str(
+                        pa_recommendations[0]
+                    )
+                )
+
+            elif pa_priority_actions:
+
+                st.write(
+                    f"{len(pa_priority_actions)} "
+                    "priority action(s)"
+                )
+
+                st.caption(
+                    str(
+                        pa_priority_actions[0]
+                    )
+                )
+
+            else:
+
+                st.success(
+                    "Precision Agriculture engine ready."
+                )
+
+        else:
+
+            st.success(
+                "Precision Agriculture engine ready."
+            )
+
+            st.caption(
+                "Recommendations will strengthen as "
+                "farm, weather and sensor data increase."
+            )
+
+    # --------------------------------------------------------
+    # CIG / CROP HEALTH INTELLIGENCE
+    # --------------------------------------------------------
+
+    with i2:
+
+        st.markdown(
+            "### 🌿 Crop Health Intelligence"
+        )
+
+        if cig_value is not None:
+
+            try:
+
+                st.metric(
+                    "Green Chlorophyll Index",
+                    f"{float(cig_value):.2f}"
+                )
+
+            except Exception:
+
+                st.metric(
+                    "Green Chlorophyll Index",
+                    str(
+                        cig_value
+                    )
+                )
+
+            if cig_alerts:
+
+                st.caption(
+                    str(
+                        cig_alerts[0]
+                    )
+                )
+
+        elif cig_analysis:
+
+            status = (
+                cig_analysis.get(
+                    "status"
+                )
+                or "Crop-health analysis available"
+            )
+
+            st.write(
+                str(
+                    status
+                )
+            )
+
+            st.caption(
+                "Smart Farm AI is using available "
+                "crop-health evidence."
+            )
+
+        else:
+
+            st.success(
+                "Crop-health intelligence ready."
+            )
+
+            st.caption(
+                "Advanced multispectral CIG input can "
+                "be connected when imagery is available."
+            )
+
+    # --------------------------------------------------------
+    # CLIMATE-SMART AGRICULTURE
+    # --------------------------------------------------------
+
+    with i3:
+
+        st.markdown(
+            "### 🌍 Climate-Smart Agriculture"
+        )
+
+        if climate_risks:
+
+            st.write(
+                f"{len(climate_risks)} "
+                "climate risk(s) identified"
+            )
+
+            st.caption(
+                str(
+                    climate_risks[0]
+                )
+            )
+
+        elif csa_recommendations:
+
+            st.write(
+                f"{len(csa_recommendations)} "
+                "CSA recommendation(s)"
+            )
+
+            st.caption(
+                str(
+                    csa_recommendations[0]
+                )
+            )
+
+        elif adaptation_actions:
+
+            st.write(
+                f"{len(adaptation_actions)} "
+                "adaptation action(s)"
+            )
+
+            st.caption(
+                str(
+                    adaptation_actions[0]
+                    )
+            )
+
+        else:
+
+            st.success(
+                "Climate-Smart Agriculture engine ready."
+            )
+
+            st.caption(
+                "Climate guidance will update as "
+                "weather and farm conditions change."
+            )
+
 
 if menu_v2 == "🏡 Home":
     farmer_command_centre_ui()
