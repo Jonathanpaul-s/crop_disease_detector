@@ -3010,6 +3010,8 @@ def enforce_farmer_session_timeout():
 
 def register_farmer_account():
 
+    import uuid
+
     st.markdown(
         "### 🌱 Create Smart Farm AI Account"
     )
@@ -3323,6 +3325,9 @@ def register_farmer_account():
         # ----------------------------------------------------
 
         pending_user = {
+            "user_id":
+                str(uuid.uuid4()),
+            
             "account_version":
                 2,
 
@@ -4031,29 +4036,41 @@ def login_farmer_account():
             return
 
         # ----------------------------------------------------
+        # ASSIGN PERMANENT ID TO EXISTING ACCOUNTS
+        # ----------------------------------------------------
+
+        if not str(
+            user.get("user_id") or ""
+        ).strip():
+
+            import uuid
+
+            user["user_id"] = str(
+                uuid.uuid4()
+            )
+
+            try:
+
+                update_account_record(
+                    user
+                )
+
+            except Exception:
+
+                st.error(
+                    "Your account could not be updated. "
+                    "Please try logging in again."
+                )
+
+                return
+
+        # ----------------------------------------------------
         # START SESSION — NO EMAIL CODE AGAIN
         # ----------------------------------------------------
 
         start_farmer_session(
             user
         )
-
-        farmer_name = (
-            user.get(
-                "farmer_name"
-            )
-            or user.get(
-                "username"
-            )
-            or "Farmer"
-        )
-
-        st.success(
-            f"✅ Welcome back, "
-            f"{farmer_name}!"
-        )
-
-        st.rerun()
 
 
 # ============================================================
@@ -6331,7 +6348,8 @@ def smart_farm_check_data_quality(
             )
 
             return {}
-            age = now - recorded_at
+
+        age = now - recorded_at
 
         if age < timedelta(minutes=-5):
 
@@ -6636,12 +6654,20 @@ def smart_farm_shared_decision_engine():
         or {}
     )
 
+    alert_log_key = (
+        smart_farm_alert_state_key(
+            farm_id,
+            "alert_log"
+        )
+    )
+
     alert_log = (
         st.session_state.get(
-            f"smart_alerts_{farm_id}_alert_log",
+            alert_log_key,
             []
         )
-        or []
+        if alert_log_key
+        else []
     )
 
     # ========================================================
@@ -16365,6 +16391,9 @@ def farm_action_chatbot_ui(
     )
 
     st.rerun()
+
+
+
 def smart_tutor_voice():
     import os
     import io
