@@ -26938,17 +26938,53 @@ def farmer_command_centre_ui():
 
                 else:
 
-                    sqlstate = getattr(
-                        error,
-                        "sqlstate",
-                        None
-                    )
+                    if (
+                        "connection refused" in error_text
+                        or "server refused" in error_text
+                    ):
 
-                    st.error(
-                        "Database connection failed. "
-                        f"Error type: {type(error).__name__}. "
-                        f"SQLSTATE: {sqlstate or 'Not provided'}."
-                    )
+                        st.error(
+                            "The database server refused "
+                            "the connection."
+                        )
+
+                    elif (
+                        "network is unreachable" in error_text
+                        or "no route to host" in error_text
+                    ):
+
+                        st.error(
+                            "Streamlit cannot reach the "
+                            "Supabase database network."
+                        )
+
+                    elif (
+                        "ssl" in error_text
+                        or "certificate" in error_text
+                    ):
+
+                        st.error(
+                            "The database connection "
+                            "encountered an SSL error."
+                        )
+
+                    elif (
+                        "invalid" in error_text
+                        or "could not parse" in error_text
+                    ):
+
+                        st.error(
+                            "The database connection "
+                            "details could not be parsed."
+                        )
+
+                    else:
+
+                        st.error(
+                            "Database connection failed. "
+                            "The error does not match a "
+                            "recognized diagnostic category."
+                        )
 
 
     # ========================================================
