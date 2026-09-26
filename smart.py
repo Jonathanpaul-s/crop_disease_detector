@@ -26883,13 +26883,65 @@ def farmer_command_centre_ui():
                         "Database test returned an unexpected result."
                     )
 
-            except Exception:
+            except Exception as error:
 
-                st.error(
-                    "Database connection failed. "
-                    "Check the database URL, password "
-                    "and connection settings."
-                )
+                error_text = str(error).lower()
+
+                if isinstance(error, ModuleNotFoundError):
+
+                    st.error(
+                        "The psycopg package is missing. "
+                        "Check requirements.txt."
+                    )
+
+                elif (
+                    "database_url" in error_text
+                    and "not configured" in error_text
+                ):
+
+                    st.error(
+                        "DATABASE_URL was not found "
+                        "in Streamlit Secrets."
+                    )
+
+                elif "tenant or user not found" in error_text:
+
+                    st.error(
+                        "Supabase could not identify the project. "
+                        "Check the Session pooler username and host."
+                    )
+
+                elif "password authentication failed" in error_text:
+
+                    st.error(
+                        "Supabase rejected the database credentials. "
+                        "Check the database password and username."
+                    )
+
+                elif (
+                    "could not translate host name" in error_text
+                    or "name or service not known" in error_text
+                ):
+
+                    st.error(
+                        "The database hostname could not be resolved."
+                    )
+
+                elif (
+                    "timed out" in error_text
+                    or "timeout" in error_text
+                ):
+
+                    st.error(
+                        "The database connection timed out."
+                    )
+
+                else:
+
+                    st.error(
+                        "Database connection failed. "
+                        f"Error type: {type(error).name}"
+                    )
 
 
     # ========================================================
