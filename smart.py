@@ -26850,8 +26850,7 @@ def farmer_command_centre_ui():
 
 
     # ========================================================
-    # TEMPORARY DATABASE CONNECTION DIAGNOSTIC
-    # REMOVE AFTER SUCCESSFUL TEST
+    # TEMPORARY DATABASE CONNECTION TEST
     # ========================================================
 
     with st.expander("🛠️ Database Connection Test"):
@@ -26862,152 +26861,83 @@ def farmer_command_centre_ui():
         ):
 
             import socket
-            from psycopg.conninfo import conninfo_to_dict
 
-            database_url = st.secrets.get(
-                "DATABASE_URL",
-                ""
-            )
+            stage = "Reading Streamlit Secrets"
 
-            if not database_url:
+            try:
 
-                st.error(
-                    "Step 1 failed: DATABASE_URL "
-                    "is missing from Streamlit Secrets."
+                database_url = st.secrets.get(
+                    "DATABASE_URL"
                 )
 
-            else:
-
-                try:
-
-                    settings = conninfo_to_dict(
-                        str(database_url)
+                if not database_url:
+                    raise ValueError(
+                        "DATABASE_URL is missing."
                     )
 
-                except Exception:
+                stage = "Parsing connection string"
 
-                    st.error(
-                        "Step 1 failed: The database "
-                        "connection string cannot be parsed."
+                from psycopg.conninfo import conninfo_to_dict
+
+                settings = conninfo_to_dict(
+                    str(database_url)
+                )
+
+                host = settings.get("host")
+
+                port = int(
+                    settings.get("port") or 5432
+                )
+
+                if not host:
+                    raise ValueError(
+                        "Database hostname is missing."
+                    )
+
+                stage = "Resolving database hostname"
+
+                socket.getaddrinfo(
+                    host,
+                    port,
+                    type=socket.SOCK_STREAM
+                )
+
+                stage = "Checking database network port"
+
+                with socket.create_connection(
+                    (host, port),
+                    timeout=5
+                ):
+                    pass
+
+                stage = "Connecting to PostgreSQL"
+
+                with smart_farm_db_connect() as conn:
+
+                    with conn.cursor() as cursor:
+
+                        cursor.execute("SELECT 1")
+
+                        result = cursor.fetchone()
+
+                if result == (1,):
+
+                    st.success(
+                        "✅ Supabase connection successful."
                     )
 
                 else:
 
-                    host = str(
-                        settings.get("host") or ""
+                    st.error(
+                        "Database returned an unexpected result."
                     )
 
-                    username = str(
-                        settings.get("user") or ""
-                    )
+            except Exception as error:
 
-                    port = str(
-                        settings.get("port") or "5432"
-                    )
-
-                    password_present = bool(
-                        settings.get("password")
-                    )
-
-                    format_ok = all([
-                        host.endswith(
-                            ".pooler.supabase.com"
-                        ),
-                        username.startswith("postgres."),
-                        username.count(".") == 1,
-                        port == "5432",
-                        password_present
-                    ])
-
-                    if not format_ok:
-
-                        st.error(
-                            "Step 1 failed: Check the Session "
-                            "pooler username, hostname, port "
-                            "and database password."
-                        )
-
-                    else:
-
-                        st.success(
-                            "Step 1 passed: Connection "
-                            "string structure is valid."
-                        )
-
-                        try:
-
-                            socket.getaddrinfo(
-                                host,
-                                int(port),
-                                type=socket.SOCK_STREAM
-                            )
-
-                        except OSError:
-
-                            st.error(
-                                "Step 2 failed: Streamlit "
-                                "cannot resolve the "
-                                "database hostname."
-                            )
-
-                        else:
-
-                            st.success(
-                                "Step 2 passed: Database "
-                                "hostname resolves."
-                            )
-
-                            try:
-
-                                with socket.create_connection(
-                                    (host, int(port)),
-                                    timeout=5
-                                ):
-                                    pass
-
-                            except OSError:
-
-                                st.error(
-                                    "Step 3 failed: Streamlit "
-                                    "cannot reach the database "
-                                    "network port."
-                                )
-
-                            else:
-
-                                st.success(
-                                    "Step 3 passed: Database "
-                                    "network port is reachable."
-                                )
-
-                                try:
-
-  with smart_farm_db_connect() as conn:
-
-                                        with conn.cursor() as cursor:
-
-                                            cursor.execute(
-                                                "SELECT 1"
-                                            )
-
-                                            result = cursor.fetchone()
-
-                                    if result == (1,):
-
-                                        st.success(
-                                            "Step 4 passed: Supabase "
-                                            "connection successful."
-                                        )
-
-                                except Exception as error:
-
-                                    st.error(
-                                        "Step 4 failed: Network access "
-                                        "works, but the PostgreSQL "
-                                        "connection was not established. "
-                                        f"Error type: "
-                                        f"{type(error).name}."
-                                    )
+                st.error(
+                    f"{stage} failed. "
+                    f"Error type: {type(error).name}."
+                )
 
 
     # ========================================================
