@@ -26850,141 +26850,164 @@ def farmer_command_centre_ui():
 
 
     # ========================================================
-    # TEMPORARY DATABASE CONNECTION TEST
+    # TEMPORARY DATABASE CONNECTION DIAGNOSTIC
     # REMOVE AFTER SUCCESSFUL TEST
     # ========================================================
 
     with st.expander("🛠️ Database Connection Test"):
 
         if st.button(
-            "Test Supabase Connection",
+            "Run Supabase Connection Test",
             key="test_supabase_connection"
         ):
 
-            try:
+            import socket
+            from psycopg.conninfo import conninfo_to_dict
 
-                with smart_farm_db_connect() as conn:
+            database_url = st.secrets.get(
+                "DATABASE_URL",
+                ""
+            )
 
-                    with conn.cursor() as cursor:
+            if not database_url:
 
-                        cursor.execute("SELECT 1")
+                st.error(
+                    "Step 1 failed: DATABASE_URL "
+                    "is missing from Streamlit Secrets."
+                )
 
-                        result = cursor.fetchone()
+            else:
 
-                if result == (1,):
+                try:
 
-                    st.success(
-                        "✅ Supabase database connection successful."
+                    settings = conninfo_to_dict(
+                        str(database_url)
+                    )
+
+                except Exception:
+
+                    st.error(
+                        "Step 1 failed: The database "
+                        "connection string cannot be parsed."
                     )
 
                 else:
 
-                    st.error(
-                        "Database test returned an unexpected result."
+                    host = str(
+                        settings.get("host") or ""
                     )
 
-            except Exception as error:
-
-                error_text = str(error).lower()
-
-                if isinstance(error, ModuleNotFoundError):
-
-                    st.error(
-                        "The psycopg package is missing. "
-                        "Check requirements.txt."
+                    username = str(
+                        settings.get("user") or ""
                     )
 
-                elif (
-                    "database_url" in error_text
-                    and "not configured" in error_text
-                ):
-
-                    st.error(
-                        "DATABASE_URL was not found "
-                        "in Streamlit Secrets."
+                    port = str(
+                        settings.get("port") or "5432"
                     )
 
-                elif "tenant or user not found" in error_text:
-
-                    st.error(
-                        "Supabase could not identify the project. "
-                        "Check the Session pooler username and host."
+                    password_present = bool(
+                        settings.get("password")
                     )
 
-                elif "password authentication failed" in error_text:
+                    format_ok = all([
+                        host.endswith(
+                            ".pooler.supabase.com"
+                        ),
+                        username.startswith("postgres."),
+                        username.count(".") == 1,
+                        port == "5432",
+                        password_present
+                    ])
 
-                    st.error(
-                        "Supabase rejected the database credentials. "
-                        "Check the database password and username."
-                    )
-
-                elif (
-                    "could not translate host name" in error_text
-                    or "name or service not known" in error_text
-                ):
-
-                    st.error(
-                        "The database hostname could not be resolved."
-                    )
-
-                elif (
-                    "timed out" in error_text
-                    or "timeout" in error_text
-                ):
-
-                    st.error(
-                        "The database connection timed out."
-                    )
-
-                else:
-
-                    if (
-                        "connection refused" in error_text
-                        or "server refused" in error_text
-                    ):
+                    if not format_ok:
 
                         st.error(
-                            "The database server refused "
-                            "the connection."
-                        )
-
-                    elif (
-                        "network is unreachable" in error_text
-                        or "no route to host" in error_text
-                    ):
-
-                        st.error(
-                            "Streamlit cannot reach the "
-                            "Supabase database network."
-                        )
-
-                    elif (
-                        "ssl" in error_text
-                        or "certificate" in error_text
-                    ):
-
-                        st.error(
-                            "The database connection "
-                            "encountered an SSL error."
-                        )
-
-                    elif (
-                        "invalid" in error_text
-                        or "could not parse" in error_text
-                    ):
-
-                        st.error(
-                            "The database connection "
-                            "details could not be parsed."
+                            "Step 1 failed: Check the Session "
+                            "pooler username, hostname, port "
+                            "and database password."
                         )
 
                     else:
 
-                        st.error(
-                            "Database connection failed. "
-                            "The error does not match a "
-                            "recognized diagnostic category."
+                        st.success(
+                            "Step 1 passed: Connection "
+                            "string structure is valid."
                         )
+
+                        try:
+
+                            socket.getaddrinfo(
+                                host,
+                                int(port),
+                                type=socket.SOCK_STREAM
+                            )
+
+                        except OSError:
+
+                            st.error(
+                                "Step 2 failed: Streamlit "
+                                "cannot resolve the "
+                                "database hostname."
+                            )
+
+                        else:
+
+                            st.success(
+                                "Step 2 passed: Database "
+                                "hostname resolves."
+                            )
+
+                            try:
+
+                                with socket.create_connection(
+                                    (host, int(port)),
+                                    timeout=5
+                                ):
+                                    pass
+
+                            except OSError:
+
+                                st.error(
+                                    "Step 3 failed: Streamlit "
+                                    "cannot reach the database "
+                                    "network port."
+                                )
+
+                            else:
+
+                                st.success(
+                                    "Step 3 passed: Database "
+                                    "network port is reachable."
+                                )
+
+                                try:
+
+  with smart_farm_db_connect() as conn:
+
+                                        with conn.cursor() as cursor:
+
+                                            cursor.execute(
+                                                "SELECT 1"
+                                            )
+
+                                            result = cursor.fetchone()
+
+                                    if result == (1,):
+
+                                        st.success(
+                                            "Step 4 passed: Supabase "
+                                            "connection successful."
+                                        )
+
+                                except Exception as error:
+
+                                    st.error(
+                                        "Step 4 failed: Network access "
+                                        "works, but the PostgreSQL "
+                                        "connection was not established. "
+                                        f"Error type: "
+                                        f"{type(error).name}."
+                                    )
 
 
     # ========================================================
