@@ -26940,7 +26940,7 @@ def farmer_command_centre_ui():
 
                     st.error(
                         "Database connection failed. "
-                        f"Error type: {type(error).name}"
+                        f"Error type: {type(error).__name__}"
                     )
 
 
