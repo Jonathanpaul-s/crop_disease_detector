@@ -6166,6 +6166,30 @@ def smart_fert_pest_ui():
         "PA/CSA recommendations, treatment records and Smart Farm Alerts."
     )
 
+# ============================================================
+# SMART FARM AI — DATABASE CONNECTION
+# ============================================================
+
+def smart_farm_db_connect():
+
+    import streamlit as st
+    import psycopg
+
+    database_url = st.secrets.get(
+        "DATABASE_URL"
+    )
+
+    if not database_url:
+        raise RuntimeError(
+            "DATABASE_URL is not configured."
+        )
+
+    return psycopg.connect(
+        str(database_url),
+        sslmode="require",
+        connect_timeout=10
+    )
+
 
 # ============================================================
 # 🛡️ SMART FARM AI — DATA QUALITY & FRESHNESS ENGINE
@@ -26823,6 +26847,50 @@ def farmer_command_centre_ui():
 
     import streamlit as st
     import html
+
+
+    # ========================================================
+    # TEMPORARY DATABASE CONNECTION TEST
+    # REMOVE AFTER SUCCESSFUL TEST
+    # ========================================================
+
+    with st.expander("🛠️ Database Connection Test"):
+
+        if st.button(
+            "Test Supabase Connection",
+            key="test_supabase_connection"
+        ):
+
+            try:
+
+                with smart_farm_db_connect() as conn:
+
+                    with conn.cursor() as cursor:
+
+                        cursor.execute("SELECT 1")
+
+                        result = cursor.fetchone()
+
+                if result == (1,):
+
+                    st.success(
+                        "✅ Supabase database connection successful."
+                    )
+
+                else:
+
+                    st.error(
+                        "Database test returned an unexpected result."
+                    )
+
+            except Exception:
+
+                st.error(
+                    "Database connection failed. "
+                    "Check the database URL, password "
+                    "and connection settings."
+                )
+
 
     # ========================================================
     # CURRENT FARM / USER CONTEXT
