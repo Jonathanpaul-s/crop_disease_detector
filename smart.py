@@ -26932,11 +26932,11 @@ def farmer_command_centre_ui():
                         "Database returned an unexpected result."
                     )
 
-            except Exception as error:
+            except Exception:
 
                 st.error(
                     f"{stage} failed. "
-                    f"Error type: {type(error).name}."
+                    "The connection could not be established."
                 )
 
 
