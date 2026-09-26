@@ -26837,7 +26837,7 @@ menu_v2 = st.sidebar.selectbox(
 key=k2("main_menu_option")
 )
 
-d
+
 # ============================================================
 # 🏡 SMART FARM AI — FARMER COMMAND CENTRE
 # FINAL PHASE-1 INTEGRATION
