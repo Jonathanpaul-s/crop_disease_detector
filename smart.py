@@ -6175,9 +6175,7 @@ def smart_farm_db_connect():
     import streamlit as st
     import psycopg
 
-    database_url = st.secrets.get(
-        "DATABASE_URL"
-    )
+    database_url = st.secrets.get("DATABASE_URL")
 
     if not database_url:
         raise RuntimeError(
@@ -6187,7 +6185,8 @@ def smart_farm_db_connect():
     return psycopg.connect(
         str(database_url),
         sslmode="require",
-        connect_timeout=10
+        connect_timeout=10,
+        prepare_threshold=None
     )
 
 
