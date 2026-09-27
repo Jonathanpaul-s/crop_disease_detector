@@ -2383,6 +2383,79 @@ def save_farmer_accounts(
 
 
 # ============================================================
+# SMART FARM AI — PERMANENT DATABASE ACCOUNT LOOKUP
+# ============================================================
+
+def smart_farm_db_find_account(username_or_email):
+    """
+    Find one farmer account in Supabase.
+
+    This function reads the database only.
+    It does not create or modify accounts.
+    """
+
+    identity = str(
+        username_or_email or ""
+    ).strip().lower()
+
+    if not identity:
+        return None
+
+    with smart_farm_db_connect() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    user_id,
+                    account_data
+                FROM app_private.farmer_accounts
+                WHERE
+                    LOWER(username) = %s
+                    OR LOWER(email) = %s
+                LIMIT 1
+                """,
+                (
+                    identity,
+                    identity
+                )
+            )
+
+            row = cursor.fetchone()
+
+    if row is None:
+        return None
+
+    database_user_id, account_data = row
+
+    if not isinstance(account_data, dict):
+        raise RuntimeError(
+            "The stored farmer account is invalid."
+        )
+
+    user = dict(account_data)
+
+    stored_user_id = str(
+        user.get("user_id") or ""
+    ).strip()
+
+    database_user_id = str(database_user_id)
+
+    if (
+        stored_user_id
+        and stored_user_id != database_user_id
+    ):
+        raise RuntimeError(
+            "Farmer account identity mismatch."
+        )
+
+    user["user_id"] = database_user_id
+
+    return user
+
+
+# ============================================================
 # FIND ACCOUNT
 # ============================================================
 
@@ -26924,6 +26997,72 @@ def farmer_command_centre_ui():
                     st.success(
                         "✅ Supabase connection successful."
                     )
+
+                    # ========================================
+                    # ACCOUNT MIGRATION PRECHECK
+                    # READ ONLY — DOES NOT CHANGE ACCOUNTS
+                    # ========================================
+
+                    import os
+                    import json
+
+                    if not os.path.isfile(AUTH_FILE):
+
+                        st.warning(
+                            "accounts.json is not available "
+                            "in this Streamlit environment."
+                        )
+
+                    else:
+
+                        try:
+
+                            with open(
+                                AUTH_FILE,
+                                "r",
+                                encoding="utf-8"
+                            ) as file:
+
+                                existing_accounts = json.load(file)
+
+                            if not isinstance(
+                                existing_accounts,
+                                list
+                            ):
+
+                                st.error(
+                                    "The account file has "
+                                    "an unexpected format."
+                                )
+
+                            else:
+
+                                missing_ids = sum(
+                                    1
+                                    for user in existing_accounts
+                                    if isinstance(user, dict)
+                                    and not user.get("user_id")
+                                )
+
+                                st.info(
+                                    "Local accounts found: "
+                                    f"{len(existing_accounts)}"
+                                )
+
+                                st.info(
+                                    "Accounts missing user_id: "
+                                    f"{missing_ids}"
+                                )
+
+                        except (
+                            OSError,
+                            json.JSONDecodeError
+                        ):
+
+                            st.error(
+                                "The existing account file "
+                                "could not be read safely."
+                            )
 
                 else:
 
