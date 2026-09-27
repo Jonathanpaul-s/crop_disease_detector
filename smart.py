@@ -2383,6 +2383,147 @@ def save_farmer_accounts(
 
 
 # ============================================================
+# SMART FARM AI — CREATE PERMANENT FARMER ACCOUNT
+# ============================================================
+
+def smart_farm_db_create_account(user):
+    """
+    Save one newly verified farmer account to Supabase.
+
+    Creates a new account only.
+    Never overwrites an existing account.
+    """
+
+    import uuid
+    from psycopg.types.json import Jsonb
+
+    if not isinstance(user, dict):
+        raise ValueError(
+            "Invalid farmer account."
+        )
+
+    if user.get("email_verified") is not True:
+        raise ValueError(
+            "Email verification is required."
+        )
+
+    # Use the ID created during registration.
+    # Never generate another ID while saving.
+    user_id = uuid.UUID(
+        str(user.get("user_id") or "")
+    )
+
+    username = str(
+        user.get("username") or ""
+    ).strip()
+
+    email = normalize_email(
+        user.get("email")
+    )
+
+    if (
+        not username
+        or not email
+        or not user.get("password_hash")
+        or not user.get("password_salt")
+    ):
+        raise ValueError(
+            "The verified account is incomplete."
+        )
+
+    account_data = dict(user)
+
+    account_data["user_id"] = str(user_id)
+    account_data["username"] = username
+    account_data["email"] = email
+
+    # ========================================================
+    # VERIFY COMPLETE FARMER REGISTRATION PROFILE
+    # ========================================================
+
+    required_profile_fields = (
+        "farmer_name",
+        "country",
+        "location",
+        "main_crop",
+        "farm_type",
+        "farming_experience",
+        "current_farm_id"
+    )
+
+    missing_fields = [
+        field
+        for field in required_profile_fields
+        if not str(
+            account_data.get(field) or ""
+        ).strip()
+    ]
+
+    if missing_fields:
+        raise ValueError(
+            "The farmer registration profile "
+            "is incomplete."
+        )
+
+    farms = account_data.get("farms")
+
+    if not isinstance(farms, list) or not farms:
+        raise ValueError(
+            "The farmer must have a valid farm profile."
+        )
+
+    current_farm_id = str(
+        account_data["current_farm_id"]
+    )
+
+    current_farm_exists = any(
+        isinstance(farm, dict)
+        and str(farm.get("farm_id") or "")
+        == current_farm_id
+        and str(farm.get("crop_type") or "").strip()
+        for farm in farms
+    )
+
+    if not current_farm_exists:
+        raise ValueError(
+            "The current farm or its crop type "
+            "is missing from registration."
+        )
+
+    with smart_farm_db_connect() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                INSERT INTO app_private.farmer_accounts (
+                    user_id,
+                    username,
+                    email,
+                    account_data
+                )
+                VALUES (%s, %s, %s, %s)
+                RETURNING user_id
+                """,
+                (
+                    user_id,
+                    username,
+                    email,
+                    Jsonb(account_data)
+                )
+            )
+
+            saved_account = cursor.fetchone()
+
+    if not saved_account:
+        raise RuntimeError(
+            "The farmer account was not saved."
+        )
+
+    return str(saved_account[0])
+
+
+# ============================================================
 # SMART FARM AI — PERMANENT DATABASE ACCOUNT LOOKUP
 # ============================================================
 
@@ -2456,42 +2597,14 @@ def smart_farm_db_find_account(username_or_email):
 
 
 # ============================================================
-# FIND ACCOUNT
+# FIND FARMER ACCOUNT IN PERMANENT DATABASE
 # ============================================================
 
-def find_account(
-    username_or_email
-):
+def find_account(username_or_email):
 
-    users = load_farmer_accounts()
-
-    search_value = (
+    return smart_farm_db_find_account(
         username_or_email
-        or ""
-    ).strip().lower()
-
-    for user in users:
-
-        username = str(
-            user.get(
-                "username",
-                ""
-            )
-        ).strip().lower()
-
-        email = normalize_email(
-            user.get(
-                "email"
-            )
-        )
-
-        if (
-            username == search_value
-            or email == search_value
-        ):
-            return user
-
-    return None
+    )
 
 
 # ============================================================
@@ -3302,34 +3415,32 @@ def register_farmer_account():
 
             return
 
-        # ----------------------------------------------------
+       # ----------------------------------------------------
         # DUPLICATE CHECK
         # ----------------------------------------------------
 
-        users = load_farmer_accounts()
+        try:
 
-        username_exists = any(
-            str(
-                user.get(
-                    "username",
-                    ""
-                )
-            ).strip().lower()
-            == username.lower()
-
-            for user in users
-        )
-
-        email_exists = any(
-            normalize_email(
-                user.get(
-                    "email"
-                )
+            username_exists = (
+                smart_farm_db_find_account(
+                    username
+                ) is not None
             )
-            == email
 
-            for user in users
-        )
+            email_exists = (
+                smart_farm_db_find_account(
+                    email
+                ) is not None
+            )
+
+        except Exception:
+
+            st.error(
+                "Registration is temporarily unavailable. "
+                "Please try again later."
+            )
+
+            return
 
         if username_exists:
 
@@ -3699,48 +3810,73 @@ def verify_farmer_email():
         # CHECK DUPLICATE AGAIN BEFORE SAVE
         # ----------------------------------------------------
 
-        users = load_farmer_accounts()
-
         pending_email = normalize_email(
-            pending_user.get(
-                "email"
-            )
+            pending_user.get("email")
         )
 
         pending_username = str(
-            pending_user.get(
-                "username",
-                ""
+            pending_user.get("username") or ""
+        ).strip()
+
+        try:
+
+            already_exists = (
+                smart_farm_db_find_account(
+                    pending_username
+                ) is not None
+                or smart_farm_db_find_account(
+                    pending_email
+                ) is not None
             )
-        ).lower()
 
-        already_exists = any(
+        except Exception:
 
-            normalize_email(
-                user.get(
-                    "email"
-                )
+            st.error(
+                "Unable to check existing accounts. "
+                "Please try again shortly."
             )
-            == pending_email
 
-            or
-
-            str(
-                user.get(
-                    "username",
-                    ""
-                )
-            ).lower()
-            == pending_username
-
-            for user in users
-        )
+            return
 
         if already_exists:
 
             st.error(
                 "This account has already been registered. "
                 "Please use Login."
+            )
+
+            return
+
+        if not pending_user.get("user_id"):
+
+            st.error(
+                "Your registration session is outdated. "
+                "Please start registration again."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # ACTIVATE ACCOUNT IN SUPABASE
+        # ----------------------------------------------------
+
+        pending_user["email_verified"] = True
+
+        pending_user["verified_at"] = (
+            datetime.now().isoformat()
+        )
+
+        try:
+
+            smart_farm_db_create_account(
+                pending_user
+            )
+
+        except Exception:
+
+            st.error(
+                "Your account could not be saved. "
+                "Please try again shortly."
             )
 
             return
@@ -3944,9 +4080,20 @@ def login_farmer_account():
 
             return
 
-        user = find_account(
-            identity
-        )
+        try:
+
+            user = find_account(
+                identity
+            )
+
+        except Exception:
+
+            st.error(
+                "Login is temporarily unavailable. "
+                "Please try again shortly."
+            )
+
+            return
 
         # Same response prevents account enumeration.
         invalid_message = (
