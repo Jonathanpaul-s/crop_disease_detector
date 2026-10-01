@@ -27845,7 +27845,7 @@ def farmer_command_centre_ui():
 
                 st.caption(
                     "Error type: "
-                    f"{type(error).name}"
+                    f"{type(error).__name__}"
                 )
 
     # ========================================================
