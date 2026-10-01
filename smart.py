@@ -2756,136 +2756,137 @@ def build_default_farm(
 
 
 # ============================================================
-# BIND REGISTERED FARMER TO SMART FARM AI
+# BIND AUTHENTICATED FARMER TO SMART FARM AI
 # ============================================================
 
-def bind_farmer_profile(
-    user
-):
+def bind_farmer_profile(user):
+
+    if not isinstance(user, dict):
+        raise ValueError(
+            "Invalid authenticated farmer profile."
+        )
+
+    # --------------------------------------------------------
+    # PERMANENT FARMER IDENTITY
+    # --------------------------------------------------------
+
+    user_id = str(
+        user.get("user_id") or ""
+    ).strip()
+
+    if not user_id:
+        raise RuntimeError(
+            "Farmer account has no permanent user ID."
+        )
+
+    session_user_id = str(
+        st.session_state.get("user_id") or ""
+    ).strip()
+
+    if (
+        session_user_id
+        and session_user_id != user_id
+    ):
+        raise RuntimeError(
+            "Authenticated farmer identity mismatch."
+        )
 
     farmer_name = (
-        user.get(
-            "farmer_name"
-        )
-        or user.get(
-            "full_name"
-        )
-        or user.get(
-            "username"
-        )
+        user.get("farmer_name")
+        or user.get("full_name")
+        or user.get("username")
         or "Farmer"
     )
 
-    farms = user.get(
+    # --------------------------------------------------------
+    # AUTHORITATIVE FARM LIST
+    # --------------------------------------------------------
+
+    raw_farms = user.get(
         "farms",
         []
     )
 
-    if not isinstance(
-        farms,
-        list
-    ):
-        farms = []
+    if not isinstance(raw_farms, list):
+        raise RuntimeError(
+            "Farmer farm profile is invalid."
+        )
+
+    farms = [
+        dict(farm)
+        for farm in raw_farms
+        if (
+            isinstance(farm, dict)
+            and str(
+                farm.get("farm_id") or ""
+            ).strip()
+        )
+    ]
 
     if not farms:
-
-        farms = [
-            build_default_farm(
-                user
-            )
-        ]
-
-    current_farm_id = (
-        user.get(
-            "current_farm_id"
+        raise RuntimeError(
+            "No valid farm belongs to this farmer."
         )
-        or farms[0].get(
-            "farm_id"
-        )
-    )
+
+    # --------------------------------------------------------
+    # CURRENT FARM
+    # --------------------------------------------------------
+
+    current_farm_id = str(
+        user.get("current_farm_id")
+        or farms[0].get("farm_id")
+        or ""
+    ).strip()
 
     current_farm = None
 
     for farm in farms:
 
         if str(
-            farm.get(
-                "farm_id",
-                ""
-            )
-        ) == str(
-            current_farm_id
-        ):
+            farm.get("farm_id") or ""
+        ).strip() == current_farm_id:
 
             current_farm = farm
-
             break
 
     if current_farm is None:
-
-        current_farm = farms[0]
-
-        current_farm_id = (
-            current_farm.get(
-                "farm_id"
-            )
+        raise RuntimeError(
+            "The selected farm does not belong "
+            "to this farmer account."
         )
+
+    # --------------------------------------------------------
+    # FARM CONTEXT
+    # --------------------------------------------------------
 
     country = (
-        current_farm.get(
-            "country"
-        )
-        or user.get(
-            "country",
-            ""
-        )
+        current_farm.get("country")
+        or user.get("country", "")
     )
 
     location = (
-        current_farm.get(
-            "location"
-        )
-        or user.get(
-            "location",
-            ""
-        )
+        current_farm.get("location")
+        or user.get("location", "")
     )
 
     crop_type = (
-        current_farm.get(
-            "crop_type"
-        )
-        or user.get(
-            "main_crop",
-            ""
-        )
+        current_farm.get("crop_type")
+        or user.get("main_crop", "")
     )
 
     farm_type = (
-        current_farm.get(
-            "farm_type"
-        )
-        or user.get(
-            "farm_type",
-            ""
-        )
+        current_farm.get("farm_type")
+        or user.get("farm_type", "")
     )
 
     farm_size = (
-        current_farm.get(
-            "farm_size"
-        )
-        or user.get(
-            "farm_size",
-            ""
-        )
+        current_farm.get("farm_size")
+        or user.get("farm_size", "")
     )
 
-    farming_experience = (
-        user.get(
-            "farming_experience",
-            "Beginner"
-        )
+    farming_experience = user.get(
+        "farming_experience",
+        "Beginner"
     )
 
     # --------------------------------------------------------
@@ -2893,6 +2894,9 @@ def bind_farmer_profile(
     # --------------------------------------------------------
 
     farmer_profile = {
+        "user_id":
+            user_id,
+
         "name":
             farmer_name,
 
@@ -2900,16 +2904,10 @@ def bind_farmer_profile(
             farmer_name,
 
         "username":
-            user.get(
-                "username",
-                ""
-            ),
+            user.get("username", ""),
 
         "email":
-            user.get(
-                "email",
-                ""
-            ),
+            user.get("email", ""),
 
         "country":
             country,
@@ -2935,6 +2933,9 @@ def bind_farmer_profile(
         "farming_experience":
             farming_experience,
 
+        "current_farm_id":
+            current_farm_id,
+
         "farms":
             farms
     }
@@ -2949,9 +2950,6 @@ def bind_farmer_profile(
 
     personalized_profile.update(
         {
-            "current_farm_id":
-                current_farm_id,
-
             "current_farm_name":
                 current_farm.get(
                     "farm_name",
@@ -2972,6 +2970,10 @@ def bind_farmer_profile(
         }
     )
 
+    # --------------------------------------------------------
+    # SESSION FARM CONTEXT
+    # --------------------------------------------------------
+
     st.session_state[
         "farmer_profile"
     ] = farmer_profile
@@ -2986,7 +2988,7 @@ def bind_farmer_profile(
 
     st.session_state[
         "current_farm"
-    ] = current_farm
+    ] = dict(current_farm)
 
     # --------------------------------------------------------
     # RECALCULATE PERSONALIZED FEATURES
@@ -2995,11 +2997,9 @@ def bind_farmer_profile(
     try:
 
         if (
-            "recommend_features"
-            in globals()
+            "recommend_features" in globals()
             and
-            "SMART_FARM_FEATURES"
-            in globals()
+            "SMART_FARM_FEATURES" in globals()
         ):
 
             st.session_state[
@@ -3012,25 +3012,30 @@ def bind_farmer_profile(
     except Exception:
         pass
 
-
 # ============================================================
 # START AUTHENTICATED SESSION
 # ============================================================
 
-def start_farmer_session(
-    user
-):
+def start_farmer_session(user):
+
+    if not isinstance(user, dict):
+        raise ValueError(
+            "Invalid authenticated farmer."
+        )
+
+    user_id = str(
+        user.get("user_id") or ""
+    ).strip()
+
+    if not user_id:
+        raise ValueError(
+            "Authenticated farmer has no permanent user ID."
+        )
 
     farmer_name = (
-        user.get(
-            "farmer_name"
-        )
-        or user.get(
-            "full_name"
-        )
-        or user.get(
-            "username"
-        )
+        user.get("farmer_name")
+        or user.get("full_name")
+        or user.get("username")
         or "Farmer"
     )
 
@@ -3044,7 +3049,12 @@ def start_farmer_session(
 
     st.session_state[
         "authenticated_user"
-    ] = user
+    ] = dict(user)
+
+    # Permanent database identity
+    st.session_state[
+        "user_id"
+    ] = user_id
 
     # --------------------------------------------------------
     # REGISTERED FARMER IDENTITY
@@ -3089,6 +3099,7 @@ def start_farmer_session(
     # --------------------------------------------------------
     # FARM / PERSONALIZATION CONTEXT
     # --------------------------------------------------------
+
     bind_farmer_profile(
         user
     )
@@ -3881,24 +3892,7 @@ def verify_farmer_email():
 
             return
 
-        # ----------------------------------------------------
-        # ACTIVATE ACCOUNT
-        # ----------------------------------------------------
-
-        pending_user[
-            "email_verified"
-        ] = True
-
-        pending_user[
-            "verified_at"
-        ] = datetime.now().isoformat()
-        users.append(
-            pending_user
-        )
-
-        save_farmer_accounts(
-            users
-        )
+        
 
         # ----------------------------------------------------
         # AUTOMATIC LOGIN
@@ -4017,7 +4011,7 @@ def verify_farmer_email():
 
 
 # ============================================================
-# LOGIN
+# LOGIN — PERMANENT DATABASE
 # ============================================================
 
 def login_farmer_account():
@@ -4036,11 +4030,9 @@ def login_farmer_account():
         "smartfarm_login_form"
     ):
 
-        username_or_email = (
-            st.text_input(
-                "Username or Email",
-                key="farmer_login_identity"
-            )
+        username_or_email = st.text_input(
+            "Username or Email",
+            key="farmer_login_identity"
         )
 
         password = st.text_input(
@@ -4049,19 +4041,16 @@ def login_farmer_account():
             key="farmer_login_password"
         )
 
-        login_button = (
-            st.form_submit_button(
-                "Login to Smart Farm AI",
-                type="primary",
-                use_container_width=True
-            )
+        login_button = st.form_submit_button(
+            "Login to Smart Farm AI",
+            type="primary",
+            use_container_width=True
         )
 
     if login_button:
 
-        identity = (
-            username_or_email
-            or ""
+        identity = str(
+            username_or_email or ""
         ).strip()
 
         if not identity:
@@ -4080,6 +4069,11 @@ def login_farmer_account():
 
             return
 
+        # Same response prevents account enumeration.
+        invalid_message = (
+            "Invalid username/email or password."
+        )
+
         try:
 
             user = find_account(
@@ -4095,11 +4089,6 @@ def login_farmer_account():
 
             return
 
-        # Same response prevents account enumeration.
-        invalid_message = (
-            "Invalid username/email or password."
-        )
-
         if not user:
 
             st.error(
@@ -4108,25 +4097,23 @@ def login_farmer_account():
 
             return
 
-        account_version = int(
-            user.get(
-                "account_version",
-                1
-            )
-            or 1
-        )
+        # ====================================================
+        # PERMANENT ACCOUNT SAFETY CHECKS
+        # ====================================================
 
-        # ----------------------------------------------------
-        # NEW ACCOUNT EMAIL VERIFICATION REQUIRED
-        # ----------------------------------------------------
+        if not str(
+            user.get("user_id") or ""
+        ).strip():
 
-        if (
-            account_version >= 2
-            and not user.get(
-                "email_verified",
-                False
+            st.error(
+                "This farmer account is invalid."
             )
-        ):
+
+            return
+
+        if user.get(
+            "email_verified"
+        ) is not True:
 
             st.error(
                 "This account has not completed "
@@ -4135,117 +4122,36 @@ def login_farmer_account():
 
             return
 
-        password_hash = (
-            user.get(
-                "password_hash"
-            )
+        password_hash = user.get(
+            "password_hash"
         )
 
-        password_salt = (
-            user.get(
-                "password_salt"
-            )
+        password_salt = user.get(
+            "password_salt"
         )
-
-        authenticated = False
-
-        # ----------------------------------------------------
-        # CURRENT SECURE PASSWORD FORMAT
-        # ----------------------------------------------------
 
         if (
-            password_hash
-            and password_salt
+            not password_hash
+            or not password_salt
         ):
 
-            authenticated = (
-                verify_password(
-                    password,
-                    password_salt,
-                    password_hash
-                )
+            st.error(
+                "This farmer account is invalid."
             )
 
-        # ----------------------------------------------------
-        # LEGACY SMART FARM ACCOUNT MIGRATION
-        # ----------------------------------------------------
+            return
 
-        elif user.get(
-            "password"
-        ):
+        try:
 
-            old_hash_function = (
-                globals().get(
-                    "hash_password"
-                )
+            authenticated = verify_password(
+                password,
+                password_salt,
+                password_hash
             )
 
-            if callable(
-                old_hash_function
-            ):
+        except Exception:
 
-                try:
-
-                    authenticated = (
-                        secrets.compare_digest(
-                            str(
-                                user.get(
-                                    "password"
-                                )
-                            ),
-                            str(
-                                old_hash_function(
-                                    password
-                                )
-                                )
-                        )
-                    )
-
-                except Exception:
-
-                    authenticated = False
-
-            # Upgrade legacy password automatically.
-            if authenticated:
-
-                new_salt, new_hash = (
-                    create_password_hash(
-                        password
-                    )
-                )
-
-                user[
-                    "password_salt"
-                ] = new_salt
-
-                user[
-                    "password_hash"
-                ] = new_hash
-
-                user[
-                    "account_version"
-                ] = 2
-
-                # Legacy account existed before
-                # email verification was introduced.
-                if "email_verified" not in user:
-
-                    user[
-                        "email_verified"
-                    ] = True
-
-                    user[
-                        "legacy_account_migrated"
-                    ] = True
-
-                user.pop(
-                    "password",
-                    None
-                )
-
-                update_account_record(
-                    user
-                )
+            authenticated = False
 
         if not authenticated:
 
@@ -4255,38 +4161,9 @@ def login_farmer_account():
 
             return
 
-        # ----------------------------------------------------
-        # ASSIGN PERMANENT ID TO EXISTING ACCOUNTS
-        # ----------------------------------------------------
-
-        if not str(
-            user.get("user_id") or ""
-        ).strip():
-
-            import uuid
-
-            user["user_id"] = str(
-                uuid.uuid4()
-            )
-
-            try:
-
-                update_account_record(
-                    user
-                )
-
-            except Exception:
-
-                st.error(
-                    "Your account could not be updated. "
-                    "Please try logging in again."
-                )
-
-                return
-
-        # ----------------------------------------------------
-        # START SESSION — NO EMAIL CODE AGAIN
-        # ----------------------------------------------------
+        # ====================================================
+        # START AUTHENTICATED FARMER SESSION
+        # ====================================================
 
         start_farmer_session(
             user
@@ -6386,6 +6263,657 @@ def smart_fert_pest_ui():
         "PA/CSA recommendations, treatment records and Smart Farm Alerts."
     )
 
+
+# ============================================================
+# 🧠 SMART FARM AI — FARM MEMORY CONTEXT
+# ============================================================
+
+def smart_farm_memory_context():
+    """
+    Return the authenticated farmer and current farm
+    identity used by permanent Farm Memory records.
+
+    The farm must belong to the authenticated account.
+    """
+
+    import uuid
+
+    authenticated_user = st.session_state.get(
+        "authenticated_user"
+    )
+
+    if not isinstance(
+        authenticated_user,
+        dict
+    ):
+        raise RuntimeError(
+            "No authenticated farmer is available."
+        )
+
+    # --------------------------------------------------------
+    # PERMANENT FARMER IDENTITY
+    # --------------------------------------------------------
+
+    owner_user_id = str(
+        farm_record_owner() or ""
+    ).strip()
+
+    if not owner_user_id:
+        raise RuntimeError(
+            "Farm Memory requires an authenticated farmer."
+        )
+
+    try:
+
+        owner_user_id = str(
+            uuid.UUID(
+                owner_user_id
+            )
+        )
+
+    except (ValueError, TypeError, AttributeError):
+
+        raise RuntimeError(
+            "The authenticated farmer ID is invalid."
+        )
+
+    # --------------------------------------------------------
+    # CURRENT FARM
+    # --------------------------------------------------------
+
+    current_farm_id = str(
+        st.session_state.get(
+            "current_farm_id"
+        )
+        or ""
+    ).strip()
+
+    if not current_farm_id:
+        raise RuntimeError(
+            "No current farm is selected."
+        )
+
+    # --------------------------------------------------------
+    # AUTHORISE FARM OWNERSHIP
+    # --------------------------------------------------------
+
+    farms = authenticated_user.get(
+        "farms",
+        []
+    )
+
+    if not isinstance(
+        farms,
+        list
+    ):
+        raise RuntimeError(
+            "The farmer farm profile is invalid."
+        )
+
+    allowed_farm_ids = {
+        str(
+            farm.get("farm_id") or ""
+        ).strip()
+        for farm in farms
+        if isinstance(farm, dict)
+    }
+
+    if current_farm_id not in allowed_farm_ids:
+
+        raise RuntimeError(
+            "The selected farm does not belong "
+            "to the authenticated farmer."
+        )
+
+    # --------------------------------------------------------
+    # DATABASE MEMORY CONTEXT
+    # --------------------------------------------------------
+
+    return {
+        "owner_user_id":
+            owner_user_id,
+
+        "farm_id":
+            current_farm_id
+    }
+
+
+# ============================================================
+# 🧠 SMART FARM AI — READ PERMANENT FARM MEMORY
+# ============================================================
+
+def smart_farm_memory_read():
+    """
+    Read permanent recommendations and farmer feedback
+    for the authenticated farmer's current farm.
+    """
+
+    context = smart_farm_memory_context()
+
+    owner_user_id = context[
+        "owner_user_id"
+    ]
+
+    farm_id = context[
+        "farm_id"
+    ]
+
+    with smart_farm_db_connect() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    record_id,
+                    record_type,
+                    recommendation_id,
+                    recorded_at,
+                    payload
+                FROM app_private.farm_memory
+                WHERE
+                    owner_user_id = %s
+                    AND farm_id = %s
+                ORDER BY
+                    recorded_at ASC,
+                    record_id ASC
+                """,
+                (
+                    owner_user_id,
+                    farm_id
+                )
+            )
+
+            rows = cursor.fetchall()
+
+    recommendations = []
+    feedback = []
+
+    for row in rows:
+
+        (
+            record_id,
+            record_type,
+            recommendation_id,
+            recorded_at,
+            payload
+        ) = row
+
+        if not isinstance(
+            payload,
+            dict
+        ):
+            continue
+
+        memory_record = dict(
+            payload
+        )
+
+        memory_record[
+            "record_id"
+        ] = str(
+            record_id
+        )
+
+        memory_record[
+            "record_type"
+        ] = str(
+            record_type
+        )
+
+        memory_record[
+            "recommendation_id"
+        ] = (
+            str(recommendation_id)
+            if recommendation_id
+            else None
+        )
+
+        memory_record[
+            "recorded_at"
+        ] = (
+            recorded_at.isoformat()
+            if hasattr(
+                recorded_at,
+                "isoformat"
+            )
+            else str(
+                recorded_at
+            )
+        )
+
+        if record_type == "recommendation":
+
+            recommendations.append(
+                memory_record
+            )
+
+        elif record_type == "farmer_feedback":
+
+            feedback.append(
+                memory_record
+            )
+
+    return {
+        "owner_user_id":
+            owner_user_id,
+
+        "farm_id":
+            farm_id,
+
+        "recommendations":
+            recommendations,
+
+        "feedback":
+            feedback
+    }
+
+
+
+# ============================================================
+# 🧠 SMART FARM AI — SAVE PERMANENT RECOMMENDATION
+# ============================================================
+
+def smart_farm_memory_save_recommendation(decision):
+    """
+    Save one Smart Farm AI recommendation permanently.
+
+    The recommendation is scoped to:
+        authenticated farmer UUID
+        + current farm
+
+    Repeated reruns will not create duplicate copies of the
+    same recommendation on the same UTC day.
+    """
+
+    import hashlib
+    import json
+    from datetime import datetime, timezone
+    from psycopg.types.json import Jsonb
+
+    if not isinstance(decision, dict):
+        raise ValueError(
+            "Farm Memory recommendation must be a dictionary."
+        )
+
+    context = smart_farm_memory_context()
+
+    owner_user_id = context[
+        "owner_user_id"
+    ]
+
+    farm_id = context[
+        "farm_id"
+    ]
+
+    # --------------------------------------------------------
+    # MAKE PAYLOAD JSON SAFE
+    # --------------------------------------------------------
+
+    try:
+
+        payload = json.loads(
+            json.dumps(
+                decision,
+                default=str
+            )
+        )
+
+    except Exception as error:
+
+        raise ValueError(
+            "The recommendation could not be serialized."
+        ) from error
+
+    # --------------------------------------------------------
+    # RECOMMENDATION ID
+    # --------------------------------------------------------
+
+    recommendation_id = str(
+        payload.get(
+            "recommendation_id"
+        )
+        or payload.get(
+            "decision_id"
+        )
+        or payload.get(
+            "id"
+        )
+        or ""
+    ).strip()
+
+    current_time = datetime.now(
+        timezone.utc
+    )
+
+    utc_day = current_time.date().isoformat()
+
+    # --------------------------------------------------------
+    # BUILD DETERMINISTIC IDENTITY
+    # --------------------------------------------------------
+
+    if recommendation_id:
+
+        identity_source = (
+            owner_user_id
+            + "|"
+            + farm_id
+            + "|"
+            + recommendation_id
+            + "|"
+            + utc_day
+        )
+
+    else:
+
+        canonical_payload = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(
+                ",",
+                ":"
+            )
+        )
+
+        identity_source = (
+            owner_user_id
+            + "|"
+            + farm_id
+            + "|"
+            + canonical_payload
+            + "|"
+            + utc_day
+        )
+
+    digest = hashlib.sha256(
+        identity_source.encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+    record_id = (
+        "rec_"
+        + digest[:32]
+    )
+
+    if not recommendation_id:
+
+        recommendation_id = record_id
+
+    # --------------------------------------------------------
+    # COMPLETE MEMORY PAYLOAD
+    # --------------------------------------------------------
+
+    payload[
+        "recommendation_id"
+    ] = recommendation_id
+
+    payload[
+        "farm_id"
+    ] = farm_id
+
+    payload[
+        "recorded_at"
+    ] = current_time.isoformat()
+
+    # --------------------------------------------------------
+    # SAVE TO SUPABASE
+    # --------------------------------------------------------
+
+    with smart_farm_db_connect() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                INSERT INTO app_private.farm_memory (
+                    owner_user_id,
+                    farm_id,
+                    record_id,
+                    record_type,
+                    recommendation_id,
+                    recorded_at,
+                    payload
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    %s,
+                    'recommendation',
+                    %s,
+                    %s,
+                    %s
+                )
+                ON CONFLICT (
+                    owner_user_id,
+                    farm_id,
+                    record_id
+                )
+                DO NOTHING
+                RETURNING record_id
+                """,
+                (
+                    owner_user_id,
+                    farm_id,
+                    record_id,
+                    recommendation_id,
+                    current_time,
+                    Jsonb(
+                        payload
+                    )
+                )
+            )
+
+            saved_row = cursor.fetchone()
+
+    # Existing duplicate is still considered successful.
+    return {
+        "record_id":
+            record_id,
+
+        "recommendation_id":
+            recommendation_id,
+
+        "saved":
+            saved_row is not None
+    }
+
+
+
+# ============================================================
+# 🧠 SMART FARM AI — SAVE PERMANENT FARMER FEEDBACK
+# ============================================================
+
+def smart_farm_memory_save_feedback(
+    recommendation_id,
+    action_status,
+    observed_outcome="",
+    notes=""
+):
+    """
+    Permanently save farmer-reported feedback for one
+    Smart Farm AI recommendation.
+
+    Feedback is append-only and scoped to the authenticated
+    farmer UUID + current authorised farm.
+    """
+
+    import uuid
+    import json
+    from datetime import datetime, timezone
+    from psycopg.types.json import Jsonb
+
+    context = smart_farm_memory_context()
+
+    owner_user_id = context[
+        "owner_user_id"
+    ]
+
+    farm_id = context[
+        "farm_id"
+    ]
+
+    recommendation_id = str(
+        recommendation_id or ""
+    ).strip()
+
+    action_status = str(
+        action_status or ""
+    ).strip()
+
+    observed_outcome = str(
+        observed_outcome or ""
+    ).strip()
+
+    notes = str(
+        notes or ""
+    ).strip()
+
+    if not recommendation_id:
+        raise ValueError(
+            "A recommendation ID is required."
+        )
+
+    if not action_status:
+        raise ValueError(
+            "Farmer action status is required."
+        )
+
+    current_time = datetime.now(
+        timezone.utc
+    )
+
+    record_id = (
+        "feedback_"
+        + uuid.uuid4().hex
+    )
+
+    payload = {
+        "recommendation_id":
+            recommendation_id,
+
+        "farm_id":
+            farm_id,
+
+        "action_status":
+            action_status,
+
+        "observed_outcome":
+            observed_outcome,
+
+        "notes":
+            notes,
+
+        "reported_at":
+            current_time.isoformat(),
+
+        "source":
+            "farmer_reported"
+    }
+
+    # Make sure everything is JSON-safe.
+    payload = json.loads(
+        json.dumps(
+            payload,
+            default=str
+        )
+    )
+
+    with smart_farm_db_connect() as conn:
+
+        with conn.cursor() as cursor:
+
+            # ------------------------------------------------
+            # VERIFY RECOMMENDATION BELONGS TO THIS FARMER/FARM
+            # ------------------------------------------------
+
+            cursor.execute(
+                """
+                SELECT 1
+                FROM app_private.farm_memory
+                WHERE
+                    owner_user_id = %s
+                    AND farm_id = %s
+                    AND recommendation_id = %s
+                    AND record_type = 'recommendation'
+                LIMIT 1
+                """,
+                (
+                    owner_user_id,
+                    farm_id,
+                    recommendation_id
+                )
+            )
+
+            recommendation_exists = (
+                cursor.fetchone()
+                is not None
+            )
+
+            if not recommendation_exists:
+
+                raise ValueError(
+                    "The recommendation does not belong "
+                    "to the current farmer and farm."
+                )
+
+            # ------------------------------------------------
+            # SAVE APPEND-ONLY FARMER FEEDBACK
+            # ------------------------------------------------
+
+            cursor.execute(
+                """
+                INSERT INTO app_private.farm_memory (
+                    owner_user_id,
+                    farm_id,
+                    record_id,
+                    record_type,
+                    recommendation_id,
+                    recorded_at,
+                    payload
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    %s,
+                    'farmer_feedback',
+                    %s,
+                    %s,
+                    %s
+                )
+                RETURNING record_id
+                """,
+                (
+                    owner_user_id,
+                    farm_id,
+                    record_id,
+                    recommendation_id,
+                    current_time,
+                    Jsonb(
+                        payload
+                    )
+                )
+            )
+
+            saved_row = cursor.fetchone()
+
+    if not saved_row:
+        raise RuntimeError(
+            "Farmer feedback was not saved."
+        )
+
+    return {
+        "record_id":
+            str(saved_row[0]),
+
+        "recommendation_id":
+            recommendation_id,
+
+        "saved":
+            True
+    }
+
+
 # ============================================================
 # SMART FARM AI — DATABASE CONNECTION
 # ============================================================
@@ -8050,30 +8578,45 @@ def _sync_farm_dataset(
 
 
 # ============================================================
-# 🔐 SMART FARM AI — RECORD OWNER
+# 🔐 SMART FARM AI — PERMANENT RECORD OWNER
 # ============================================================
 
 def farm_record_owner():
     """
-    Return a stable account identifier for farm records.
+    Return the authenticated farmer's permanent UUID.
+
+    Farmer names and emails are never used as
+    database ownership identifiers.
     """
 
-    owner = (
-        st.session_state.get(
-            "current_user"
-        )
-        or st.session_state.get(
-            "registered_email"
-        )
-        or st.session_state.get(
-            "registered_name"
-        )
-        or ""
+    authenticated_user = st.session_state.get(
+        "authenticated_user"
     )
 
-    return str(
-        owner
-    ).strip().lower()
+    if not isinstance(authenticated_user, dict):
+        return ""
+
+    authenticated_user_id = str(
+        authenticated_user.get("user_id") or ""
+    ).strip()
+
+    session_user_id = str(
+        st.session_state.get("user_id") or ""
+    ).strip()
+
+    if not authenticated_user_id:
+        return ""
+
+    # Fail closed if session identities ever disagree.
+    if (
+        session_user_id
+        and session_user_id != authenticated_user_id
+    ):
+        raise RuntimeError(
+            "Authenticated farmer identity mismatch."
+        )
+
+    return authenticated_user_id
 
 # ============================================================
 # 💰 RECORD SALE — SHARED WITH PRODUCTIVITY
@@ -27223,7 +27766,87 @@ def farmer_command_centre_ui():
                     f"{stage} failed. "
                     "The connection could not be established."
                 )
+               
 
+
+    # ========================================================
+    # TEMPORARY FARM MEMORY READ TEST
+    # ========================================================
+
+    with st.expander("🧠 Farm Memory Test"):
+
+        st.caption(
+            "Read-only test. "
+            "This does not create or modify farm records."
+        )
+
+        if st.button(
+            "Test Permanent Farm Memory",
+            key="test_permanent_farm_memory"
+        ):
+
+            try:
+
+                # --------------------------------------------
+                # VERIFY AUTHENTICATED FARM CONTEXT
+                # --------------------------------------------
+
+                memory_context = (
+                    smart_farm_memory_context()
+                )
+
+                # --------------------------------------------
+                # READ FROM SUPABASE
+                # --------------------------------------------
+
+                memory = (
+                    smart_farm_memory_read()
+                )
+
+                recommendations = (
+                    memory.get(
+                        "recommendations",
+                        []
+                    )
+                )
+
+                feedback = (
+                    memory.get(
+                        "feedback",
+                        []
+                    )
+                )
+
+                st.success(
+                    "✅ Permanent Farm Memory "
+                    "read successful."
+                )
+
+                st.info(
+                    "Current Farm ID: "
+                    f"{memory_context['farm_id']}"
+                )
+
+                st.write(
+                    "Saved recommendations:",
+                    len(recommendations)
+                )
+
+                st.write(
+                    "Saved farmer feedback:",
+                    len(feedback)
+                )
+
+            except Exception as error:
+
+                st.error(
+                    "Farm Memory test failed."
+                )
+
+                st.caption(
+                    "Error type: "
+                    f"{type(error).name}"
+                )
 
     # ========================================================
     # CURRENT FARM / USER CONTEXT
