@@ -27770,7 +27770,7 @@ def farmer_command_centre_ui():
 
 
     # ========================================================
-    # TEMPORARY FARM MEMORY READ TEST
+    # 🧠 TEMPORARY PERMANENT FARM MEMORY READ TEST
     # ========================================================
 
     with st.expander("🧠 Farm Memory Test"):
@@ -27785,23 +27785,103 @@ def farmer_command_centre_ui():
             key="test_permanent_farm_memory"
         ):
 
+            stage = "Checking authenticated farmer"
+
             try:
 
-                # --------------------------------------------
-                # VERIFY AUTHENTICATED FARM CONTEXT
-                # --------------------------------------------
+                # ============================================
+                # 1. VERIFY AUTHENTICATED FARMER
+                # ============================================
+
+                authenticated_user = (
+                    st.session_state.get(
+                        "authenticated_user"
+                    )
+                )
+
+                if not isinstance(
+                    authenticated_user,
+                    dict
+                ):
+                    raise RuntimeError(
+                        "No authenticated farmer session."
+                    )
+
+                # ============================================
+                # 2. VERIFY PERMANENT FARMER UUID
+                # ============================================
+
+                stage = "Checking permanent user ID"
+
+                user_id = str(
+                    authenticated_user.get(
+                        "user_id"
+                    )
+                    or ""
+                ).strip()
+
+                if not user_id:
+                    raise RuntimeError(
+                        "Authenticated farmer has no "
+                        "permanent user ID."
+                    )
+
+                session_user_id = str(
+                    st.session_state.get(
+                        "user_id"
+                    )
+                    or ""
+                ).strip()
+
+                if (
+                    session_user_id
+                    and session_user_id != user_id
+                ):
+                    raise RuntimeError(
+                        "Authenticated farmer identity mismatch."
+                    )
+
+                # ============================================
+                # 3. BUILD AUTHORISED FARM MEMORY CONTEXT
+                # ============================================
+
+                stage = "Building Farm Memory context"
 
                 memory_context = (
                     smart_farm_memory_context()
                 )
 
-                # --------------------------------------------
-                # READ FROM SUPABASE
-                # --------------------------------------------
+                if not memory_context.get(
+                    "owner_user_id"
+                ):
+                    raise RuntimeError(
+                        "Farm Memory owner is missing."
+                    )
+
+                if not memory_context.get(
+                    "farm_id"
+                ):
+                    raise RuntimeError(
+                        "Farm Memory farm ID is missing."
+                    )
+
+                # ============================================
+                # 4. READ FARM MEMORY FROM SUPABASE
+                # ============================================
+
+                stage = "Reading Farm Memory database"
 
                 memory = (
                     smart_farm_memory_read()
                 )
+
+                if not isinstance(
+                    memory,
+                    dict
+                ):
+                    raise RuntimeError(
+                        "Farm Memory returned invalid data."
+                    )
 
                 recommendations = (
                     memory.get(
@@ -27816,6 +27896,27 @@ def farmer_command_centre_ui():
                         []
                     )
                 )
+
+                if not isinstance(
+                    recommendations,
+                    list
+                ):
+                    raise RuntimeError(
+                        "Farm Memory recommendations "
+                        "are invalid."
+                    )
+
+                if not isinstance(
+                    feedback,
+                    list
+                ):
+                    raise RuntimeError(
+                        "Farm Memory feedback is invalid."
+                    )
+
+                # ============================================
+                # 5. SUCCESS
+                # ============================================
 
                 st.success(
                     "✅ Permanent Farm Memory "
@@ -27837,6 +27938,10 @@ def farmer_command_centre_ui():
                     len(feedback)
                 )
 
+            # ================================================
+            # TEMPORARY DIAGNOSTIC ERROR HANDLER
+            # ================================================
+
             except Exception as error:
 
                 st.error(
@@ -27844,8 +27949,16 @@ def farmer_command_centre_ui():
                 )
 
                 st.caption(
+                    f"Failed stage: {stage}"
+                )
+
+                st.caption(
                     "Error type: "
                     f"{type(error).__name__}"
+                )
+
+                st.code(
+                    str(error)
                 )
 
     # ========================================================
