@@ -3114,12 +3114,18 @@ def logout_farmer():
     auth_keys = [
         "logged_in",
         "authenticated_user",
+        "user_id",
         "auth_last_activity",
         "auth_session_started",
         "current_user",
         "registered_name",
         "username",
-        "user_email"
+        "user_email",
+        "farmer_profile",
+        "personalized_profile",
+        "current_farm_id",
+        "current_farm",
+        "recommended_features"
     ]
 
     for key in auth_keys:
@@ -3133,7 +3139,6 @@ def logout_farmer():
     st.session_state[
         "logged_in"
     ] = False
-
 
 # ============================================================
 # SESSION TIMEOUT — 50 MINUTES INACTIVITY
