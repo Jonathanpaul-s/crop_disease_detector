@@ -27775,6 +27775,65 @@ def farmer_command_centre_ui():
 
 
     # ========================================================
+    # 🔐 TEMPORARY AUTHENTICATION SESSION TEST
+    # ========================================================
+
+    with st.expander("🔐 Authentication Session Test"):
+
+        st.write(
+            "logged_in:",
+            st.session_state.get(
+                "logged_in",
+                False
+            )
+        )
+
+        st.write(
+            "authenticated_user exists:",
+            isinstance(
+                st.session_state.get(
+                    "authenticated_user"
+                ),
+                dict
+            )
+        )
+
+        st.write(
+            "user_id exists:",
+            bool(
+                str(
+                    st.session_state.get(
+                        "user_id"
+                    )
+                    or ""
+                ).strip()
+            )
+        )
+
+        st.write(
+            "farmer_profile exists:",
+            isinstance(
+                st.session_state.get(
+                    "farmer_profile"
+                ),
+                dict
+            )
+        )
+
+        st.write(
+            "current_farm_id exists:",
+            bool(
+                str(
+                    st.session_state.get(
+                        "current_farm_id"
+                    )
+                    or ""
+                ).strip()
+            )
+        )
+
+
+    # ========================================================
     # 🧠 TEMPORARY PERMANENT FARM MEMORY READ TEST
     # ========================================================
 
