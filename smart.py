@@ -549,169 +549,34 @@ if "farmer_profile" not in st.session_state:
 
 
 # ============================================================
-# 🔐 ACCOUNT MANAGEMENT
+# 🔐 ACCOUNT MANAGEMENT — PERMANENT DATABASE AUTHENTICATION
 # ============================================================
 
-if not st.session_state.logged_in:
+if not st.session_state.get(
+    "logged_in",
+    False
+):
 
-    st.subheader("🔐 User Account Management")
+    st.subheader(
+        "🔐 User Account Management"
+    )
 
     account_action = st.radio(
         "Choose an action",
-        ["Login", "Create Account"],
+        [
+            "Login",
+            "Create Account"
+        ],
         key="account_action_unique_001"
     )
 
     if account_action == "Login":
 
-        username = st.text_input(
-            "Username",
-            key="login_username_unique_001"
-        )
+        login_farmer_account()
 
-        password = st.text_input(
-            "Password",
-            type="password",
-            key="login_password_unique_001"
-        )
+    elif account_action == "Create Account":
 
-        if st.button(
-            "🔓 Login",
-            key="login_button_unique_001"
-        ):
-
-            # Load saved accounts from disk
-            users = _load("accounts.json", [])
-
-            if not isinstance(users, list):
-                users = []
-
-            user_found = None
-
-            for user in users:
-                if (
-                    isinstance(user, dict)
-                    and user.get("username") == username
-                    and user.get("password") == hash_password(password)
-                ):
-                    user_found = user
-                    break
-
-            if user_found:
-
-                st.session_state.logged_in = True
-                st.session_state.current_user = username
-                st.session_state.farmer_profile = user_found.get(
-                    "profile",
-                    {}
-                )
-
-                st.success("Login successful!")
-                st.rerun()
-
-            else:
-                st.error("Invalid username or password.")
-
-    else:
-
-        new_username = st.text_input(
-            "Create Username",
-            key="register_username_unique_001"
-        )
-
-        new_email = st.text_input(
-            "Email",
-            key="register_email_unique_001"
-        )
-
-        new_password = st.text_input(
-            "Create Password",
-            type="password",
-            key="register_password_unique_001"
-        )
-
-        country = st.text_input(
-            "Country",
-            key="register_country_unique_001"
-        )
-
-        location = st.text_input(
-            "Location",
-            key="register_location_unique_001"
-        )
-
-        crop_type = st.text_input(
-            "Main Crop Type",
-            key="register_crop_type_unique_001"
-        )
-
-        farm_type = st.selectbox(
-            "Farm Type",
-            [
-                "Crop Farming",
-                "Livestock Farming",
-                "Mixed Farming",
-                "Aquaculture",
-                "Urban Farming"
-            ],
-            key="register_farm_type_unique_001"
-        )
-
-        experience = st.selectbox(
-            "Farming Experience",
-            [
-                "Beginner",
-                "Intermediate",
-                "Experienced",
-                "Professional"
-            ],
-            key="register_experience_unique_001"
-        )
-
-        if st.button(
-            "📝 Create Account",
-            key="create_account_button_unique_001"
-        ):
-
-            if not new_username or not new_password:
-                st.warning("Please enter a username and password.")
-
-            else:
-
-                # Load existing accounts from disk
-                users = _load("accounts.json", [])
-
-                if not isinstance(users, list):
-                    users = []
-
-                if any(
-                    isinstance(user, dict)
-                    and user.get("username") == new_username
-                    for user in users
-                ):
-                    st.error("Username already exists.")
-
-                else:
-
-                    profile = {
-                        "country": country,
-                        "location": location,
-                        "crop_type": crop_type,
-                        "farm_type": farm_type,
-                        "experience": experience
-                    }
-                    users.append({
-                        "username": new_username,
-                        "email": new_email,
-                        "password": hash_password(new_password),
-                        "profile": profile
-                    })
-
-                    # Permanently save account
-                    _save("accounts.json", users)
-                    st.success(
-                        "Account created successfully. You can now login."
-                    )
+        register_farmer_account()
 
  # ============================================================
 # 🔒 STOP APP UNTIL USER IS LOGGED IN
